@@ -6,8 +6,10 @@ import {
   ClothingItem,
   createOutfit,
   destroyOutfit,
+  emptyOutfitDraft,
   fetchOutfits,
   formatTagLabel,
+  OutfitDraft,
   Outfit,
   updateOutfit,
   User,
@@ -15,8 +17,8 @@ import {
 
 interface MyOutfitsPageProps {
   user: User;
-  draftItemIds: number[];
-  onDraftChange: (itemIds: number[]) => void;
+  draft: OutfitDraft;
+  onDraftChange: (draft: OutfitDraft) => void;
   onBrowseCloset: () => void;
   onOpenItem: (itemId: number) => void;
 }
@@ -28,7 +30,7 @@ interface FlashState {
 
 export function MyOutfitsPage({
   user,
-  draftItemIds,
+  draft,
   onDraftChange,
   onBrowseCloset,
   onOpenItem,
@@ -38,10 +40,10 @@ export function MyOutfitsPage({
   const [flash, setFlash] = useState<FlashState | null>(null);
   const [editingOutfitId, setEditingOutfitId] = useState<number | null>(null);
 
-  const [name, setName] = useState("");
-  const [notes, setNotes] = useState("");
-  const [tagInput, setTagInput] = useState("");
-  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
+  const [name, setName] = useState(draft.name);
+  const [notes, setNotes] = useState(draft.notes);
+  const [tagInput, setTagInput] = useState(draft.tagInput);
+  const [selectedItemIds, setSelectedItemIds] = useState<number[]>(draft.itemIds);
   const [isSaving, setIsSaving] = useState(false);
   const formSectionRef = useRef<HTMLElement | null>(null);
 
@@ -60,13 +62,24 @@ export function MyOutfitsPage({
     setFlash({ kind, message });
   }
 
+  function updateCreateDraft(nextDraft: OutfitDraft) {
+    setName(nextDraft.name);
+    setNotes(nextDraft.notes);
+    setTagInput(nextDraft.tagInput);
+    setSelectedItemIds(nextDraft.itemIds);
+    onDraftChange(nextDraft);
+  }
+
   useEffect(() => {
     if (editingOutfitId) {
       return;
     }
 
-    setSelectedItemIds(draftItemIds);
-  }, [draftItemIds, editingOutfitId]);
+    setName(draft.name);
+    setNotes(draft.notes);
+    setTagInput(draft.tagInput);
+    setSelectedItemIds(draft.itemIds);
+  }, [draft, editingOutfitId]);
 
   useEffect(() => {
     if (!flash) {
@@ -150,7 +163,7 @@ export function MyOutfitsPage({
         });
 
         setOutfits((current) => [createdOutfit, ...current]);
-        onDraftChange([]);
+        updateCreateDraft(emptyOutfitDraft());
         showFlash("success", "Outfit saved.");
       }
 
@@ -178,7 +191,12 @@ export function MyOutfitsPage({
       return;
     }
 
-    onDraftChange(selectedItemIds.filter((id) => id !== itemId));
+    updateCreateDraft({
+      name,
+      notes,
+      tagInput,
+      itemIds: selectedItemIds.filter((id) => id !== itemId),
+    });
   }
 
   function removeEditingItem(itemId: number) {
@@ -197,10 +215,10 @@ export function MyOutfitsPage({
 
   function resetForm() {
     setEditingOutfitId(null);
-    setName("");
-    setNotes("");
-    setTagInput("");
-    setSelectedItemIds(draftItemIds);
+    setName(draft.name);
+    setNotes(draft.notes);
+    setTagInput(draft.tagInput);
+    setSelectedItemIds(draft.itemIds);
   }
 
   return (
@@ -237,7 +255,20 @@ export function MyOutfitsPage({
               </span>
               <input
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  if (editingOutfitId) {
+                    setName(nextValue);
+                    return;
+                  }
+
+                  updateCreateDraft({
+                    name: nextValue,
+                    notes,
+                    tagInput,
+                    itemIds: selectedItemIds,
+                  });
+                }}
                 placeholder="Weekend Brunch"
                 className="w-full border border-border bg-background px-3 py-2"
               />
@@ -249,7 +280,20 @@ export function MyOutfitsPage({
               </span>
               <input
                 value={tagInput}
-                onChange={(event) => setTagInput(event.target.value)}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  if (editingOutfitId) {
+                    setTagInput(nextValue);
+                    return;
+                  }
+
+                  updateCreateDraft({
+                    name,
+                    notes,
+                    tagInput: nextValue,
+                    itemIds: selectedItemIds,
+                  });
+                }}
                 placeholder="casual, spring"
                 className="w-full border border-border bg-background px-3 py-2"
               />
@@ -262,7 +306,20 @@ export function MyOutfitsPage({
             </span>
             <textarea
               value={notes}
-              onChange={(event) => setNotes(event.target.value)}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                if (editingOutfitId) {
+                  setNotes(nextValue);
+                  return;
+                }
+
+                updateCreateDraft({
+                  name,
+                  notes: nextValue,
+                  tagInput,
+                  itemIds: selectedItemIds,
+                });
+              }}
               placeholder="When and where to wear this look"
               className="w-full border border-border bg-background px-3 py-2 min-h-24"
             />

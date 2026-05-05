@@ -148,49 +148,93 @@ export interface TemporaryCleanImageResult {
   filename: string;
 }
 
-function outfitDraftStorageKey(userId: number) {
-  return `outfit-draft-item-ids:${userId}`;
+export interface OutfitDraft {
+  name: string;
+  notes: string;
+  tagInput: string;
+  itemIds: number[];
 }
 
-export function loadOutfitDraftItemIds(userId: number) {
+export function emptyOutfitDraft(): OutfitDraft {
+  return {
+    name: "",
+    notes: "",
+    tagInput: "",
+    itemIds: [],
+  };
+}
+
+function outfitDraftStorageKey(userId: number) {
+  return `outfit-draft:${userId}`;
+}
+
+function normalizeOutfitDraft(raw: Partial<OutfitDraft> | null | undefined): OutfitDraft {
+  const itemIds = Array.isArray(raw?.itemIds)
+    ? raw.itemIds
+        .map((value) => Number(value))
+        .filter((value, index, array) => Number.isInteger(value) && value > 0 && array.indexOf(value) === index)
+    : [];
+
+  return {
+    name: typeof raw?.name === "string" ? raw.name : "",
+    notes: typeof raw?.notes === "string" ? raw.notes : "",
+    tagInput: typeof raw?.tagInput === "string" ? raw.tagInput : "",
+    itemIds,
+  };
+}
+
+export function loadOutfitDraft(userId: number): OutfitDraft {
   if (typeof window === "undefined") {
-    return [] as number[];
+    return emptyOutfitDraft();
   }
 
   const raw = window.localStorage.getItem(outfitDraftStorageKey(userId));
   if (!raw) {
-    return [] as number[];
+    return emptyOutfitDraft();
   }
 
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [] as number[];
+    if (!parsed || typeof parsed !== "object") {
+      return emptyOutfitDraft();
     }
 
-    return parsed
-      .map((value) => Number(value))
-      .filter((value) => Number.isInteger(value) && value > 0);
+    return normalizeOutfitDraft(parsed as Partial<OutfitDraft>);
   } catch {
-    return [] as number[];
+    return emptyOutfitDraft();
   }
 }
 
-export function saveOutfitDraftItemIds(userId: number, itemIds: number[]) {
+export function saveOutfitDraft(userId: number, draft: OutfitDraft) {
   if (typeof window === "undefined") {
     return;
   }
 
-  const normalized = itemIds.filter((value, index, array) =>
-    Number.isInteger(value) && value > 0 && array.indexOf(value) === index,
-  );
+  const normalized = normalizeOutfitDraft(draft);
+  const isEmpty =
+    normalized.name.trim().length === 0 &&
+    normalized.notes.trim().length === 0 &&
+    normalized.tagInput.trim().length === 0 &&
+    normalized.itemIds.length === 0;
 
-  if (normalized.length === 0) {
+  if (isEmpty) {
     window.localStorage.removeItem(outfitDraftStorageKey(userId));
     return;
   }
 
   window.localStorage.setItem(outfitDraftStorageKey(userId), JSON.stringify(normalized));
+}
+
+export function loadOutfitDraftItemIds(userId: number) {
+  return loadOutfitDraft(userId).itemIds;
+}
+
+export function saveOutfitDraftItemIds(userId: number, itemIds: number[]) {
+  const existing = loadOutfitDraft(userId);
+  saveOutfitDraft(userId, {
+    ...existing,
+    itemIds,
+  });
 }
 
 export function emptyClothingItemFormValues(): ClothingItemFormValues {

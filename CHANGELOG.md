@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.10 - 2026-05-04
+
+- Persisted full outfit draft state per user so name, notes, tags, and selected item IDs survive navigation between Closet and My Outfits.
+- Synced My Outfits create-form fields directly with stored draft data to prevent losing in-progress outfit details while adding items.
+- Kept draft item IDs filtered to available closet items when loading persisted drafts, preventing stale references after item deletes.
+
 ## v1.0.9 - 2026-05-04
 
 - Refreshed the root `README.md`, `wiki.md`, and `PROJECT_INDEX.md` so the repository-level documentation matches the Milestone 1 app state.

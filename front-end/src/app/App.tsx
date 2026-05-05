@@ -20,12 +20,14 @@ import {
   beginGoogleSignIn,
   ClothingItem,
   CreateItemMode,
+  emptyOutfitDraft,
   fetchClosetOwner,
   formatPossessive,
   formatPreferredStyle,
-  loadOutfitDraftItemIds,
+  loadOutfitDraft,
   logoutSession,
-  saveOutfitDraftItemIds,
+  OutfitDraft,
+  saveOutfitDraft,
   titleize,
   User,
 } from "./lib/closet";
@@ -246,7 +248,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState("all");
   const [sortOption, setSortOption] = useState<ClosetSortOption>("name-asc");
-  const [outfitDraftItemIds, setOutfitDraftItemIds] = useState<number[]>([]);
+  const [outfitDraft, setOutfitDraft] = useState<OutfitDraft>(emptyOutfitDraft());
   const [outfitDraftNotice, setOutfitDraftNotice] = useState("");
 
   useEffect(() => {
@@ -315,13 +317,16 @@ export default function App() {
 
   useEffect(() => {
     if (!user) {
-      setOutfitDraftItemIds([]);
+      setOutfitDraft(emptyOutfitDraft());
       return;
     }
 
     const availableItemIds = new Set(user.clothing_items.map((item) => item.id));
-    const persisted = loadOutfitDraftItemIds(user.id).filter((itemId) => availableItemIds.has(itemId));
-    setOutfitDraftItemIds(persisted);
+    const persisted = loadOutfitDraft(user.id);
+    setOutfitDraft({
+      ...persisted,
+      itemIds: persisted.itemIds.filter((itemId) => availableItemIds.has(itemId)),
+    });
   }, [user?.id, user?.clothing_items]);
 
   useEffect(() => {
@@ -329,8 +334,8 @@ export default function App() {
       return;
     }
 
-    saveOutfitDraftItemIds(user.id, outfitDraftItemIds);
-  }, [outfitDraftItemIds, user]);
+    saveOutfitDraft(user.id, outfitDraft);
+  }, [outfitDraft, user]);
 
   useEffect(() => {
     if (!outfitDraftNotice) {
@@ -356,14 +361,17 @@ export default function App() {
       : null;
 
   function addItemToOutfitDraft(itemId: number) {
-    setOutfitDraftItemIds((current) => {
-      if (current.includes(itemId)) {
+    setOutfitDraft((current) => {
+      if (current.itemIds.includes(itemId)) {
         setOutfitDraftNotice("Already in your outfit draft.");
         return current;
       }
 
       setOutfitDraftNotice("Added to outfit draft.");
-      return [itemId, ...current];
+      return {
+        ...current,
+        itemIds: [itemId, ...current.itemIds],
+      };
     });
   }
 
@@ -584,7 +592,10 @@ export default function App() {
         onItemSaved={(nextItem) => setUser((current) => updateUserItem(current, nextItem))}
         onItemDeleted={(itemId) => {
           setUser((current) => removeUserItem(current, itemId));
-          setOutfitDraftItemIds((current) => current.filter((id) => id !== itemId));
+          setOutfitDraft((current) => ({
+            ...current,
+            itemIds: current.itemIds.filter((id) => id !== itemId),
+          }));
           navigateTo("/closet");
         }}
       />
@@ -593,8 +604,8 @@ export default function App() {
     pageContent = user ? (
       <MyOutfitsPage
         user={user}
-        draftItemIds={outfitDraftItemIds}
-        onDraftChange={setOutfitDraftItemIds}
+        draft={outfitDraft}
+        onDraftChange={setOutfitDraft}
         onBrowseCloset={() => navigateTo("/closet")}
         onOpenItem={(itemId) => navigateTo(`/items/${itemId}`)}
       />
@@ -847,7 +858,7 @@ export default function App() {
           className="fixed bottom-6 right-6 z-50 max-w-sm border border-foreground/20 bg-background/95 px-4 py-3 text-sm shadow-lg backdrop-blur"
           style={{ fontFamily: "Outfit, sans-serif" }}
         >
-          {outfitDraftNotice} Draft has {outfitDraftItemIds.length} {outfitDraftItemIds.length === 1 ? "item" : "items"}.
+          {outfitDraftNotice} Draft has {outfitDraft.itemIds.length} {outfitDraft.itemIds.length === 1 ? "item" : "items"}.
         </motion.div>
       ) : null}
 
