@@ -482,8 +482,12 @@ export default function App() {
             >
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1.9fr)_minmax(14rem,1fr)_12rem] lg:items-start">
                 <div className="relative min-w-0 self-start">
+                  <label htmlFor="closet-search" className="sr-only">
+                    Search closet items
+                  </label>
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
+                    id="closet-search"
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Search by name or describe an item with tags"
@@ -492,8 +496,14 @@ export default function App() {
                 </div>
 
                 <div className="min-w-0">
+                  <label id="closet-tag-filter-label" className="sr-only">
+                    Filter closet items by tag
+                  </label>
                   <Select value={selectedTag} onValueChange={setSelectedTag}>
-                    <SelectTrigger className="h-14 w-full bg-stone-200 hover:bg-stone-200">
+                    <SelectTrigger
+                      aria-labelledby="closet-tag-filter-label"
+                      className="h-14 w-full bg-stone-200 hover:bg-stone-200"
+                    >
                       <SelectValue placeholder="All tags" />
                     </SelectTrigger>
                     <SelectContent>
@@ -507,17 +517,25 @@ export default function App() {
                   </Select>
                 </div>
 
-                <Select value={sortOption} onValueChange={(value) => setSortOption(value as ClosetSortOption)}>
-                  <SelectTrigger className="h-14 w-full bg-stone-200 hover:bg-stone-200">
-                    <SelectValue placeholder="Sort items" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="name-asc">Name A-Z</SelectItem>
-                    <SelectItem value="newest-added">Newest added</SelectItem>
-                    <SelectItem value="oldest-added">Oldest added</SelectItem>
-                    <SelectItem value="recent-purchase">Most recent purchase</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="min-w-0">
+                  <label id="closet-sort-label" className="sr-only">
+                    Sort closet items
+                  </label>
+                  <Select value={sortOption} onValueChange={(value) => setSortOption(value as ClosetSortOption)}>
+                    <SelectTrigger
+                      aria-labelledby="closet-sort-label"
+                      className="h-14 w-full bg-stone-200 hover:bg-stone-200"
+                    >
+                      <SelectValue placeholder="Sort items" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name-asc">Name A-Z</SelectItem>
+                      <SelectItem value="newest-added">Newest added</SelectItem>
+                      <SelectItem value="oldest-added">Oldest added</SelectItem>
+                      <SelectItem value="recent-purchase">Most recent purchase</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               {hasActiveFilters ? (
