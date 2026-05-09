@@ -1,6 +1,6 @@
 # Project Structure Index
 
-Last updated: 2026-05-04
+Last updated: 2026-05-09
 
 This file is intentionally concise and focused on repository structure.
 For project background, scope, and roadmap, see `wiki.md`.
@@ -25,7 +25,8 @@ project-closet-organizer/
 
 - `app/models`: `user`, `clothing_item`, `outfit`, `outfit_item`, `outfit_upload`, and `outfit_detection`
 - `app/controllers`: auth/session handling, JSON CRUD controllers, upload flows, and SPA fallback
-- `app/services/`: OpenRouter detection, crop refinement, crop verification, and image-cleaning logic
+- `app/presenters`: API payload shaping for users, clothing items, outfits, uploads, and detections
+- `app/services/`: OpenRouter detection, crop refinement, crop verification, image-cleaning logic, and shared tempfile/image-source helpers
 - `config/routes.rb`: API routes plus HTML fallback routes
 - `db/seeds.rb`: demo admin user and closet seed generation
 - `test/`: model, integration, and service tests
@@ -33,9 +34,14 @@ project-closet-organizer/
 ## Frontend (`front-end`)
 
 - `src/app/App.tsx`: route handling, auth-aware layout, and top-level page composition
-- `src/app/components/`: routed pages, shared presentation components, and UI primitives
-- `src/app/lib/closet.ts`: API calls, shared types, and formatting helpers
+- `src/app/components/`: routed pages, extracted create-item/restricted-state components, and UI primitives
+- `src/app/lib/routes.ts`: route parsing, navigation helpers, and route guards
+- `src/app/lib/api.ts`: shared request/error helpers for frontend API calls
+- `src/app/lib/closet.ts`: shared types, formatting helpers, and feature-specific API helpers
+- `src/app/lib/closetFilters.ts`: closet search, filter, and sort helpers
 - `src/app/lib/useItemPhotoState.ts`: shared photo upload and preview state management
+- `src/app/lib/usePageData.ts`: shared async page-loading hook
+- `src/app/lib/useOutfitDraftState.ts`: persisted outfit draft state management
 - `src/styles/`: fonts, theme, and global styling
 
 ## CI
@@ -48,3 +54,4 @@ project-closet-organizer/
 - `wiki.md`: project background, Milestone 1 scope, and roadmap
 - `back-end/README.md`: backend API and environment details
 - `front-end/README.md`: frontend routes and integration notes
+- `front-end/guidelines/Guidelines.md`: frontend working conventions for future code generation and refactors

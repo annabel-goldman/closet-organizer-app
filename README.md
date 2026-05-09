@@ -49,6 +49,13 @@ Heroku deployment link:
 - `PROJECT_INDEX.md`: concise repository structure index
 - `wiki.md`: extended project background, scope notes, and roadmap
 
+## Current Code Organization
+
+- Frontend route parsing, closet filtering, shared API helpers, page-loading hooks, and outfit-draft persistence are split into focused modules under `front-end/src/app/lib/`.
+- The image-based item flow is split between `CreateItemPage.tsx` and extracted review components under `front-end/src/app/components/create-item/`.
+- Backend JSON response shaping lives in `back-end/app/presenters/api_payloads.rb`.
+- Backend image-preparation and tempfile lifecycle helpers live in `back-end/app/services/managed_tempfiles.rb` and `back-end/app/services/prepared_image_source.rb`.
+
 ## Getting Started
 
 ### Start Both Apps
@@ -68,6 +75,13 @@ Override ports if needed:
 
 ```bash
 BACKEND_PORT=3001 FRONTEND_PORT=5174 ./start.sh
+```
+
+Or use the script shorthand:
+
+```bash
+./start.sh port=4100
+./start.sh backend-port=3100 frontend-port=5174
 ```
 
 ### Start Apps Separately
@@ -112,6 +126,7 @@ npm run dev
 - Recent local verification:
   `npm run build`
   `bundle exec rails test`
+  `bundle exec rubocop`
 
 ## Documentation
 

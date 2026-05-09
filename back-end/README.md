@@ -24,6 +24,12 @@ Rails 8 JSON backend for the Closet Organizer Milestone 1 app.
 - AI-assisted image cleanup for clothing items and verified detections
 - SPA fallback for browser HTML requests
 
+## Internal Structure Notes
+
+- `app/presenters/api_payloads.rb` centralizes JSON payload shaping for users, clothing items, outfits, uploads, and detections.
+- `app/services/managed_tempfiles.rb` tracks tempfiles created during crop and image-clean flows so cleanup happens in one place.
+- `app/services/prepared_image_source.rb` wraps attachment-like image inputs used by crop and AI-clean flows.
+
 ## Local Setup
 
 ```bash
@@ -196,6 +202,13 @@ bin/bundler-audit
 ```
 
 Current backend coverage includes model tests, integration tests for auth-sensitive flows, clothing items, outfits, uploads, and clean-image services.
+
+Recent cleanup work also keeps backend verification anchored on:
+
+- `bundle exec rails test`
+- `bundle exec rubocop`
+- presenter-backed payload rendering
+- shared tempfile/image-source handling for AI cleanup and crop flows
 
 ## Environment
 

@@ -40,7 +40,7 @@ To run the full monorepo together, use [start.sh](../start.sh) from the reposito
 
 ## Backend Connection
 
-The frontend API layer lives in `src/app/lib/closet.ts`.
+The frontend API layer is split between shared request helpers in `src/app/lib/api.ts` and feature-facing helpers/types in `src/app/lib/closet.ts`.
 
 - `VITE_API_BASE_URL` defaults to `/api`
 - Vite proxies `/api` to the Rails backend
@@ -51,7 +51,7 @@ If the Rails API is running on the default port, no extra configuration is requi
 
 ## Current Routes
 
-Routes are derived in `src/app/App.tsx` with `window.location` and `history.pushState`.
+Routes are coordinated in `src/app/App.tsx` and parsed/navigation helpers live in `src/app/lib/routes.ts`.
 
 - `/` logged-out landing page
 - `/closet` signed-in user closet
@@ -66,9 +66,19 @@ Routes are derived in `src/app/App.tsx` with `window.location` and `history.push
 ## Important Source Files
 
 - `src/app/App.tsx`
-  Main entry point, route handling, auth-aware page composition, and global layout
+  Main entry point, auth-aware page composition, header/footer layout, and top-level screen switching
+- `src/app/lib/routes.ts`
+  Route parsing, route guards, auth error messaging, and navigation helpers
+- `src/app/lib/api.ts`
+  Shared fetch helpers and API error handling
 - `src/app/lib/closet.ts`
-  Shared types, formatting helpers, and fetch helpers
+  Shared types, formatting helpers, and feature-specific API helpers
+- `src/app/lib/closetFilters.ts`
+  Closet search, tag filtering, and sort helpers
+- `src/app/lib/usePageData.ts`
+  Shared async page-loading hook used by several routed screens
+- `src/app/lib/useOutfitDraftState.ts`
+  Persistent per-user outfit draft state management
 - `src/app/components/ClothingCard.tsx`
   Closet grid card used on the main closet page
 - `src/app/components/MyOutfitsPage.tsx`
@@ -80,7 +90,11 @@ Routes are derived in `src/app/App.tsx` with `window.location` and `history.push
 - `src/app/components/ItemDetailPage.tsx`
   Edit/delete flow for a clothing item
 - `src/app/components/CreateItemPage.tsx`
-  Manual item creation plus image upload/detection review flow
+  Manual item creation plus orchestration for the image upload/detection review flow
+- `src/app/components/create-item/`
+  Extracted detection review and image-mode create-item components
+- `src/app/components/shared/AccessRestrictedState.tsx`
+  Shared access-restricted state used across admin-only pages
 - `src/app/lib/useItemPhotoState.ts`
   Shared image selection and preview state for item and outfit flows
 
@@ -88,6 +102,7 @@ Routes are derived in `src/app/App.tsx` with `window.location` and `history.push
 
 - The app loads the signed-in user through `GET /me`, not by browsing arbitrary users.
 - Non-admin users are blocked from the users directory in both backend authorization and frontend navigation.
+- Shared page data loading is handled through `usePageData` to keep route components focused on page behavior.
 - Item create and edit flows send multipart form data so photos can be attached, cropped, or removed.
 - Image-based item creation submits one photo to `POST /outfit_uploads` and renders structured detections returned by the backend.
 - The outfit flow stores a draft item selection in local storage per user.
