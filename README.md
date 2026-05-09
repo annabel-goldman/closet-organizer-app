@@ -84,6 +84,13 @@ Or use the script shorthand:
 ./start.sh backend-port=3100 frontend-port=5174
 ```
 
+Important for Google sign-in:
+
+- Google OAuth requires exact backend origins and callback URLs.
+- If you choose a new local `BACKEND_PORT`, that port must already be registered in the Google auth app settings.
+- If it is not registered yet, speak with the owner of the Google auth screen/client configuration and ask them to add both the new local backend origin and the matching callback URL before using that port.
+- In practice, that means adding entries like `http://localhost:3100` and `http://localhost:3100/auth/google_oauth2/callback` for any new backend port you want to use locally.
+
 ### Start Apps Separately
 
 Backend:
