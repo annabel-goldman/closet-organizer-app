@@ -4,41 +4,21 @@ class ClothingItemsController < ApplicationController
 
   def index
     @clothing_items = current_user.clothing_items.includes(:user).order(:name)
-    render json: @clothing_items.map { |clothing_item| clothing_item_payload(clothing_item) }
+    render json: @clothing_items.map { |clothing_item| payloads.clothing_item(clothing_item) }
   end
 
   def show
-    render json: clothing_item_payload(@clothing_item)
+    render json: payloads.clothing_item(@clothing_item)
   end
 
   def create
-    temporary_files = []
     @clothing_item = ClothingItem.new(clothing_item_attributes)
-    attach_photo_from_request(@clothing_item, temporary_files)
-
-    if @clothing_item.save
-      remove_all_item_photos(@clothing_item) if remove_photo_requested?
-      render json: clothing_item_payload(@clothing_item), status: :created
-    else
-      render_validation_errors(@clothing_item)
-    end
-  ensure
-    cleanup_temporary_files(temporary_files)
+    persist_clothing_item(@clothing_item, status: :created)
   end
 
   def update
-    temporary_files = []
     @clothing_item.assign_attributes(clothing_item_attributes)
-    attach_photo_from_request(@clothing_item, temporary_files)
-
-    if @clothing_item.errors.empty? && @clothing_item.save
-      remove_all_item_photos(@clothing_item) if remove_photo_requested?
-      render json: clothing_item_payload(@clothing_item)
-    else
-      render_validation_errors(@clothing_item)
-    end
-  ensure
-    cleanup_temporary_files(temporary_files)
+    persist_clothing_item(@clothing_item)
   end
 
   def destroy
@@ -58,7 +38,7 @@ class ClothingItemsController < ApplicationController
       prompt_context: ImageCleanPromptBuilder.for_clothing_item(@clothing_item)
     )
 
-    render json: clothing_item_payload(@clothing_item.reload)
+    render json: payloads.clothing_item(@clothing_item.reload)
   rescue StandardError => error
     render json: { error: error.message }, status: :unprocessable_content
   end
@@ -77,6 +57,20 @@ class ClothingItemsController < ApplicationController
       tags: TagListNormalizer.call(tag_params.presence || params.dig(:clothing_item, :tags)),
       user_id: current_user.id
     )
+  end
+
+  def persist_clothing_item(clothing_item, status: :ok)
+    temporary_files = ManagedTempfiles.new
+    attach_photo_from_request(clothing_item, temporary_files)
+
+    if clothing_item.errors.empty? && clothing_item.save
+      remove_all_item_photos(clothing_item) if remove_photo_requested?
+      render json: payloads.clothing_item(clothing_item), status: status
+    else
+      render_validation_errors(clothing_item)
+    end
+  ensure
+    temporary_files.close_all
   end
 
   def attach_photo_from_request(clothing_item, temporary_files)
@@ -110,15 +104,7 @@ class ClothingItemsController < ApplicationController
 
   def attach_cropped_photo(clothing_item, uploaded_photo, bounding_box, temporary_files)
     cropped_photo = ClothingItemPhotoCropper.call(uploaded_photo, bounding_box)
-    cropped_tempfile = cropped_photo.fetch(:tempfile)
-    cropped_tempfile.rewind
-    temporary_files << cropped_tempfile
-
-    clothing_item.photo.attach(
-      io: cropped_tempfile,
-      filename: cropped_photo.fetch(:filename),
-      content_type: cropped_photo.fetch(:content_type)
-    )
+    PreparedImageSource.from_crop_result(cropped_photo, temporary_files: temporary_files).attach_to(clothing_item.photo)
   end
 
   def attach_photo_from_detection(clothing_item, temporary_files)
@@ -128,11 +114,7 @@ class ClothingItemsController < ApplicationController
     end
 
     if source_outfit_detection.cleaned_photo.attached?
-      clothing_item.photo.attach(
-        io: StringIO.new(source_outfit_detection.cleaned_photo.download),
-        filename: source_outfit_detection.cleaned_photo.blob.filename.to_s,
-        content_type: source_outfit_detection.cleaned_photo.blob.content_type
-      )
+      PreparedImageSource.from_attachment(source_outfit_detection.cleaned_photo).attach_to(clothing_item.photo)
       return
     end
 
@@ -140,15 +122,7 @@ class ClothingItemsController < ApplicationController
       source_outfit_detection.outfit_upload.source_photo,
       source_outfit_detection.usable_crop_box
     )
-    cropped_tempfile = cropped_photo.fetch(:tempfile)
-    cropped_tempfile.rewind
-    temporary_files << cropped_tempfile
-
-    clothing_item.photo.attach(
-      io: cropped_tempfile,
-      filename: cropped_photo.fetch(:filename),
-      content_type: cropped_photo.fetch(:content_type)
-    )
+    PreparedImageSource.from_crop_result(cropped_photo, temporary_files: temporary_files).attach_to(clothing_item.photo)
   end
 
   def normalized_crop_box
@@ -176,10 +150,6 @@ class ClothingItemsController < ApplicationController
   def invalid_crop_box
     @clothing_item.errors.add(:base, "Crop box is invalid")
     nil
-  end
-
-  def cleanup_temporary_files(temporary_files)
-    Array(temporary_files).each(&:close!)
   end
 
   def reset_clean_image_state(clothing_item)

@@ -12,7 +12,7 @@ class CleanImageAttachmentGenerator
     @record = record
     @source_photo = source_photo
     @prompt_context = prompt_context
-    @temporary_files = temporary_files
+    @temporary_files = ManagedTempfiles.wrap(temporary_files)
   end
 
   def call
@@ -22,9 +22,7 @@ class CleanImageAttachmentGenerator
     )
 
     generated = OpenrouterImageCleaner.call(source_photo, prompt_context: prompt_context)
-    generated_tempfile = generated.fetch(:tempfile)
-    generated_tempfile.rewind
-    temporary_files << generated_tempfile
+    generated_tempfile = temporary_files.track(generated.fetch(:tempfile))
 
     record.cleaned_photo.attach(
       io: generated_tempfile,
@@ -53,8 +51,6 @@ class CleanImageAttachmentGenerator
   attr_reader :prompt_context, :record, :source_photo, :temporary_files
 
   def cleanup_temporary_files
-    Array(temporary_files).each do |file|
-      file.close! if file.respond_to?(:close!)
-    end
+    temporary_files.close_all
   end
 end
