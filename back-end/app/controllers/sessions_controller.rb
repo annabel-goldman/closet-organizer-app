@@ -22,7 +22,7 @@ class SessionsController < ApplicationController
   def me
     return render_unauthorized unless logged_in?
 
-    render json: user_payload(current_user)
+    render json: payloads.user(current_user)
   end
 
   def destroy
