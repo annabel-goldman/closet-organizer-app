@@ -1,3 +1,5 @@
+import { requestJson, requestJsonOrNull, requestVoid } from "./api";
+
 const LOCAL_BACKEND_BASE_URL = "http://127.0.0.1:3000";
 
 function isLocalDevelopmentHost(hostname: string) {
@@ -335,25 +337,9 @@ export function preferredDetectionBox(detection: OutfitDetection) {
   return detection.final_box ?? detection.refined_box ?? detection.coarse_box ?? detection.bounding_box ?? null;
 }
 
-export async function fetchClosetOwner(signal?: AbortSignal) {
-  return fetchCurrentUser(signal);
-}
-
 export async function fetchCurrentUser(signal?: AbortSignal) {
-  const response = await fetch(`${API_BASE_URL}/me`, {
-    credentials: "include",
-    signal,
-  });
-
-  if (response.status === 401) {
-    return null;
-  }
-
-  if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
-  }
-
-  return normalizeUserPayload((await response.json()) as User);
+  const user = await requestJsonOrNull<User>(`${API_BASE_URL}/me`, 401, { signal });
+  return user ? normalizeUserPayload(user) : null;
 }
 
 export function beginGoogleSignIn() {
@@ -361,44 +347,24 @@ export function beginGoogleSignIn() {
 }
 
 export async function logoutSession() {
-  const response = await fetch(`${API_BASE_URL}/session`, {
+  await requestVoid(`${API_BASE_URL}/session`, {
     method: "DELETE",
-    credentials: "include",
   });
-
-  if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
-  }
 }
 
 export async function fetchUsers(signal?: AbortSignal) {
-  const response = await fetch(`${API_BASE_URL}/users`, { credentials: "include", signal });
-
-  if (!response.ok) {
-    throw await buildApiError(response);
-  }
-
-  return ((await response.json()) as User[]).map(normalizeUserPayload);
+  const users = await requestJson<User[]>(`${API_BASE_URL}/users`, { signal });
+  return users.map(normalizeUserPayload);
 }
 
 export async function fetchUser(id: number, signal?: AbortSignal) {
-  const response = await fetch(`${API_BASE_URL}/users/${id}`, { credentials: "include", signal });
-
-  if (!response.ok) {
-    throw await buildApiError(response);
-  }
-
-  return normalizeUserPayload((await response.json()) as User);
+  return normalizeUserPayload(await requestJson<User>(`${API_BASE_URL}/users/${id}`, { signal }));
 }
 
 export async function fetchClothingItem(id: number, signal?: AbortSignal) {
-  const response = await fetch(`${API_BASE_URL}/clothing_items/${id}`, { credentials: "include", signal });
-
-  if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
-  }
-
-  return normalizeClothingItemPayload((await response.json()) as ClothingItem);
+  return normalizeClothingItemPayload(
+    await requestJson<ClothingItem>(`${API_BASE_URL}/clothing_items/${id}`, { signal }),
+  );
 }
 
 export async function saveClothingItem(
@@ -407,20 +373,12 @@ export async function saveClothingItem(
   values: ClothingItemFormValues,
   photoOptions: ClothingItemPhotoOptions = {},
 ) {
-  const response = await fetch(`${API_BASE_URL}/clothing_items/${id}`, {
-    method: "PATCH",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-    },
-    body: buildClothingItemFormData(userId, values, photoOptions),
-  });
-
-  if (!response.ok) {
-    throw await buildApiError(response);
-  }
-
-  return normalizeClothingItemPayload((await response.json()) as ClothingItem);
+  return normalizeClothingItemPayload(
+    await requestJson<ClothingItem>(`${API_BASE_URL}/clothing_items/${id}`, {
+      method: "PATCH",
+      body: buildClothingItemFormData(userId, values, photoOptions),
+    }),
+  );
 }
 
 export async function createClothingItem(
@@ -428,20 +386,12 @@ export async function createClothingItem(
   values: ClothingItemFormValues,
   photoOptions: ClothingItemPhotoOptions = {},
 ) {
-  const response = await fetch(`${API_BASE_URL}/clothing_items`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-    },
-    body: buildClothingItemFormData(userId, values, photoOptions),
-  });
-
-  if (!response.ok) {
-    throw await buildApiError(response);
-  }
-
-  return normalizeClothingItemPayload((await response.json()) as ClothingItem);
+  return normalizeClothingItemPayload(
+    await requestJson<ClothingItem>(`${API_BASE_URL}/clothing_items`, {
+      method: "POST",
+      body: buildClothingItemFormData(userId, values, photoOptions),
+    }),
+  );
 }
 
 export async function createOutfitUpload(
@@ -452,52 +402,18 @@ export async function createOutfitUpload(
   formData.append("outfit_upload[user_id]", String(userId));
   formData.append("outfit_upload[source_photo]", photoOptions.photo);
 
-  const response = await fetch(`${API_BASE_URL}/outfit_uploads`, {
+  return requestJson<OutfitUpload>(`${API_BASE_URL}/outfit_uploads`, {
     method: "POST",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-    },
     body: formData,
   });
-
-  if (!response.ok) {
-    throw await buildApiError(response);
-  }
-
-  return (await response.json()) as OutfitUpload;
 }
 
 export async function fetchOutfitUpload(id: number, signal?: AbortSignal) {
-  const response = await fetch(`${API_BASE_URL}/outfit_uploads/${id}`, {
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-    },
-    signal,
-  });
-
-  if (!response.ok) {
-    throw await buildApiError(response);
-  }
-
-  return (await response.json()) as OutfitUpload;
+  return requestJson<OutfitUpload>(`${API_BASE_URL}/outfit_uploads/${id}`, { signal });
 }
 
 export async function fetchOutfits(signal?: AbortSignal) {
-  const response = await fetch(`${API_BASE_URL}/outfits`, {
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-    },
-    signal,
-  });
-
-  if (!response.ok) {
-    throw await buildApiError(response);
-  }
-
-  return (await response.json()) as Outfit[];
+  return requestJson<Outfit[]>(`${API_BASE_URL}/outfits`, { signal });
 }
 
 interface CreateOutfitInput {
@@ -508,30 +424,32 @@ interface CreateOutfitInput {
   tags?: string[];
 }
 
+function buildOutfitPayload(input: {
+  itemIds: number[];
+  name: string;
+  notes?: string;
+  tags?: string[];
+  userId?: number;
+}) {
+  return {
+    outfit: {
+      user_id: input.userId,
+      name: input.name,
+      item_ids: input.itemIds,
+      notes: input.notes,
+      tags: input.tags,
+    },
+  };
+}
+
 export async function createOutfit(input: CreateOutfitInput) {
-  const response = await fetch(`${API_BASE_URL}/outfits`, {
+  return requestJson<Outfit>(`${API_BASE_URL}/outfits`, {
     method: "POST",
-    credentials: "include",
     headers: {
-      Accept: "application/json",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      outfit: {
-        user_id: input.userId,
-        name: input.name,
-        item_ids: input.itemIds,
-        notes: input.notes,
-        tags: input.tags,
-      },
-    }),
+    body: JSON.stringify(buildOutfitPayload(input)),
   });
-
-  if (!response.ok) {
-    throw await buildApiError(response);
-  }
-
-  return (await response.json()) as Outfit;
 }
 
 interface UpdateOutfitInput {
@@ -543,108 +461,47 @@ interface UpdateOutfitInput {
 }
 
 export async function updateOutfit(input: UpdateOutfitInput) {
-  const response = await fetch(`${API_BASE_URL}/outfits/${input.id}`, {
+  return requestJson<Outfit>(`${API_BASE_URL}/outfits/${input.id}`, {
     method: "PATCH",
-    credentials: "include",
     headers: {
-      Accept: "application/json",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      outfit: {
-        name: input.name,
-        item_ids: input.itemIds,
-        notes: input.notes,
-        tags: input.tags,
-      },
-    }),
+    body: JSON.stringify(buildOutfitPayload(input)),
   });
-
-  if (!response.ok) {
-    throw await buildApiError(response);
-  }
-
-  return (await response.json()) as Outfit;
 }
 
 export async function destroyOutfit(id: number) {
-  const response = await fetch(`${API_BASE_URL}/outfits/${id}`, {
+  await requestVoid(`${API_BASE_URL}/outfits/${id}`, {
     method: "DELETE",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-    },
   });
-
-  if (!response.ok) {
-    throw await buildApiError(response);
-  }
 }
 
 export async function destroyClothingItem(id: number) {
-  const response = await fetch(`${API_BASE_URL}/clothing_items/${id}`, {
+  await requestVoid(`${API_BASE_URL}/clothing_items/${id}`, {
     method: "DELETE",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-    },
   });
-
-  if (!response.ok) {
-    throw await buildApiError(response);
-  }
 }
 
 export async function generateClothingItemCleanImage(id: number) {
-  const response = await fetch(`${API_BASE_URL}/clothing_items/${id}/generate_clean_image`, {
+  return requestJson<ClothingItem>(`${API_BASE_URL}/clothing_items/${id}/generate_clean_image`, {
     method: "POST",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-    },
   });
-
-  if (!response.ok) {
-    throw await buildApiError(response);
-  }
-
-  return (await response.json()) as ClothingItem;
 }
 
 export async function generateOutfitDetectionCleanImage(id: number) {
-  const response = await fetch(`${API_BASE_URL}/outfit_detections/${id}/generate_clean_image`, {
+  return requestJson<OutfitDetection>(`${API_BASE_URL}/outfit_detections/${id}/generate_clean_image`, {
     method: "POST",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-    },
   });
-
-  if (!response.ok) {
-    throw await buildApiError(response);
-  }
-
-  return (await response.json()) as OutfitDetection;
 }
 
 export async function previewCleanImage(photo: File) {
   const formData = new FormData();
   formData.append("image_variant[source_photo]", photo);
 
-  const response = await fetch(`${API_BASE_URL}/image_variants/preview`, {
+  return requestJson<TemporaryCleanImageResult>(`${API_BASE_URL}/image_variants/preview`, {
     method: "POST",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-    },
     body: formData,
   });
-
-  if (!response.ok) {
-    throw await buildApiError(response);
-  }
-
-  return (await response.json()) as TemporaryCleanImageResult;
 }
 
 export async function createCleanPreviewFile(photo: File) {
@@ -656,16 +513,6 @@ async function fileFromDataUrl(dataUrl: string, filename: string, contentType?: 
   const response = await fetch(dataUrl);
   const blob = await response.blob();
   return new File([blob], filename, { type: contentType || blob.type || "image/png" });
-}
-
-async function buildApiError(response: Response) {
-  try {
-    const payload = (await response.json()) as { error?: string; errors?: string[] };
-    const message = payload.errors?.join(", ") || payload.error;
-    return new Error(message || `Request failed with status ${response.status}`);
-  } catch {
-    return new Error(`Request failed with status ${response.status}`);
-  }
 }
 
 function normalizeTagList(rawTags: unknown): string[] {

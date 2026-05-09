@@ -1,13 +1,8 @@
-import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, ChevronRight, Users } from "lucide-react";
-import {
-  fetchUsers,
-  formatPossessive,
-  formatPreferredStyle,
-  titleize,
-  User,
-} from "../lib/closet";
+import { ChevronRight, Users } from "lucide-react";
+import { fetchUsers, formatPossessive, formatPreferredStyle, titleize, User } from "../lib/closet";
+import { usePageData } from "../lib/usePageData";
+import { AccessRestrictedState } from "./shared/AccessRestrictedState";
 
 interface UsersDirectoryPageProps {
   onBack: () => void;
@@ -15,63 +10,25 @@ interface UsersDirectoryPageProps {
 }
 
 export function UsersDirectoryPage({ onBack, onSelectUser }: UsersDirectoryPageProps) {
-  const [users, setUsers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState("");
+  const {
+    data: users,
+    errorMessage,
+    isLoading,
+  } = usePageData<User[]>({
+    deps: [],
+    getErrorMessage: (error) => (error instanceof Error ? error.message : "Unable to load users."),
+    initialData: [],
+    load: (signal) => fetchUsers(signal),
+  });
   const isForbidden = /not authorized/i.test(errorMessage);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadUsers() {
-      setIsLoading(true);
-      setErrorMessage("");
-
-      try {
-        const nextUsers = await fetchUsers(controller.signal);
-        setUsers(nextUsers);
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          setErrorMessage(error instanceof Error ? error.message : "Unable to load users.");
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadUsers();
-
-    return () => controller.abort();
-  }, []);
 
   if (isForbidden) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="max-w-3xl mx-auto px-6 py-16">
-          <button
-            onClick={onBack}
-            className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back
-          </button>
-
-          <div className="border border-destructive/20 bg-destructive/5 p-8">
-            <p
-              className="uppercase tracking-[0.3em] text-xs text-destructive/80 mb-3"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              Access Restricted
-            </p>
-            <h1 className="mb-3">You are not authorized to view this page.</h1>
-            <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-              {errorMessage}
-            </p>
-          </div>
-        </div>
-      </div>
+      <AccessRestrictedState
+        backLabel="Back"
+        message={errorMessage}
+        onBack={onBack}
+      />
     );
   }
 
@@ -82,7 +39,6 @@ export function UsersDirectoryPage({ onBack, onSelectUser }: UsersDirectoryPageP
           onClick={onBack}
           className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
         >
-          <ArrowLeft className="w-4 h-4" />
           Back home
         </button>
 
@@ -108,7 +64,7 @@ export function UsersDirectoryPage({ onBack, onSelectUser }: UsersDirectoryPageP
         {errorMessage ? (
           <div className="border border-destructive/20 bg-destructive/5 p-6">
             <p className="text-lg mb-2" style={{ fontFamily: "Cormorant Garamond, serif" }}>
-              {isForbidden ? "You are not authorized to view this directory." : "Users could not be loaded."}
+              Users could not be loaded.
             </p>
             <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
               {errorMessage}
