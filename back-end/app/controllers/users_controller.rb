@@ -4,11 +4,11 @@ class UsersController < ApplicationController
   before_action :set_user, only: %i[ show update destroy ]
 
   def index
-    render json: User.order(:username).map { |user| user_payload(user) }
+    render json: User.order(:username).map { |user| payloads.user(user) }
   end
 
   def show
-    render json: user_payload(@user)
+    render json: payloads.user(@user)
   end
 
   def create
@@ -17,7 +17,7 @@ class UsersController < ApplicationController
 
   def update
     if @user.update(user_params)
-      render json: user_payload(@user)
+      render json: payloads.user(@user)
     else
       render_validation_errors(@user)
     end

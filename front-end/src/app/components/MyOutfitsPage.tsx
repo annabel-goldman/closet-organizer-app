@@ -11,6 +11,7 @@ import {
   formatTagLabel,
   OutfitDraft,
   Outfit,
+  parseTagInput,
   updateOutfit,
   User,
 } from "../lib/closet";
@@ -28,6 +29,15 @@ interface FlashState {
   message: string;
 }
 
+function outfitToFormState(outfit: Outfit): OutfitDraft {
+  return {
+    name: outfit.name,
+    notes: outfit.notes ?? "",
+    tagInput: outfit.tags?.join(", ") ?? "",
+    itemIds: outfit.item_ids ?? outfit.items.map((item) => item.id),
+  };
+}
+
 export function MyOutfitsPage({
   user,
   draft,
@@ -39,11 +49,7 @@ export function MyOutfitsPage({
   const [isLoading, setIsLoading] = useState(true);
   const [flash, setFlash] = useState<FlashState | null>(null);
   const [editingOutfitId, setEditingOutfitId] = useState<number | null>(null);
-
-  const [name, setName] = useState(draft.name);
-  const [notes, setNotes] = useState(draft.notes);
-  const [tagInput, setTagInput] = useState(draft.tagInput);
-  const [selectedItemIds, setSelectedItemIds] = useState<number[]>(draft.itemIds);
+  const [formState, setFormState] = useState<OutfitDraft>(draft);
   const [isSaving, setIsSaving] = useState(false);
   const formSectionRef = useRef<HTMLElement | null>(null);
 
@@ -53,21 +59,45 @@ export function MyOutfitsPage({
   );
   const selectedItems = useMemo(() => {
     const itemById = new Map(sortedItems.map((item) => [item.id, item]));
-    return selectedItemIds
+    return formState.itemIds
       .map((id) => itemById.get(id))
       .filter((item): item is ClothingItem => Boolean(item));
-  }, [selectedItemIds, sortedItems]);
+  }, [formState.itemIds, sortedItems]);
 
   function showFlash(kind: FlashState["kind"], message: string) {
     setFlash({ kind, message });
   }
 
   function updateCreateDraft(nextDraft: OutfitDraft) {
-    setName(nextDraft.name);
-    setNotes(nextDraft.notes);
-    setTagInput(nextDraft.tagInput);
-    setSelectedItemIds(nextDraft.itemIds);
+    setFormState(nextDraft);
     onDraftChange(nextDraft);
+  }
+
+  function updateFormState(updater: (current: OutfitDraft) => OutfitDraft) {
+    setFormState((current) => {
+      const nextDraft = updater(current);
+
+      if (!editingOutfitId) {
+        onDraftChange(nextDraft);
+      }
+
+      return nextDraft;
+    });
+  }
+
+  function setFormField<Key extends keyof OutfitDraft>(key: Key, value: OutfitDraft[Key]) {
+    if (editingOutfitId) {
+      setFormState((current) => ({
+        ...current,
+        [key]: value,
+      }));
+      return;
+    }
+
+    updateFormState((current) => ({
+      ...current,
+      [key]: value,
+    }));
   }
 
   useEffect(() => {
@@ -75,10 +105,7 @@ export function MyOutfitsPage({
       return;
     }
 
-    setName(draft.name);
-    setNotes(draft.notes);
-    setTagInput(draft.tagInput);
-    setSelectedItemIds(draft.itemIds);
+    setFormState(draft);
   }, [draft, editingOutfitId]);
 
   useEffect(() => {
@@ -96,7 +123,7 @@ export function MyOutfitsPage({
   useEffect(() => {
     const controller = new AbortController();
 
-    async function loadOutfits() {
+    void (async () => {
       setIsLoading(true);
 
       try {
@@ -111,9 +138,7 @@ export function MyOutfitsPage({
           setIsLoading(false);
         }
       }
-    }
-
-    loadOutfits();
+    })();
 
     return () => controller.abort();
   }, []);
@@ -121,21 +146,18 @@ export function MyOutfitsPage({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const trimmedName = name.trim();
+    const trimmedName = formState.name.trim();
     if (!trimmedName) {
       showFlash("error", "Please add an outfit name.");
       return;
     }
 
-    if (selectedItemIds.length === 0) {
+    if (formState.itemIds.length === 0) {
       showFlash("error", "Add at least one item to build an outfit.");
       return;
     }
 
-    const tags = tagInput
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter(Boolean);
+    const tags = parseTagInput(formState.tagInput);
 
     setIsSaving(true);
 
@@ -144,8 +166,8 @@ export function MyOutfitsPage({
         const updatedOutfit = await updateOutfit({
           id: editingOutfitId,
           name: trimmedName,
-          itemIds: selectedItemIds,
-          notes: notes.trim() || undefined,
+          itemIds: formState.itemIds,
+          notes: formState.notes.trim() || undefined,
           tags: tags.length > 0 ? tags : undefined,
         });
 
@@ -157,8 +179,8 @@ export function MyOutfitsPage({
         const createdOutfit = await createOutfit({
           userId: user.id,
           name: trimmedName,
-          itemIds: selectedItemIds,
-          notes: notes.trim() || undefined,
+          itemIds: formState.itemIds,
+          notes: formState.notes.trim() || undefined,
           tags: tags.length > 0 ? tags : undefined,
         });
 
@@ -185,40 +207,23 @@ export function MyOutfitsPage({
     }
   }
 
-  function removeDraftItem(itemId: number) {
-    if (editingOutfitId) {
-      setSelectedItemIds((current) => current.filter((id) => id !== itemId));
-      return;
-    }
-
-    updateCreateDraft({
-      name,
-      notes,
-      tagInput,
-      itemIds: selectedItemIds.filter((id) => id !== itemId),
-    });
-  }
-
-  function removeEditingItem(itemId: number) {
-    setSelectedItemIds((current) => current.filter((id) => id !== itemId));
+  function removeSelectedItem(itemId: number) {
+    updateFormState((current) => ({
+      ...current,
+      itemIds: current.itemIds.filter((id) => id !== itemId),
+    }));
   }
 
   function startEditing(outfit: Outfit) {
     setEditingOutfitId(outfit.id);
-    setName(outfit.name);
-    setNotes(outfit.notes ?? "");
-    setTagInput(outfit.tags?.join(", ") ?? "");
-    setSelectedItemIds(outfit.item_ids ?? outfit.items.map((item) => item.id));
+    setFormState(outfitToFormState(outfit));
     setFlash(null);
     formSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function resetForm() {
     setEditingOutfitId(null);
-    setName(draft.name);
-    setNotes(draft.notes);
-    setTagInput(draft.tagInput);
-    setSelectedItemIds(draft.itemIds);
+    setFormState(draft);
   }
 
   return (
@@ -254,21 +259,8 @@ export function MyOutfitsPage({
                 Name
               </span>
               <input
-                value={name}
-                onChange={(event) => {
-                  const nextValue = event.target.value;
-                  if (editingOutfitId) {
-                    setName(nextValue);
-                    return;
-                  }
-
-                  updateCreateDraft({
-                    name: nextValue,
-                    notes,
-                    tagInput,
-                    itemIds: selectedItemIds,
-                  });
-                }}
+                value={formState.name}
+                onChange={(event) => setFormField("name", event.target.value)}
                 placeholder="Weekend Brunch"
                 className="w-full border border-border bg-background px-3 py-2"
               />
@@ -279,21 +271,8 @@ export function MyOutfitsPage({
                 Tags (comma separated)
               </span>
               <input
-                value={tagInput}
-                onChange={(event) => {
-                  const nextValue = event.target.value;
-                  if (editingOutfitId) {
-                    setTagInput(nextValue);
-                    return;
-                  }
-
-                  updateCreateDraft({
-                    name,
-                    notes,
-                    tagInput: nextValue,
-                    itemIds: selectedItemIds,
-                  });
-                }}
+                value={formState.tagInput}
+                onChange={(event) => setFormField("tagInput", event.target.value)}
                 placeholder="casual, spring"
                 className="w-full border border-border bg-background px-3 py-2"
               />
@@ -305,21 +284,8 @@ export function MyOutfitsPage({
               Notes
             </span>
             <textarea
-              value={notes}
-              onChange={(event) => {
-                const nextValue = event.target.value;
-                if (editingOutfitId) {
-                  setNotes(nextValue);
-                  return;
-                }
-
-                updateCreateDraft({
-                  name,
-                  notes: nextValue,
-                  tagInput,
-                  itemIds: selectedItemIds,
-                });
-              }}
+              value={formState.notes}
+              onChange={(event) => setFormField("notes", event.target.value)}
               placeholder="When and where to wear this look"
               className="w-full border border-border bg-background px-3 py-2 min-h-24"
             />
@@ -341,7 +307,10 @@ export function MyOutfitsPage({
             </div>
 
             {selectedItems.length === 0 ? (
-              <div className="border border-dashed border-border p-4 text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+              <div
+                className="border border-dashed border-border p-4 text-sm text-muted-foreground"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
                 Use “Add to Outfit” on any closet item, then come back here to save.
               </div>
             ) : (
@@ -352,29 +321,30 @@ export function MyOutfitsPage({
                       {item.image_url ? (
                         <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
                       ) : (
-                        <div className="h-full w-full flex items-center justify-center text-xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <div
+                          className="h-full w-full flex items-center justify-center text-xs"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
                           {buildPlaceholderLabel(item.name)}
                         </div>
                       )}
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <p className="truncate" style={{ fontFamily: "Outfit, sans-serif" }}>{item.name}</p>
-                      <p className="text-xs text-muted-foreground truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <p className="truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {item.name}
+                      </p>
+                      <p
+                        className="text-xs text-muted-foreground truncate"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
                         {item.tags.length > 0 ? formatTagLabel(item.tags[0]) : "Unstyled"}
                       </p>
                     </div>
 
                     <button
                       type="button"
-                      onClick={() => {
-                        if (editingOutfitId) {
-                          removeEditingItem(item.id);
-                          return;
-                        }
-
-                        removeDraftItem(item.id);
-                      }}
+                      onClick={() => removeSelectedItem(item.id)}
                       className="inline-flex items-center justify-center border border-border p-1.5 hover:border-foreground transition-colors"
                       aria-label={`Remove ${item.name}`}
                     >
@@ -458,7 +428,7 @@ export function MyOutfitsPage({
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleDelete(outfit.id)}
+                      onClick={() => void handleDelete(outfit.id)}
                       className="inline-flex items-center justify-center border border-border p-2 hover:border-destructive transition-colors"
                       aria-label="Delete outfit"
                     >

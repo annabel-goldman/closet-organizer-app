@@ -49,6 +49,13 @@ Heroku deployment link:
 - `PROJECT_INDEX.md`: concise repository structure index
 - `wiki.md`: extended project background, scope notes, and roadmap
 
+## Current Code Organization
+
+- Frontend route parsing, closet filtering, shared API helpers, page-loading hooks, and outfit-draft persistence are split into focused modules under `front-end/src/app/lib/`.
+- The image-based item flow is split between `CreateItemPage.tsx` and extracted review components under `front-end/src/app/components/create-item/`.
+- Backend JSON response shaping lives in `back-end/app/presenters/api_payloads.rb`.
+- Backend image-preparation and tempfile lifecycle helpers live in `back-end/app/services/managed_tempfiles.rb` and `back-end/app/services/prepared_image_source.rb`.
+
 ## Getting Started
 
 ### Start Both Apps
@@ -69,6 +76,20 @@ Override ports if needed:
 ```bash
 BACKEND_PORT=3001 FRONTEND_PORT=5174 ./start.sh
 ```
+
+Or use the script shorthand:
+
+```bash
+./start.sh port=4100
+./start.sh backend-port=3100 frontend-port=5174
+```
+
+Important for Google sign-in:
+
+- Google OAuth requires exact backend origins and callback URLs.
+- If you choose a new local `BACKEND_PORT`, that port must already be registered in the Google auth app settings.
+- If it is not registered yet, speak with the owner of the Google auth screen/client configuration and ask them to add both the new local backend origin and the matching callback URL before using that port.
+- In practice, that means adding entries like `http://localhost:3100` and `http://localhost:3100/auth/google_oauth2/callback` for any new backend port you want to use locally.
 
 ### Start Apps Separately
 
@@ -112,6 +133,7 @@ npm run dev
 - Recent local verification:
   `npm run build`
   `bundle exec rails test`
+  `bundle exec rubocop`
 
 ## Documentation
 

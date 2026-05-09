@@ -3,7 +3,7 @@ class OutfitDetectionsController < ApplicationController
   before_action :set_outfit_detection
 
   def generate_clean_image
-    temporary_files = []
+    temporary_files = ManagedTempfiles.new
 
     source_photo = source_photo_for_cleaning(@outfit_detection, temporary_files)
     unless source_photo
@@ -18,9 +18,11 @@ class OutfitDetectionsController < ApplicationController
       temporary_files: temporary_files
     )
 
-    render json: outfit_detection_payload(@outfit_detection.reload)
+    render json: payloads.outfit_detection(@outfit_detection.reload)
   rescue StandardError => error
     render json: { error: error.message }, status: :unprocessable_content
+  ensure
+    temporary_files&.close_all
   end
 
   private
@@ -41,14 +43,6 @@ class OutfitDetectionsController < ApplicationController
       outfit_detection.outfit_upload.source_photo,
       crop_box
     )
-    cropped_tempfile = cropped_photo.fetch(:tempfile)
-    cropped_tempfile.rewind
-    temporary_files << cropped_tempfile
-
-    Struct.new(:tempfile, :original_filename, :content_type, keyword_init: true).new(
-      tempfile: cropped_tempfile,
-      original_filename: cropped_photo.fetch(:filename),
-      content_type: cropped_photo.fetch(:content_type)
-    )
+    PreparedImageSource.from_crop_result(cropped_photo, temporary_files: temporary_files)
   end
 end

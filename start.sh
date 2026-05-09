@@ -6,13 +6,28 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$ROOT_DIR/back-end"
 FRONTEND_DIR="$ROOT_DIR/front-end"
 
-BACKEND_HOST="${BACKEND_HOST:-127.0.0.1}"
-BACKEND_PORT="${BACKEND_PORT:-3000}"
-FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
-FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+print_usage() {
+  cat <<'EOF'
+Usage:
+  ./start.sh
+  ./start.sh port=4100
+  ./start.sh backend-port=3100 frontend-port=5174
 
-BACKEND_PID=""
-FRONTEND_PID=""
+Options:
+  port=NNNN           Set the backend to NNNN and the frontend to NNNN+1.
+  backend-port=NNNN   Set the Rails backend port explicitly.
+  frontend-port=NNNN  Set the Vite frontend port explicitly.
+  help, --help, -h    Show this help text.
+
+Environment variables still work:
+  BACKEND_HOST, BACKEND_PORT, FRONTEND_HOST, FRONTEND_PORT
+EOF
+}
+
+is_valid_port() {
+  local port="$1"
+  [[ "$port" =~ ^[0-9]+$ ]] && ((port >= 1 && port <= 65535))
+}
 
 load_env_file() {
   local env_file="$1"
@@ -52,6 +67,71 @@ load_env_file() {
     echo "Warning: skipping invalid env line in ${env_file#$ROOT_DIR/}: $line" >&2
   done < "$env_file"
 }
+
+CLI_BASE_PORT=""
+CLI_BACKEND_PORT=""
+CLI_FRONTEND_PORT=""
+
+for arg in "$@"; do
+  case "$arg" in
+    help|--help|-h)
+      print_usage
+      exit 0
+      ;;
+    port=*)
+      CLI_BASE_PORT="${arg#port=}"
+      ;;
+    backend-port=*)
+      CLI_BACKEND_PORT="${arg#backend-port=}"
+      ;;
+    frontend-port=*)
+      CLI_FRONTEND_PORT="${arg#frontend-port=}"
+      ;;
+    *)
+      echo "Unknown argument: $arg" >&2
+      print_usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [[ -n "$CLI_BASE_PORT" ]]; then
+  if ! is_valid_port "$CLI_BASE_PORT"; then
+    echo "Invalid port value for port=: $CLI_BASE_PORT" >&2
+    exit 1
+  fi
+
+  if [[ -z "$CLI_BACKEND_PORT" ]]; then
+    CLI_BACKEND_PORT="$CLI_BASE_PORT"
+  fi
+
+  if [[ -z "$CLI_FRONTEND_PORT" ]]; then
+    if ((CLI_BASE_PORT == 65535)); then
+      echo "port=65535 requires an explicit frontend-port because 65536 is not a valid port." >&2
+      exit 1
+    fi
+
+    CLI_FRONTEND_PORT="$((CLI_BASE_PORT + 1))"
+  fi
+fi
+
+if [[ -n "$CLI_BACKEND_PORT" ]] && ! is_valid_port "$CLI_BACKEND_PORT"; then
+  echo "Invalid backend port: $CLI_BACKEND_PORT" >&2
+  exit 1
+fi
+
+if [[ -n "$CLI_FRONTEND_PORT" ]] && ! is_valid_port "$CLI_FRONTEND_PORT"; then
+  echo "Invalid frontend port: $CLI_FRONTEND_PORT" >&2
+  exit 1
+fi
+
+INITIAL_BACKEND_HOST="${BACKEND_HOST:-}"
+INITIAL_BACKEND_PORT="${BACKEND_PORT:-}"
+INITIAL_FRONTEND_HOST="${FRONTEND_HOST:-}"
+INITIAL_FRONTEND_PORT="${FRONTEND_PORT:-}"
+
+BACKEND_PID=""
+FRONTEND_PID=""
 
 kill_matching_processes() {
   local pattern="$1"
@@ -147,6 +227,21 @@ load_env_file "$BACKEND_DIR/.env.local"
 load_env_file "$FRONTEND_DIR/.env"
 load_env_file "$FRONTEND_DIR/.env.local"
 
+BACKEND_HOST="${INITIAL_BACKEND_HOST:-${BACKEND_HOST:-127.0.0.1}}"
+BACKEND_PORT="${INITIAL_BACKEND_PORT:-${BACKEND_PORT:-3000}}"
+FRONTEND_HOST="${INITIAL_FRONTEND_HOST:-${FRONTEND_HOST:-127.0.0.1}}"
+FRONTEND_PORT="${INITIAL_FRONTEND_PORT:-${FRONTEND_PORT:-5173}}"
+
+if [[ -n "$CLI_BACKEND_PORT" ]]; then
+  BACKEND_PORT="$CLI_BACKEND_PORT"
+fi
+
+if [[ -n "$CLI_FRONTEND_PORT" ]]; then
+  FRONTEND_PORT="$CLI_FRONTEND_PORT"
+fi
+
+export BACKEND_HOST BACKEND_PORT FRONTEND_HOST FRONTEND_PORT
+
 echo "Running backend migrations"
 (
   cd "$BACKEND_DIR"
@@ -169,7 +264,10 @@ BACKEND_PID=$!
 echo "Starting frontend on http://${FRONTEND_HOST}:${FRONTEND_PORT}"
 (
   cd "$FRONTEND_DIR"
-  BACKEND_HOST="$BACKEND_HOST" BACKEND_PORT="$BACKEND_PORT" exec npm run dev -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT" --strictPort
+  BACKEND_HOST="$BACKEND_HOST" \
+  BACKEND_PORT="$BACKEND_PORT" \
+  VITE_BACKEND_BASE_URL="http://${BACKEND_HOST}:${BACKEND_PORT}" \
+  exec npm run dev -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT" --strictPort
 ) &
 FRONTEND_PID=$!
 

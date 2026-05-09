@@ -1,61 +1,39 @@
-**Add your own guidelines here**
-<!--
+# Frontend Guidelines
 
-System Guidelines
+## Structure
 
-Use this file to provide the AI with rules and guidelines you want it to follow.
-This template outlines a few examples of things you can add. You can add your own sections and format it to suit your needs
+- Keep route components focused on page behavior, not shared plumbing.
+- Put shared request logic in `src/app/lib/api.ts`.
+- Put route parsing and navigation helpers in `src/app/lib/routes.ts`.
+- Put search, sort, and filter helpers in focused utility modules instead of `App.tsx`.
+- Extract multi-step UI flows into subcomponents once a single file starts mixing orchestration and rendering.
 
-TIP: More context isn't always better. It can confuse the LLM. Try and add the most important rules you need
+## State
 
-# General guidelines
+- Prefer one coherent state object over several parallel state variables when fields are edited together.
+- Use shared hooks like `usePageData` and `useOutfitDraftState` instead of repeating fetch lifecycle or local-storage wiring in each page.
+- Avoid introducing local UI state for behavior that CSS can express cleanly.
 
-Any general rules you want the AI to follow.
-For example:
+## API Integration
 
-* Only use absolute positioning when necessary. Opt for responsive and well structured layouts that use flexbox and grid by default
-* Refactor code as you go to keep code clean
-* Keep file sizes small and put helper functions and components in their own files.
+- Use the shared request helpers so credentials, JSON parsing, and API error formatting stay consistent.
+- Normalize backend payloads at the API/helper layer instead of scattering payload cleanup through components.
+- Keep `closet.ts` focused on shared types, formatting helpers, and feature-facing frontend API functions.
 
---------------
+## Components
 
-# Design system guidelines
-Rules for how the AI should make generations look like your company's design system
+- Prefer small presentational components with clear props over long files that mix several visual sections.
+- Reuse shared restricted/error/loading patterns when the UX should stay consistent across pages.
+- Keep item and outfit forms readable by extracting repeated field blocks or review cards once a page becomes hard to scan.
 
-Additionally, if you select a design system to use in the prompt box, you can reference
-your design system's components, tokens, variables and components.
-For example:
+## Styling
 
-* Use a base font-size of 14px
-* Date formats should always be in the format “Jun 10”
-* The bottom toolbar should only ever have a maximum of 4 items
-* Never use the floating action button with the bottom toolbar
-* Chips should always come in sets of 3 or more
-* Don't use a dropdown if there are 2 or fewer options
+- Preserve the established editorial look: serif headings, clean cards, and tailored spacing.
+- Use flexbox and grid first; only use absolute positioning when it is clearly necessary.
+- Favor existing UI primitives under `src/app/components/ui/` before introducing new ad hoc patterns.
 
-You can also create sub sections and add more specific details
-For example:
+## Refactoring Expectations
 
-
-## Button
-The Button component is a fundamental interactive element in our design system, designed to trigger actions or navigate
-users through the application. It provides visual feedback and clear affordances to enhance user experience.
-
-### Usage
-Buttons should be used for important actions that users need to take, such as form submissions, confirming choices,
-or initiating processes. They communicate interactivity and should have clear, action-oriented labels.
-
-### Variants
-* Primary Button
-  * Purpose : Used for the main action in a section or page
-  * Visual Style : Bold, filled with the primary brand color
-  * Usage : One primary button per section to guide users toward the most important action
-* Secondary Button
-  * Purpose : Used for alternative or supporting actions
-  * Visual Style : Outlined with the primary color, transparent background
-  * Usage : Can appear alongside a primary button for less important actions
-* Tertiary Button
-  * Purpose : Used for the least important actions
-  * Visual Style : Text-only with no border, using primary color
-  * Usage : For actions that should be available but not emphasized
--->
+- When touching a large file, leave it cleaner than you found it.
+- Prefer removing duplication in state transitions, async loading, and fetch handling before adding new abstractions elsewhere.
+- If a helper or wrapper only renames another function without adding clarity, inline it.

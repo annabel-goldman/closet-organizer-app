@@ -4,33 +4,20 @@ class OutfitsController < ApplicationController
 
   def index
     outfits = current_user.outfits.includes(:clothing_items).order(created_at: :desc)
-    render json: outfits.map { |outfit| outfit_payload(outfit) }
+    render json: outfits.map { |outfit| payloads.outfit(outfit) }
   end
 
   def show
-    render json: outfit_payload(@outfit)
+    render json: payloads.outfit(@outfit)
   end
 
   def create
-    outfit = current_user.outfits.new(outfit_attributes)
-    assign_items(outfit)
-
-    if outfit.errors.empty? && outfit.save
-      render json: outfit_payload(outfit), status: :created
-    else
-      render_validation_errors(outfit)
-    end
+    outfit = current_user.outfits.new
+    persist_outfit(outfit, status: :created)
   end
 
   def update
-    @outfit.assign_attributes(outfit_attributes)
-    assign_items(@outfit)
-
-    if @outfit.errors.empty? && @outfit.save
-      render json: outfit_payload(@outfit)
-    else
-      render_validation_errors(@outfit)
-    end
+    persist_outfit(@outfit)
   end
 
   def destroy
@@ -50,6 +37,17 @@ class OutfitsController < ApplicationController
 
   def outfit_attributes
     outfit_params.slice(:name, :notes, :tags)
+  end
+
+  def persist_outfit(outfit, status: :ok)
+    outfit.assign_attributes(outfit_attributes)
+    assign_items(outfit)
+
+    if outfit.errors.empty? && outfit.save
+      render json: payloads.outfit(outfit), status: status
+    else
+      render_validation_errors(outfit)
+    end
   end
 
   def assign_items(outfit)

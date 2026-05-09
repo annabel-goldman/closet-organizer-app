@@ -4,15 +4,17 @@ import { ArrowLeft, Save, Trash2 } from "lucide-react";
 import {
   createCleanPreviewFile,
   ClothingItem,
+  ClothingItemFormValues,
   destroyClothingItem,
   fetchClothingItem,
-  formatTagLabel,
   formatDisplaySize,
+  formatTagLabel,
   generateClothingItemCleanImage,
   parseTagInput,
   saveClothingItem,
   toClothingItemFormValues,
 } from "../lib/closet";
+import { usePageData } from "../lib/usePageData";
 import { AiCleanImageButton } from "./AiCleanImageButton";
 import { ItemHeroPreview } from "./ItemHeroPreview";
 import { ItemMetadataFields } from "./ItemMetadataFields";
@@ -34,55 +36,39 @@ export function ItemDetailPage({
   onItemSaved,
   onItemDeleted,
 }: ItemDetailPageProps) {
-  const [item, setItem] = useState<ClothingItem | null>(initialItem ?? null);
-  const [formValues, setFormValues] = useState(
-    initialItem ? toClothingItemFormValues(initialItem) : null,
+  const shouldUseInitialItem = Boolean(initialItem?.id === itemId);
+  const photoState = useItemPhotoState(initialItem?.image_url);
+  const [formValues, setFormValues] = useState<ClothingItemFormValues | null>(
+    shouldUseInitialItem && initialItem ? toClothingItemFormValues(initialItem) : null,
   );
-  const [isLoading, setIsLoading] = useState(!initialItem);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCleaningImage, setIsCleaningImage] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const photoState = useItemPhotoState(item?.image_url);
+  const {
+    data: item,
+    errorMessage,
+    isLoading,
+    setData: setItem,
+    setErrorMessage,
+  } = usePageData<ClothingItem | null>({
+    deps: [initialItem, itemId, shouldUseInitialItem],
+    getErrorMessage: (error) =>
+      error instanceof Error ? error.message : "Unable to load this clothing item.",
+    initialData: shouldUseInitialItem ? initialItem ?? null : null,
+    load: (signal) => fetchClothingItem(itemId, signal),
+    shouldUseInitialData: shouldUseInitialItem,
+  });
 
   useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadItem() {
-      if (initialItem?.id === itemId) {
-        setItem(initialItem);
-        setFormValues(toClothingItemFormValues(initialItem));
-        photoState.reset();
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(true);
-      setErrorMessage("");
-
-      try {
-        const nextItem = await fetchClothingItem(itemId, controller.signal);
-        setItem(nextItem);
-        setFormValues(toClothingItemFormValues(nextItem));
-        photoState.reset();
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          setErrorMessage(
-            error instanceof Error ? error.message : "Unable to load this clothing item.",
-          );
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
+    if (!item) {
+      setFormValues(null);
+      return;
     }
 
-    loadItem();
-
-    return () => controller.abort();
-  }, [initialItem, itemId]);
+    setFormValues(toClothingItemFormValues(item));
+    photoState.reset();
+  }, [item]);
 
   const isDirty = useMemo(() => {
     if (!item || !formValues) {
@@ -114,8 +100,6 @@ export function ItemDetailPage({
         removePhoto: photoState.removeExisting,
       });
       setItem(updatedItem);
-      setFormValues(toClothingItemFormValues(updatedItem));
-      photoState.reset();
       setSuccessMessage("Item details saved.");
       onItemSaved(updatedItem);
     } catch (error) {
@@ -164,8 +148,6 @@ export function ItemDetailPage({
       } else {
         const updatedItem = await generateClothingItemCleanImage(item.id);
         setItem(updatedItem);
-        setFormValues(toClothingItemFormValues(updatedItem));
-        photoState.reset();
         setSuccessMessage("AI-cleaned image saved to this item.");
         onItemSaved(updatedItem);
       }
@@ -255,7 +237,7 @@ export function ItemDetailPage({
 
             <button
               type="button"
-              onClick={handleDelete}
+              onClick={() => void handleDelete()}
               disabled={isDeleting}
               className="inline-flex items-center gap-2 px-4 py-2 border border-destructive/30 text-destructive hover:bg-destructive/5 transition-colors disabled:opacity-60"
             >

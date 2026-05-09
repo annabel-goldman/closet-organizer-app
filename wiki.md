@@ -28,10 +28,13 @@ Closet information is often spread across memory, notes, screenshots, and shoppi
 ## Current Implementation Notes
 
 - The backend lives in `back-end/` and serves JSON by default.
-- The frontend uses a lightweight custom router in `front-end/src/app/App.tsx`.
+- The frontend uses a lightweight custom router split between `front-end/src/app/App.tsx` and `front-end/src/app/lib/routes.ts`.
+- Frontend shared request helpers, page-loading hooks, closet filters, and outfit-draft persistence are factored into focused modules under `front-end/src/app/lib/`.
 - `/users` and `/users/:id` HTML requests fall back to the SPA shell, while JSON requests still enforce backend authorization.
 - Closet records are scoped to `current_user`; non-admin users cannot read or mutate other users' data.
 - Outfit detection and clean-image generation are powered by OpenRouter-backed service objects in the backend.
+- Backend API response shaping is centralized in `back-end/app/presenters/api_payloads.rb`.
+- Backend crop/image flows use shared tempfile and prepared-image helpers to reduce duplication across controllers and services.
 - Active Storage manages uploaded source images and generated cleaned images.
 
 ## Demo Data
@@ -66,4 +69,6 @@ Miro board link:
 - Backend and frontend are maintained in one monorepo.
 - The active Rails backend lives in `back-end/`; the old duplicate root Rails scaffold was removed earlier in the project.
 - CI currently validates the Rails app only.
+- The frontend recently went through a cleanup pass that split routing, API helpers, draft persistence, and create-item review UI into smaller modules.
+- The backend recently went through a cleanup pass that moved JSON payload shaping into presenters and unified tempfile/image-source handling for AI cleanup flows.
 - Deployment target for the course assignment is Heroku.

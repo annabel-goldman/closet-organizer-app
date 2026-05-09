@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, ChevronRight, Shirt } from "lucide-react";
+import { ChevronRight, Shirt } from "lucide-react";
 import {
   fetchUser,
   formatDisplaySize,
@@ -10,6 +9,8 @@ import {
   titleize,
   User,
 } from "../lib/closet";
+import { usePageData } from "../lib/usePageData";
+import { AccessRestrictedState } from "./shared/AccessRestrictedState";
 
 interface UserDetailPageProps {
   userId: number;
@@ -24,69 +25,28 @@ export function UserDetailPage({
   onBack,
   onOpenItem,
 }: UserDetailPageProps) {
-  const [user, setUser] = useState<User | null>(initialUser ?? null);
-  const [isLoading, setIsLoading] = useState(!initialUser);
-  const [errorMessage, setErrorMessage] = useState("");
+  const shouldUseInitialUser = Boolean(initialUser?.id === userId);
+  const {
+    data: user,
+    errorMessage,
+    isLoading,
+  } = usePageData<User | null>({
+    deps: [initialUser, shouldUseInitialUser, userId],
+    getErrorMessage: (error) =>
+      error instanceof Error ? error.message : "Unable to load this user.",
+    initialData: shouldUseInitialUser ? initialUser ?? null : null,
+    load: (signal) => fetchUser(userId, signal),
+    shouldUseInitialData: shouldUseInitialUser,
+  });
   const isForbidden = /not authorized/i.test(errorMessage);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadUser() {
-      if (initialUser?.id === userId) {
-        setUser(initialUser);
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(true);
-      setErrorMessage("");
-
-      try {
-        const nextUser = await fetchUser(userId, controller.signal);
-        setUser(nextUser);
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          setErrorMessage(error instanceof Error ? error.message : "Unable to load this user.");
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadUser();
-
-    return () => controller.abort();
-  }, [initialUser, userId]);
 
   if (isForbidden) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="max-w-3xl mx-auto px-6 py-16">
-          <button
-            onClick={onBack}
-            className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back
-          </button>
-
-          <div className="border border-destructive/20 bg-destructive/5 p-8">
-            <p
-              className="uppercase tracking-[0.3em] text-xs text-destructive/80 mb-3"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              Access Restricted
-            </p>
-            <h1 className="mb-3">You are not authorized to view this page.</h1>
-            <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-              {errorMessage}
-            </p>
-          </div>
-        </div>
-      </div>
+      <AccessRestrictedState
+        backLabel="Back"
+        message={errorMessage}
+        onBack={onBack}
+      />
     );
   }
 
@@ -115,12 +75,11 @@ export function UserDetailPage({
             onClick={onBack}
             className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
           >
-            <ArrowLeft className="w-4 h-4" />
             Back to all users
           </button>
           <div className="border border-destructive/20 bg-destructive/5 p-6">
             <p className="text-lg mb-2" style={{ fontFamily: "Cormorant Garamond, serif" }}>
-              {isForbidden ? "You are not authorized to view this profile." : "This user could not be loaded."}
+              This user could not be loaded.
             </p>
             <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
               {errorMessage || "The requested user may have been removed."}
@@ -140,7 +99,6 @@ export function UserDetailPage({
           onClick={onBack}
           className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
         >
-          <ArrowLeft className="w-4 h-4" />
           Back to all users
         </button>
 
@@ -185,18 +143,16 @@ export function UserDetailPage({
             className="space-y-6"
           >
             <div>
-              <div>
-                <p
-                  className="uppercase tracking-[0.3em] text-xs text-muted-foreground mb-3"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  Clothing Items
-                </p>
-                <h2 className="mb-1">Closet Contents</h2>
-                <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Click any item to jump straight into its editable detail page.
-                </p>
-              </div>
+              <p
+                className="uppercase tracking-[0.3em] text-xs text-muted-foreground mb-3"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                Clothing Items
+              </p>
+              <h2 className="mb-1">Closet Contents</h2>
+              <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Click any item to jump straight into its editable detail page.
+              </p>
             </div>
 
             <div className="space-y-4">

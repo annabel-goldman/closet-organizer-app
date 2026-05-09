@@ -12,14 +12,14 @@ class OutfitUploadsController < ApplicationController
         @outfit_upload.update!(status: :failed, error_message: error.message)
       end
 
-      render json: outfit_upload_payload(@outfit_upload.reload), status: :created
+      render json: payloads.outfit_upload(@outfit_upload.reload), status: :created
     else
       render_validation_errors(@outfit_upload)
     end
   end
 
   def show
-    render json: outfit_upload_payload(@outfit_upload)
+    render json: payloads.outfit_upload(@outfit_upload)
   end
 
   private
