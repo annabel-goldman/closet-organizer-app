@@ -1,4 +1,5 @@
 import { RefObject } from "react";
+import { PrimitiveText } from "./primitives/PrimitiveText";
 
 interface ItemPhotoFieldProps {
   description: string;
@@ -27,7 +28,9 @@ export function ItemPhotoField({
 
   return (
     <label className="space-y-2 sm:col-span-2">
-      <span>Photo</span>
+      <PrimitiveText as="span" variant="label">
+        Photo
+      </PrimitiveText>
       <input
         ref={inputRef}
         type="file"
@@ -35,15 +38,15 @@ export function ItemPhotoField({
         onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
         className="w-full border border-border bg-card px-4 py-3 file:mr-4 file:border-0 file:bg-transparent file:font-medium"
       />
-      <p className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+      <PrimitiveText as="p" variant="bodySm" tone="muted">
         {description}
-      </p>
+      </PrimitiveText>
 
       {isShowingPhotoRow && (
         <div className="flex items-center justify-between gap-4 border border-border bg-card px-4 py-3">
-          <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>
+          <PrimitiveText as="span" variant="bodySm">
             {selectedFileName || "Current photo attached"}
-          </span>
+          </PrimitiveText>
           <button
             type="button"
             onClick={selectedFileName ? onClearSelection : onRemoveExisting}
@@ -56,9 +59,9 @@ export function ItemPhotoField({
 
       {isRemovingExisting && (
         <div className="flex items-center justify-between gap-4 border border-dashed border-border px-4 py-3">
-          <span className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+          <PrimitiveText as="span" variant="bodySm" tone="muted">
             The current photo will be removed when you save.
-          </span>
+          </PrimitiveText>
           <button
             type="button"
             onClick={onKeepExisting}

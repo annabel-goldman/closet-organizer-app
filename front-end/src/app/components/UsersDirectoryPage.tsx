@@ -2,6 +2,7 @@ import { motion } from "motion/react";
 import { ChevronRight, Users } from "lucide-react";
 import { fetchUsers, formatPossessive, formatPreferredStyle, titleize, User } from "../lib/closet";
 import { usePageData } from "../lib/usePageData";
+import { PrimitiveText } from "./primitives/PrimitiveText";
 import { AccessRestrictedState } from "./shared/AccessRestrictedState";
 
 interface UsersDirectoryPageProps {
@@ -44,31 +45,32 @@ export function UsersDirectoryPage({ onBack, onSelectUser }: UsersDirectoryPageP
 
         <div className="flex items-end justify-between gap-6 mb-10">
           <div>
-            <p
-              className="uppercase tracking-[0.3em] text-xs text-muted-foreground mb-3"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
+            <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
               User Directory
-            </p>
-            <h1 className="mb-2">All Users</h1>
-            <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+            </PrimitiveText>
+            <PrimitiveText as="h1" variant="display" font="serif" className="mb-2">
+              All Users
+            </PrimitiveText>
+            <PrimitiveText as="p" tone="muted">
               Browse every closet owner in the system and open a detailed profile.
-            </p>
+            </PrimitiveText>
           </div>
           <div className="hidden sm:flex items-center gap-3 px-5 py-3 border border-border bg-card">
             <Users className="w-4 h-4" />
-            <span style={{ fontFamily: "Outfit, sans-serif" }}>{users.length} users</span>
+            <PrimitiveText as="span" variant="bodySm">
+              {users.length} users
+            </PrimitiveText>
           </div>
         </div>
 
         {errorMessage ? (
           <div className="border border-destructive/20 bg-destructive/5 p-6">
-            <p className="text-lg mb-2" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+            <PrimitiveText as="p" variant="title" font="serif" className="mb-2">
               Users could not be loaded.
-            </p>
-            <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+            </PrimitiveText>
+            <PrimitiveText as="p" tone="muted">
               {errorMessage}
-            </p>
+            </PrimitiveText>
           </div>
         ) : isLoading ? (
           <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -93,32 +95,37 @@ export function UsersDirectoryPage({ onBack, onSelectUser }: UsersDirectoryPageP
                   onClick={() => onSelectUser(user.id)}
                   className="text-left border border-border bg-card p-6 hover:border-foreground transition-colors"
                 >
-                  <p
-                    className="uppercase tracking-[0.3em] text-xs text-muted-foreground mb-4"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
+                  <PrimitiveText as="p" variant="overline" tone="muted" className="mb-4">
                     Closet Owner
-                  </p>
-                  <h2 className="mb-2">{titleize(user.username)}</h2>
-                  <p className="text-muted-foreground mb-6" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  </PrimitiveText>
+                  <PrimitiveText as="h2" variant="title" font="serif" className="mb-2">
+                    {titleize(user.username)}
+                  </PrimitiveText>
+                  <PrimitiveText as="p" tone="muted" className="mb-6">
                     {formatPossessive(titleize(user.username))}
-                  </p>
+                  </PrimitiveText>
                   <div className="grid grid-cols-2 gap-4 text-sm mb-6">
                     <div className="border border-border p-4">
-                      <p className="text-muted-foreground mb-1">Items</p>
-                      <p className="text-xl" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+                      <PrimitiveText as="p" variant="bodySm" tone="muted" className="mb-1">
+                        Items
+                      </PrimitiveText>
+                      <PrimitiveText as="p" variant="stat" font="serif">
                         {user.clothing_items.length}
-                      </p>
+                      </PrimitiveText>
                     </div>
                     <div className="border border-border p-4">
-                      <p className="text-muted-foreground mb-1">Style</p>
-                      <p className="text-xl" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+                      <PrimitiveText as="p" variant="bodySm" tone="muted" className="mb-1">
+                        Style
+                      </PrimitiveText>
+                      <PrimitiveText as="p" variant="stat" font="serif">
                         {preferredStyle ?? "N/A"}
-                      </p>
+                      </PrimitiveText>
                     </div>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span style={{ fontFamily: "Outfit, sans-serif" }}>Open details</span>
+                    <PrimitiveText as="span" variant="bodySm">
+                      Open details
+                    </PrimitiveText>
                     <ChevronRight className="w-4 h-4" />
                   </div>
                 </motion.button>

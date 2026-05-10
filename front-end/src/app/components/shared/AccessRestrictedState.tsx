@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import { PrimitiveText } from "../primitives/PrimitiveText";
 
 interface AccessRestrictedStateProps {
   backLabel: string;
@@ -23,16 +24,20 @@ export function AccessRestrictedState({
         </button>
 
         <div className="border border-destructive/20 bg-destructive/5 p-8">
-          <p
-            className="uppercase tracking-[0.3em] text-xs text-destructive/80 mb-3"
-            style={{ fontFamily: "Outfit, sans-serif" }}
+          <PrimitiveText
+            as="p"
+            variant="overline"
+            tone="destructiveSoft"
+            className="mb-3"
           >
             Access Restricted
-          </p>
-          <h1 className="mb-3">You are not authorized to view this page.</h1>
-          <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+          </PrimitiveText>
+          <PrimitiveText as="h1" variant="display" font="serif" className="mb-3">
+            You are not authorized to view this page.
+          </PrimitiveText>
+          <PrimitiveText as="p" tone="muted">
             {message}
-          </p>
+          </PrimitiveText>
         </div>
       </div>
     </div>
