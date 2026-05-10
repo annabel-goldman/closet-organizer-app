@@ -1,6 +1,7 @@
 import { motion } from "motion/react";
 import { Plus } from "lucide-react";
 import { useState } from "react";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import {
   formatDisplaySize,
@@ -111,18 +112,18 @@ export function ClothingCard({
           animate={{ opacity: isHovered ? 1 : 0, y: isHovered ? 0 : 20 }}
           className="absolute bottom-4 left-4 right-4"
         >
-          <button
+          <PrimitiveButton
             onClick={(event) => {
               event.stopPropagation();
               onAddToOutfit?.(id);
             }}
-            className="w-full bg-white/90 backdrop-blur-sm px-4 py-2 hover:bg-white transition-colors flex items-center justify-center gap-2"
+            className="h-auto w-full bg-white/90 px-4 py-2 backdrop-blur-sm hover:bg-white"
           >
             <Plus className="w-5 h-5" />
             <PrimitiveText as="span" variant="bodySm">
               Add to Outfit
             </PrimitiveText>
-          </button>
+          </PrimitiveButton>
         </motion.div>
       </div>
     </motion.div>

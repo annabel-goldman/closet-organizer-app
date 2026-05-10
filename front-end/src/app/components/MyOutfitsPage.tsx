@@ -15,6 +15,7 @@ import {
   updateOutfit,
   User,
 } from "../lib/closet";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 
 interface MyOutfitsPageProps {
@@ -292,13 +293,14 @@ export function MyOutfitsPage({
               <PrimitiveText as="p" variant="bodySm" tone="muted">
                 Items in this outfit
               </PrimitiveText>
-              <button
+              <PrimitiveButton
                 type="button"
                 onClick={onBrowseCloset}
-                className="inline-flex items-center justify-center border border-border px-3 py-1.5 text-xs transition-colors hover:border-foreground"
+                variant="outline"
+                size="sm"
               >
                 Add from closet
-              </button>
+              </PrimitiveButton>
             </div>
 
             {selectedItems.length === 0 ? (
@@ -335,14 +337,16 @@ export function MyOutfitsPage({
                       </PrimitiveText>
                     </div>
 
-                    <button
+                    <PrimitiveButton
                       type="button"
                       onClick={() => removeSelectedItem(item.id)}
-                      className="inline-flex items-center justify-center border border-border p-1.5 hover:border-foreground transition-colors"
+                      variant="outline"
+                      size="icon"
+                      className="size-8 p-1.5"
                       aria-label={`Remove ${item.name}`}
                     >
                       <X className="w-3.5 h-3.5" />
-                    </button>
+                    </PrimitiveButton>
                   </div>
                 ))}
               </div>
@@ -350,22 +354,22 @@ export function MyOutfitsPage({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
+            <PrimitiveButton
               type="submit"
               disabled={isSaving}
-              className="inline-flex items-center justify-center gap-2 border border-border px-4 py-2.5 text-sm transition-colors hover:border-foreground disabled:opacity-50"
+              variant="outline"
             >
               {editingOutfitId ? "Save Changes" : "Save Outfit"}
-            </button>
+            </PrimitiveButton>
 
             {editingOutfitId ? (
-              <button
+              <PrimitiveButton
                 type="button"
                 onClick={resetForm}
-                className="inline-flex items-center justify-center gap-2 border border-border px-4 py-2.5 text-sm transition-colors hover:border-foreground"
+                variant="outline"
               >
                 Cancel Edit
-              </button>
+              </PrimitiveButton>
             ) : null}
           </div>
         </form>
@@ -411,20 +415,23 @@ export function MyOutfitsPage({
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
+                    <PrimitiveButton
                       onClick={() => startEditing(outfit)}
-                      className="inline-flex items-center justify-center border border-border p-2 hover:border-foreground transition-colors"
+                      variant="outline"
+                      size="icon"
                       aria-label="Edit outfit"
                     >
                       <Pencil className="w-4 h-4" />
-                    </button>
-                    <button
+                    </PrimitiveButton>
+                    <PrimitiveButton
                       onClick={() => void handleDelete(outfit.id)}
-                      className="inline-flex items-center justify-center border border-border p-2 hover:border-destructive transition-colors"
+                      variant="outline"
+                      size="icon"
+                      className="hover:border-destructive"
                       aria-label="Delete outfit"
                     >
                       <Trash2 className="w-4 h-4" />
-                    </button>
+                    </PrimitiveButton>
                   </div>
                 </div>
 
@@ -434,10 +441,11 @@ export function MyOutfitsPage({
 
                 <div className="grid gap-2 sm:grid-cols-2">
                   {outfit.items.map((item: ClothingItem) => (
-                    <button
+                    <PrimitiveButton
                       key={item.id}
                       onClick={() => onOpenItem(item.id)}
-                      className="w-full text-left border border-border px-3 py-2 hover:border-foreground transition-colors"
+                      variant="outline"
+                      className="h-auto w-full justify-start px-3 py-2 text-left"
                     >
                       <div className="flex items-center gap-3">
                         <div className="h-9 w-9 shrink-0 border border-border rounded-full flex items-center justify-center bg-muted">
@@ -461,7 +469,7 @@ export function MyOutfitsPage({
                           </PrimitiveText>
                         </div>
                       </div>
-                    </button>
+                    </PrimitiveButton>
                   ))}
                 </div>
               </motion.article>

@@ -39,6 +39,7 @@ function PrimitiveButton({
   variant,
   size,
   asChild = false,
+  style,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof primitiveButtonVariants> & {
@@ -50,6 +51,7 @@ function PrimitiveButton({
     <Comp
       data-slot="button"
       className={cn(primitiveButtonVariants({ variant, size, className }))}
+      style={{ fontFamily: "Outfit, sans-serif", ...style }}
       {...props}
     />
   );

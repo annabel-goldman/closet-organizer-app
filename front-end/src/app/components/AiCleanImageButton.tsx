@@ -1,4 +1,5 @@
 import { Sparkles } from "lucide-react";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
 
 interface AiCleanImageButtonProps {
   className?: string;
@@ -16,14 +17,15 @@ export function AiCleanImageButton({
   onClick,
 }: AiCleanImageButtonProps) {
   return (
-    <button
+    <PrimitiveButton
       type="button"
       onClick={onClick}
       disabled={disabled || isLoading}
-      className={`inline-flex items-center gap-2 px-4 py-2 border border-border hover:border-foreground transition-colors disabled:opacity-50 ${className}`.trim()}
+      variant="outline"
+      className={className}
     >
       <Sparkles className="w-4 h-4" />
       {isLoading ? "Cleaning..." : label}
-    </button>
+    </PrimitiveButton>
   );
 }

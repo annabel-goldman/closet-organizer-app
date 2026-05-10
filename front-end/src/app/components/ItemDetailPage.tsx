@@ -19,6 +19,7 @@ import { AiCleanImageButton } from "./AiCleanImageButton";
 import { ItemHeroPreview } from "./ItemHeroPreview";
 import { ItemMetadataFields } from "./ItemMetadataFields";
 import { ItemPhotoField } from "./ItemPhotoField";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { useItemPhotoState } from "../lib/useItemPhotoState";
 
@@ -179,13 +180,14 @@ export function ItemDetailPage({
   if (!item || !formValues) {
     return (
       <div className="max-w-5xl mx-auto px-6 py-12">
-        <button
+        <PrimitiveButton
           onClick={onBack}
-          className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
+          variant="ghost"
+          className="mb-8 h-auto px-0 py-0 text-muted-foreground"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to closet
-        </button>
+        </PrimitiveButton>
         <div className="border border-destructive/20 bg-destructive/5 p-6">
           <PrimitiveText as="p" variant="title" font="serif" className="mb-2">
             This item could not be loaded.
@@ -200,13 +202,14 @@ export function ItemDetailPage({
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-12">
-      <button
+      <PrimitiveButton
         onClick={onBack}
-        className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
+        variant="ghost"
+        className="mb-8 h-auto px-0 py-0 text-muted-foreground"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to closet
-      </button>
+      </PrimitiveButton>
 
       <div className="grid gap-10 lg:grid-cols-[1.1fr_1fr] items-start">
         <ItemHeroPreview
@@ -238,15 +241,16 @@ export function ItemDetailPage({
               </PrimitiveText>
             </div>
 
-            <button
+            <PrimitiveButton
               type="button"
               onClick={() => void handleDelete()}
               disabled={isDeleting}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-destructive/30 text-destructive hover:bg-destructive/5 transition-colors disabled:opacity-60"
+              variant="outline"
+              className="border-destructive/30 text-destructive hover:bg-destructive/5"
             >
               <Trash2 className="w-4 h-4" />
               {isDeleting ? "Deleting..." : "Delete"}
-            </button>
+            </PrimitiveButton>
           </div>
 
           {errorMessage && (
@@ -298,14 +302,14 @@ export function ItemDetailPage({
               {isDirty ? "Unsaved changes" : "All changes saved"}
             </PrimitiveText>
 
-            <button
+            <PrimitiveButton
               type="submit"
               disabled={isSaving || !isDirty}
-              className="inline-flex items-center gap-2 px-5 py-3 bg-foreground text-background hover:bg-foreground/90 transition-colors disabled:opacity-50"
+              className="h-auto bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
             >
               <Save className="w-4 h-4" />
               {isSaving ? "Saving..." : "Save Changes"}
-            </button>
+            </PrimitiveButton>
           </div>
         </motion.form>
       </div>

@@ -11,6 +11,7 @@ import {
 } from "../../lib/closet";
 import { AiCleanImageButton } from "../AiCleanImageButton";
 import { ItemMetadataFields } from "../ItemMetadataFields";
+import { PrimitiveButton } from "../primitives/PrimitiveButton";
 import { PrimitiveText } from "../primitives/PrimitiveText";
 
 interface DetectionReviewCardProps {
@@ -126,27 +127,28 @@ export function DetectionReviewCard({
       )}
 
       <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
-        <button
+        <PrimitiveButton
           type="button"
           onClick={onToggleEdit}
-          className="inline-flex items-center gap-2 px-4 py-2 border border-border hover:border-foreground transition-colors"
+          variant="outline"
         >
           <PencilLine className="w-4 h-4" />
           {isEditing ? "Done editing" : "Edit"}
-        </button>
-        <button
+        </PrimitiveButton>
+        <PrimitiveButton
           type="button"
           onClick={onToggle}
           disabled={!canSave}
-          className={`inline-flex items-center gap-2 px-4 py-2 border transition-colors disabled:opacity-50 ${
+          className={`disabled:opacity-50 ${
             isSelected
               ? "border-foreground bg-foreground text-background"
               : "border-border hover:border-foreground"
           }`}
+          variant="outline"
         >
           <Check className="w-4 h-4" />
           {isSelected ? "Will save to closet" : canSave ? "Add to closet" : "Preview unavailable"}
-        </button>
+        </PrimitiveButton>
       </div>
     </motion.div>
   );

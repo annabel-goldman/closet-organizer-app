@@ -2,6 +2,7 @@ import { motion } from "motion/react";
 import { ChevronRight, Users } from "lucide-react";
 import { fetchUsers, formatPossessive, formatPreferredStyle, titleize, User } from "../lib/closet";
 import { usePageData } from "../lib/usePageData";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { AccessRestrictedState } from "./shared/AccessRestrictedState";
 
@@ -9,6 +10,8 @@ interface UsersDirectoryPageProps {
   onBack: () => void;
   onSelectUser: (userId: number) => void;
 }
+
+const MotionPrimitiveButton = motion.create(PrimitiveButton);
 
 export function UsersDirectoryPage({ onBack, onSelectUser }: UsersDirectoryPageProps) {
   const {
@@ -36,12 +39,13 @@ export function UsersDirectoryPage({ onBack, onSelectUser }: UsersDirectoryPageP
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-6 py-12">
-        <button
+        <PrimitiveButton
           onClick={onBack}
-          className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
+          variant="ghost"
+          className="mb-8 h-auto px-0 py-0 text-muted-foreground"
         >
           Back home
-        </button>
+        </PrimitiveButton>
 
         <div className="flex items-end justify-between gap-6 mb-10">
           <div>
@@ -87,13 +91,14 @@ export function UsersDirectoryPage({ onBack, onSelectUser }: UsersDirectoryPageP
             {users.map((user, index) => {
               const preferredStyle = formatPreferredStyle(user.preferred_style);
               return (
-                <motion.button
+                <MotionPrimitiveButton
                   key={user.id}
                   initial={{ opacity: 0, y: 18 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.45, delay: index * 0.04 }}
                   onClick={() => onSelectUser(user.id)}
-                  className="text-left border border-border bg-card p-6 hover:border-foreground transition-colors"
+                  variant="outline"
+                  className="h-auto justify-start bg-card p-6 text-left hover:border-foreground"
                 >
                   <PrimitiveText as="p" variant="overline" tone="muted" className="mb-4">
                     Closet Owner
@@ -128,7 +133,7 @@ export function UsersDirectoryPage({ onBack, onSelectUser }: UsersDirectoryPageP
                     </PrimitiveText>
                     <ChevronRight className="w-4 h-4" />
                   </div>
-                </motion.button>
+                </MotionPrimitiveButton>
               );
             })}
           </div>

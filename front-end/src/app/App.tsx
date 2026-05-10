@@ -9,6 +9,9 @@ import { MyOutfitsPage } from "./components/MyOutfitsPage";
 import { UserDetailPage } from "./components/UserDetailPage";
 import { UsersDirectoryPage } from "./components/UsersDirectoryPage";
 import {
+  PrimitiveButton,
+} from "./components/primitives/PrimitiveButton";
+import {
   PrimitiveDropdownMenu,
   PrimitiveDropdownMenuCheckboxItem,
   PrimitiveDropdownMenuContent,
@@ -24,6 +27,7 @@ import {
   PrimitiveSelectTrigger,
   PrimitiveSelectValue,
 } from "./components/primitives/PrimitiveSelect";
+import { PrimitiveText } from "./components/primitives/PrimitiveText";
 import { AccessRestrictedState } from "./components/shared/AccessRestrictedState";
 import { Input } from "./components/ui/input";
 import {
@@ -117,7 +121,6 @@ function ClosetFilterMenu({
       <PrimitiveDropdownMenuTrigger asChild>
         <PrimitiveDropdownTriggerButton
           disabled={options.length === 0}
-          style={{ fontFamily: "Outfit, sans-serif" }}
         >
           {triggerLabel}
         </PrimitiveDropdownTriggerButton>
@@ -289,23 +292,21 @@ export default function App() {
   }
 
   const globalAction = user ? (
-    <button
+    <PrimitiveButton
       onClick={() => void handleLogout()}
-      className="inline-flex items-center justify-center gap-3 border border-border px-4 py-2.5 text-sm transition-colors hover:border-foreground"
-      style={{ fontFamily: "Outfit, sans-serif" }}
+      variant="outline"
     >
       <Users className="h-4 w-4" />
       Sign Out
-    </button>
+    </PrimitiveButton>
   ) : (
-    <button
+    <PrimitiveButton
       onClick={() => beginGoogleSignIn()}
-      className="inline-flex items-center justify-center gap-3 border border-border px-4 py-2.5 text-sm transition-colors hover:border-foreground"
-      style={{ fontFamily: "Outfit, sans-serif" }}
+      variant="outline"
     >
       Sign In
       <ArrowRight className="h-4 w-4" />
-    </button>
+    </PrimitiveButton>
   );
 
   let pageContent;
@@ -323,31 +324,36 @@ export default function App() {
           transition={{ duration: 0.5 }}
           className="max-w-2xl text-center"
         >
-          <h1
+          <PrimitiveText
+            as="h1"
+            variant="display"
+            font="serif"
             className="mb-6"
             style={{
-              fontFamily: "Cormorant Garamond, serif",
               fontSize: "clamp(3rem, 8vw, 5.5rem)",
               lineHeight: "0.95",
             }}
           >
             Closet Organizer
-          </h1>
-          <p
-            className="mb-10 text-lg text-muted-foreground"
-            style={{ fontFamily: "Outfit, sans-serif", lineHeight: "1.7" }}
+          </PrimitiveText>
+          <PrimitiveText
+            as="p"
+            variant="title"
+            tone="muted"
+            className="mb-10"
+            style={{ lineHeight: "1.7" }}
           >
             Organize clothing items, manage closet details.
-          </p>
+          </PrimitiveText>
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <button
+            <PrimitiveButton
               onClick={() => beginGoogleSignIn()}
-              className="inline-flex items-center justify-center gap-3 border border-border px-6 py-3 transition-colors hover:border-foreground"
-              style={{ fontFamily: "Outfit, sans-serif" }}
+              variant="outline"
+              className="h-auto px-6 py-3"
             >
               Sign in with Google
               <ArrowRight className="h-4 w-4" />
-            </button>
+            </PrimitiveButton>
           </div>
           {homeMessage ? (
             <div
@@ -357,7 +363,7 @@ export default function App() {
                   : "border border-destructive/30 bg-destructive/10 text-destructive"
               }`}
             >
-              <p style={{ fontFamily: "Outfit, sans-serif" }}>{homeMessage.text}</p>
+              <PrimitiveText as="p" variant="bodySm">{homeMessage.text}</PrimitiveText>
             </div>
           ) : null}
         </motion.div>
@@ -367,23 +373,21 @@ export default function App() {
     pageContent = (
       <div className="max-w-3xl mx-auto px-6 py-16">
         <div className="border border-border bg-card p-8">
-          <p
-            className="uppercase tracking-[0.3em] text-xs text-muted-foreground mb-3"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
+          <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
             Page Not Found
-          </p>
-          <h1 className="mb-3">We couldn&apos;t find that page.</h1>
-          <p className="mb-6 text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+          </PrimitiveText>
+          <PrimitiveText as="h1" variant="display" font="serif" className="mb-3">
+            We couldn&apos;t find that page.
+          </PrimitiveText>
+          <PrimitiveText as="p" tone="muted" className="mb-6">
             The link may be out of date, or the page may have been moved.
-          </p>
-          <button
+          </PrimitiveText>
+          <PrimitiveButton
             onClick={() => navigateTo(user ? "/closet" : "/")}
-            className="inline-flex items-center justify-center border border-border px-4 py-2.5 text-sm transition-colors hover:border-foreground"
-            style={{ fontFamily: "Outfit, sans-serif" }}
+            variant="outline"
           >
             {user ? "Back to closet" : "Back home"}
-          </button>
+          </PrimitiveButton>
         </div>
       </div>
     );
@@ -479,32 +483,37 @@ export default function App() {
       <div className="max-w-7xl mx-auto px-6 py-12">
         <div className="mb-8 flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
           <div>
-            <motion.h1
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
-              className="mb-2 tracking-tight"
-              style={{
-                fontFamily: "Cormorant Garamond, serif",
-                fontSize: "clamp(2.5rem, 5vw, 4rem)",
-                lineHeight: "1",
-              }}
             >
-              {closetTitle}
-            </motion.h1>
-            <motion.p
+              <PrimitiveText
+                as="h1"
+                variant="display"
+                font="serif"
+                className="mb-2 tracking-tight"
+                style={{
+                  fontSize: "clamp(2.5rem, 5vw, 4rem)",
+                  lineHeight: "1",
+                }}
+              >
+                {closetTitle}
+              </PrimitiveText>
+            </motion.div>
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.8, delay: 0.2 }}
-              className="tracking-wide text-muted-foreground"
-              style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              {isLoading
-                ? "Loading items from your backend..."
-                : `${clothingItems.length} ${clothingItems.length === 1 ? "item" : "items"}${
-                    preferredStyle ? ` · ${preferredStyle} style` : ""
-                  }`}
-            </motion.p>
+              <PrimitiveText as="p" tone="muted" className="tracking-wide">
+                {isLoading
+                  ? "Loading items from your backend..."
+                  : `${clothingItems.length} ${clothingItems.length === 1 ? "item" : "items"}${
+                      preferredStyle ? ` · ${preferredStyle} style` : ""
+                    }`}
+              </PrimitiveText>
+            </motion.div>
           </div>
 
           <motion.div
@@ -534,12 +543,12 @@ export default function App() {
 
         {errorMessage ? (
           <div className="border border-destructive/20 bg-destructive/5 p-6">
-            <p className="mb-2 text-lg" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+            <PrimitiveText as="p" variant="title" font="serif" className="mb-2">
               The closet data could not be loaded.
-            </p>
-            <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+            </PrimitiveText>
+            <PrimitiveText as="p" tone="muted">
               {errorMessage}. Make sure both dev servers are running through `./start.sh`.
-            </p>
+            </PrimitiveText>
           </div>
         ) : isLoading ? (
           <div className="grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-4">
@@ -628,16 +637,16 @@ export default function App() {
               </div>
             ) : (
               <div className="border border-dashed border-border p-10 text-center">
-                <p className="mb-3 text-2xl" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+                <PrimitiveText as="p" variant="display" font="serif" className="mb-3">
                   {user ? "No matching items found" : "No closet data found"}
-                </p>
-                <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                </PrimitiveText>
+                <PrimitiveText as="p" tone="muted">
                   {user
                     ? hasActiveFilters
                       ? "Try a different tag, search phrase, or sort."
                       : "Add a new item to start building out this closet."
                     : "Sign in with Google to load your closet."}
-                </p>
+                </PrimitiveText>
               </div>
             )}
           </>
@@ -654,44 +663,44 @@ export default function App() {
     <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-5">
-          <button
+          <PrimitiveButton
             onClick={() => navigateTo(user ? "/closet" : "/")}
-            className={`inline-flex items-center justify-center border px-4 py-2.5 text-sm transition-colors ${
+            variant="outline"
+            className={`${
               user && isClosetRoute(route)
                 ? "border-foreground bg-foreground text-background"
                 : "border-border hover:border-foreground"
             }`}
-            style={{ fontFamily: "Outfit, sans-serif" }}
           >
             {user ? "Closet" : "Home"}
-          </button>
+          </PrimitiveButton>
 
           <div className="flex items-center gap-3">
             {user ? (
               <nav className="flex items-center gap-2">
-                <button
+                <PrimitiveButton
                   onClick={() => navigateTo("/outfits")}
-                  className={`inline-flex items-center justify-center border px-4 py-2.5 text-sm transition-colors ${
+                  variant="outline"
+                  className={`${
                     isOutfitRoute(route)
                       ? "border-foreground bg-foreground text-background"
                       : "border-border text-foreground hover:border-foreground"
                   }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   My Outfits
-                </button>
+                </PrimitiveButton>
                 {user.admin ? (
-                  <button
+                  <PrimitiveButton
                     onClick={() => navigateTo("/users")}
-                    className={`inline-flex items-center justify-center border px-4 py-2.5 text-sm transition-colors ${
+                    variant="outline"
+                    className={`${
                       isUsersRoute(route)
                         ? "border-foreground bg-foreground text-background"
                         : "border-border text-foreground hover:border-foreground"
                     }`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
                   >
                     Users
-                  </button>
+                  </PrimitiveButton>
                 ) : null}
               </nav>
             ) : null}
@@ -707,7 +716,6 @@ export default function App() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           className="fixed bottom-6 right-6 z-50 max-w-sm border border-foreground/20 bg-background/95 px-4 py-3 text-sm shadow-lg backdrop-blur"
-          style={{ fontFamily: "Outfit, sans-serif" }}
         >
           {outfitDraftNotice} Draft has {outfitDraft.itemIds.length}{" "}
           {outfitDraft.itemIds.length === 1 ? "item" : "items"}.
@@ -716,10 +724,10 @@ export default function App() {
 
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-6 py-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p style={{ fontFamily: "Outfit, sans-serif" }}>
+          <PrimitiveText as="p" variant="bodySm">
             Curating closets and serving looks, one hanger at a time.
-          </p>
-          <p style={{ fontFamily: "Outfit, sans-serif" }}>Pressed, polished, and ready for the runway.</p>
+          </PrimitiveText>
+          <PrimitiveText as="p" variant="bodySm">Pressed, polished, and ready for the runway.</PrimitiveText>
         </div>
       </footer>
     </div>

@@ -10,6 +10,7 @@ import {
 } from "../../lib/closet";
 import { DetectionReviewCard } from "./DetectionReviewCard";
 import { ItemPhotoField } from "../ItemPhotoField";
+import { PrimitiveButton } from "../primitives/PrimitiveButton";
 import { PrimitiveText } from "../primitives/PrimitiveText";
 import { UploadWorkspace } from "../UploadWorkspace";
 
@@ -70,13 +71,14 @@ export function CreateItemImageMode({
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-12 space-y-8">
-      <button
+      <PrimitiveButton
         onClick={onBack}
-        className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+        variant="ghost"
+        className="h-auto px-0 py-0 text-muted-foreground"
       >
         <ArrowLeft className="w-4 h-4" />
         Back
-      </button>
+      </PrimitiveButton>
 
       <UploadWorkspace
         imageUrl={sourceImageUrl}
@@ -133,22 +135,24 @@ export function CreateItemImageMode({
             We refine and verify each detected crop before it becomes selectable below.
           </PrimitiveText>
           <div className="flex items-center justify-between gap-4">
-            <button
+            <PrimitiveButton
               type="button"
               onClick={onClearImageSelection}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              variant="ghost"
+              size="sm"
+              className="h-auto px-0 py-0 text-muted-foreground"
             >
               Reset
-            </button>
-            <button
+            </PrimitiveButton>
+            <PrimitiveButton
               type="button"
               onClick={onDetectItems}
               disabled={isDetecting || !selectedFileName}
-              className="inline-flex items-center gap-2 px-5 py-3 bg-foreground text-background hover:bg-foreground/90 transition-colors disabled:opacity-50"
+              className="h-auto bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
             >
               <Sparkles className="w-4 h-4" />
               {isDetecting ? "Detecting items..." : "Detect items"}
-            </button>
+            </PrimitiveButton>
           </div>
         </div>
       </UploadWorkspace>
@@ -240,15 +244,15 @@ export function CreateItemImageMode({
         <PrimitiveText as="p" variant="bodySm" tone="muted">
           Selected items will use the best available crop from the uploaded image.
         </PrimitiveText>
-        <button
+        <PrimitiveButton
           type="button"
           onClick={onSaveSelectedItems}
           disabled={isCreating || selectedCount === 0}
-          className="inline-flex items-center gap-2 px-5 py-3 bg-foreground text-background hover:bg-foreground/90 transition-colors disabled:opacity-50"
+          className="h-auto bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
         >
           <Check className="w-4 h-4" />
           {isCreating ? "Saving..." : "Save to closet"}
-        </button>
+        </PrimitiveButton>
       </div>
     </div>
   );

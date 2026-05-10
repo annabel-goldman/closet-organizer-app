@@ -7,6 +7,7 @@ import { cn } from "../ui/utils";
 function PrimitiveDropdownTriggerButton({
   children,
   className,
+  style,
   ...props
 }: React.ComponentProps<"button">) {
   return (
@@ -17,6 +18,7 @@ function PrimitiveDropdownTriggerButton({
         "h-14 bg-stone-200 hover:bg-stone-200",
         className,
       )}
+      style={{ fontFamily: "Outfit, sans-serif", ...style }}
       {...props}
     >
       <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-left">

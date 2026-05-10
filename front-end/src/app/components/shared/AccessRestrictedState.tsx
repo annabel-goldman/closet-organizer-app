@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import { PrimitiveButton } from "../primitives/PrimitiveButton";
 import { PrimitiveText } from "../primitives/PrimitiveText";
 
 interface AccessRestrictedStateProps {
@@ -15,13 +16,14 @@ export function AccessRestrictedState({
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto px-6 py-16">
-        <button
+        <PrimitiveButton
           onClick={onBack}
-          className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
+          variant="ghost"
+          className="mb-8 h-auto px-0 py-0 text-muted-foreground"
         >
           <ArrowLeft className="w-4 h-4" />
           {backLabel}
-        </button>
+        </PrimitiveButton>
 
         <div className="border border-destructive/20 bg-destructive/5 p-8">
           <PrimitiveText

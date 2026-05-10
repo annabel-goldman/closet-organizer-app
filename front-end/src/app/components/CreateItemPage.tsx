@@ -25,6 +25,7 @@ import { AiCleanImageButton } from "./AiCleanImageButton";
 import { CreateItemImageMode } from "./create-item/CreateItemImageMode";
 import { ItemMetadataFields } from "./ItemMetadataFields";
 import { ItemPhotoField } from "./ItemPhotoField";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { UploadWorkspace } from "./UploadWorkspace";
 import { useItemPhotoState } from "../lib/useItemPhotoState";
@@ -346,13 +347,14 @@ export function CreateItemPage({
   if (!user) {
     return (
       <div className="max-w-5xl mx-auto px-6 py-12">
-        <button
+        <PrimitiveButton
           onClick={onBack}
-          className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
+          variant="ghost"
+          className="mb-8 h-auto px-0 py-0 text-muted-foreground"
         >
           <ArrowLeft className="w-4 h-4" />
           Back
-        </button>
+        </PrimitiveButton>
         <div className="border border-destructive/20 bg-destructive/5 p-6">
           <PrimitiveText as="p" variant="title" font="serif" className="mb-2">
             A user is required before you can add an item.
@@ -400,13 +402,14 @@ export function CreateItemPage({
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-12">
-      <button
+      <PrimitiveButton
         onClick={onBack}
-        className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
+        variant="ghost"
+        className="mb-8 h-auto px-0 py-0 text-muted-foreground"
       >
         <ArrowLeft className="w-4 h-4" />
         Back
-      </button>
+      </PrimitiveButton>
 
       <motion.form
         initial={{ opacity: 0, y: 18 }}
@@ -478,14 +481,14 @@ export function CreateItemPage({
           </div>
 
           <div className="border-t border-border pt-5 flex items-center justify-end">
-            <button
+            <PrimitiveButton
               type="submit"
               disabled={isCreating}
-              className="inline-flex items-center gap-2 px-5 py-3 bg-foreground text-background hover:bg-foreground/90 transition-colors disabled:opacity-50"
+              className="h-auto bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
             >
               <Plus className="w-4 h-4" />
               {isCreating ? "Creating..." : "Create Item"}
-            </button>
+            </PrimitiveButton>
           </div>
         </UploadWorkspace>
       </motion.form>

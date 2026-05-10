@@ -1,4 +1,5 @@
 import { RefObject } from "react";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 
 interface ItemPhotoFieldProps {
@@ -47,13 +48,15 @@ export function ItemPhotoField({
           <PrimitiveText as="span" variant="bodySm">
             {selectedFileName || "Current photo attached"}
           </PrimitiveText>
-          <button
+          <PrimitiveButton
             type="button"
             onClick={selectedFileName ? onClearSelection : onRemoveExisting}
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            variant="ghost"
+            size="sm"
+            className="h-auto px-0 py-0 text-muted-foreground"
           >
             {selectedFileName ? "Clear Selection" : "Remove Photo"}
-          </button>
+          </PrimitiveButton>
         </div>
       )}
 
@@ -62,13 +65,15 @@ export function ItemPhotoField({
           <PrimitiveText as="span" variant="bodySm" tone="muted">
             The current photo will be removed when you save.
           </PrimitiveText>
-          <button
+          <PrimitiveButton
             type="button"
             onClick={onKeepExisting}
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            variant="ghost"
+            size="sm"
+            className="h-auto px-0 py-0 text-muted-foreground"
           >
             Keep Photo
-          </button>
+          </PrimitiveButton>
         </div>
       )}
     </label>

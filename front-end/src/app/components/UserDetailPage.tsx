@@ -10,6 +10,7 @@ import {
   User,
 } from "../lib/closet";
 import { usePageData } from "../lib/usePageData";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { AccessRestrictedState } from "./shared/AccessRestrictedState";
 
@@ -19,6 +20,8 @@ interface UserDetailPageProps {
   onBack: () => void;
   onOpenItem: (itemId: number) => void;
 }
+
+const MotionPrimitiveButton = motion.create(PrimitiveButton);
 
 export function UserDetailPage({
   userId,
@@ -72,12 +75,13 @@ export function UserDetailPage({
     return (
       <div className="min-h-screen bg-background">
         <div className="max-w-7xl mx-auto px-6 py-12">
-          <button
+          <PrimitiveButton
             onClick={onBack}
-            className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
+            variant="ghost"
+            className="mb-8 h-auto px-0 py-0 text-muted-foreground"
           >
             Back to all users
-          </button>
+          </PrimitiveButton>
           <div className="border border-destructive/20 bg-destructive/5 p-6">
             <PrimitiveText as="p" variant="title" font="serif" className="mb-2">
               This user could not be loaded.
@@ -96,12 +100,13 @@ export function UserDetailPage({
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-6 py-12">
-        <button
+        <PrimitiveButton
           onClick={onBack}
-          className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
+          variant="ghost"
+          className="mb-8 h-auto px-0 py-0 text-muted-foreground"
         >
           Back to all users
-        </button>
+        </PrimitiveButton>
 
         <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] items-start">
           <motion.div
@@ -173,13 +178,14 @@ export function UserDetailPage({
                   const visibleTags = item.tags.slice(0, 3);
 
                   return (
-                    <motion.button
+                    <MotionPrimitiveButton
                       key={item.id}
                       initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.35, delay: index * 0.03 }}
                       onClick={() => onOpenItem(item.id)}
-                      className="w-full text-left border border-border bg-card p-5 hover:border-foreground transition-colors"
+                      variant="outline"
+                      className="h-auto w-full justify-start bg-card p-5 text-left hover:border-foreground"
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex items-start gap-4">
@@ -201,7 +207,7 @@ export function UserDetailPage({
                         </div>
                         <ChevronRight className="mt-1 h-4 w-4 shrink-0" />
                       </div>
-                    </motion.button>
+                    </MotionPrimitiveButton>
                   );
                 })
               )}

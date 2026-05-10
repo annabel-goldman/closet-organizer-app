@@ -5,6 +5,7 @@ import {
   PrimitiveDropdownMenuItem,
   PrimitiveDropdownMenuTrigger,
 } from "./primitives/PrimitiveDropdownMenu";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 
 interface AddItemMenuProps {
@@ -21,17 +22,18 @@ export function AddItemMenu({
   return (
     <PrimitiveDropdownMenu>
       <PrimitiveDropdownMenuTrigger asChild>
-        <button
+        <PrimitiveButton
           type="button"
           disabled={disabled}
-          className="flex items-center justify-center gap-3 px-5 py-3 border border-border hover:border-foreground transition-colors disabled:opacity-50"
+          variant="outline"
+          className="h-auto gap-3 px-5 py-3"
         >
           <Plus className="w-4 h-4" />
           <PrimitiveText as="span" variant="bodySm">
             Add Item
           </PrimitiveText>
           <ChevronDown className="w-4 h-4" />
-        </button>
+        </PrimitiveButton>
       </PrimitiveDropdownMenuTrigger>
 
       <PrimitiveDropdownMenuContent align="end" className="w-56">
