@@ -1,6 +1,6 @@
 import { Dispatch, SetStateAction, useDeferredValue, useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Search, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Search, Users, X } from "lucide-react";
 import { AddItemMenu } from "./components/AddItemMenu";
 import { ClothingCard } from "./components/ClothingCard";
 import { CreateItemPage } from "./components/CreateItemPage";
@@ -68,6 +68,7 @@ interface ClosetFilterMenuProps {
   label: string;
   options: string[];
   selectedValues: string[];
+  onClear: () => void;
   onToggleValue: (value: string) => void;
 }
 
@@ -112,34 +113,55 @@ function ClosetFilterMenu({
   label,
   options,
   selectedValues,
+  onClear,
   onToggleValue,
 }: ClosetFilterMenuProps) {
   const triggerLabel = formatFilterMenuTrigger(label, selectedValues);
+  const hasSelections = selectedValues.length > 0;
 
   return (
-    <PrimitiveDropdownMenu>
-      <PrimitiveDropdownMenuTrigger asChild>
-        <PrimitiveDropdownTriggerButton
-          disabled={options.length === 0}
-        >
-          {triggerLabel}
-        </PrimitiveDropdownTriggerButton>
-      </PrimitiveDropdownMenuTrigger>
-      <PrimitiveDropdownMenuContent align="start" className="max-h-80 w-64 overflow-y-auto">
-        <PrimitiveDropdownMenuLabel>{label}</PrimitiveDropdownMenuLabel>
-        <PrimitiveDropdownMenuSeparator />
-        {options.map((option) => (
-          <PrimitiveDropdownMenuCheckboxItem
-            key={option}
-            checked={selectedValues.includes(option)}
-            onCheckedChange={() => onToggleValue(option)}
-            onSelect={(event) => event.preventDefault()}
+    <div className="relative">
+      <PrimitiveDropdownMenu>
+        <PrimitiveDropdownMenuTrigger asChild>
+          <PrimitiveDropdownTriggerButton
+            disabled={options.length === 0}
+            className={hasSelections ? "pr-16" : undefined}
           >
-            {titleize(option)}
-          </PrimitiveDropdownMenuCheckboxItem>
-        ))}
-      </PrimitiveDropdownMenuContent>
-    </PrimitiveDropdownMenu>
+            {triggerLabel}
+          </PrimitiveDropdownTriggerButton>
+        </PrimitiveDropdownMenuTrigger>
+        <PrimitiveDropdownMenuContent align="start" className="max-h-80 w-64 overflow-y-auto">
+          <PrimitiveDropdownMenuLabel>{label}</PrimitiveDropdownMenuLabel>
+          <PrimitiveDropdownMenuSeparator />
+          {options.map((option) => (
+            <PrimitiveDropdownMenuCheckboxItem
+              key={option}
+              checked={selectedValues.includes(option)}
+              onCheckedChange={() => onToggleValue(option)}
+              onSelect={(event) => event.preventDefault()}
+            >
+              {titleize(option)}
+            </PrimitiveDropdownMenuCheckboxItem>
+          ))}
+        </PrimitiveDropdownMenuContent>
+      </PrimitiveDropdownMenu>
+      {hasSelections ? (
+        <PrimitiveButton
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute top-1/2 right-7 z-10 size-7 -translate-y-1/2 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={(event) => {
+            event.stopPropagation();
+            onClear();
+          }}
+          aria-label={`Clear ${label.toLowerCase()} filters`}
+          title={`Clear ${label.toLowerCase()} filters`}
+        >
+          <X className="size-4" />
+        </PrimitiveButton>
+      ) : null}
+    </div>
   );
 }
 
@@ -261,6 +283,10 @@ export default function App() {
         ? current.filter((entry) => entry !== value)
         : [...current, value].sort((left, right) => left.localeCompare(right)),
     );
+  }
+
+  function clearSelectedValues(setSelectedValues: Dispatch<SetStateAction<string[]>>) {
+    setSelectedValues([]);
   }
 
   function addItemToOutfitDraft(itemId: number) {
@@ -584,6 +610,7 @@ export default function App() {
                     label="Tags"
                     options={groupedTagOptions.other}
                     selectedValues={selectedOtherTags}
+                    onClear={() => clearSelectedValues(setSelectedOtherTags)}
                     onToggleValue={(value) => toggleSelectedValue(value, setSelectedOtherTags)}
                   />
                 </div>
@@ -593,6 +620,7 @@ export default function App() {
                     label="Colors"
                     options={groupedTagOptions.colors}
                     selectedValues={selectedColors}
+                    onClear={() => clearSelectedValues(setSelectedColors)}
                     onToggleValue={(value) => toggleSelectedValue(value, setSelectedColors)}
                   />
                 </div>
@@ -602,6 +630,7 @@ export default function App() {
                     label="Brands"
                     options={groupedTagOptions.brands}
                     selectedValues={selectedBrands}
+                    onClear={() => clearSelectedValues(setSelectedBrands)}
                     onToggleValue={(value) => toggleSelectedValue(value, setSelectedBrands)}
                   />
                 </div>

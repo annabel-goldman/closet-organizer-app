@@ -2,6 +2,44 @@ import { ClothingItem } from "./closet";
 
 export type ClosetSortOption = "name-asc" | "newest-added" | "oldest-added" | "recent-purchase";
 
+const COLOR_TAGS = new Set([
+  "beige",
+  "black",
+  "blue",
+  "brown",
+  "burgundy",
+  "charcoal",
+  "cream",
+  "dark blue",
+  "gold",
+  "gray",
+  "green",
+  "grey",
+  "indigo",
+  "ivory",
+  "khaki",
+  "maroon",
+  "navy",
+  "oatmeal",
+  "olive",
+  "orange",
+  "pink",
+  "purple",
+  "red",
+  "sand",
+  "silver",
+  "tan",
+  "teal",
+  "white",
+  "yellow",
+]);
+
+export interface GroupedTagOptions {
+  brands: string[];
+  colors: string[];
+  other: string[];
+}
+
 export function matchesSearchQuery(item: ClothingItem, query: string) {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) {
@@ -44,15 +82,47 @@ export function buildTagOptions(items: ClothingItem[]) {
   );
 }
 
+export function buildGroupedTagOptions(items: ClothingItem[]): GroupedTagOptions {
+  const uniqueTags = buildTagOptions(items);
+  const brandCandidates = new Set(
+    items
+      .map((item) => item.tags[0]?.trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+  const grouped = uniqueTags.reduce<GroupedTagOptions>(
+    (result, tag) => {
+      const normalizedTag = tag.trim().toLowerCase();
+
+      if (COLOR_TAGS.has(normalizedTag)) {
+        result.colors.push(tag);
+      } else if (brandCandidates.has(normalizedTag)) {
+        result.brands.push(tag);
+      } else {
+        result.other.push(tag);
+      }
+
+      return result;
+    },
+    { brands: [], colors: [], other: [] },
+  );
+
+  return {
+    brands: grouped.brands.sort((left, right) => left.localeCompare(right)),
+    colors: grouped.colors.sort((left, right) => left.localeCompare(right)),
+    other: grouped.other.sort((left, right) => left.localeCompare(right)),
+  };
+}
+
 export function filterClothingItems(
   items: ClothingItem[],
   searchQuery: string,
-  selectedTag: string,
+  selectedTags: string[],
   sortOption: ClosetSortOption,
 ) {
   return sortClothingItems(
     items.filter((item) => {
-      if (selectedTag !== "all" && !item.tags.includes(selectedTag)) {
+      if (selectedTags.length > 0 && !selectedTags.some((tag) => item.tags.includes(tag))) {
         return false;
       }
 
@@ -64,8 +134,8 @@ export function filterClothingItems(
 
 export function hasActiveClosetControls(
   searchQuery: string,
-  selectedTag: string,
+  selectedTags: string[],
   sortOption: ClosetSortOption,
 ) {
-  return searchQuery.trim().length > 0 || selectedTag !== "all" || sortOption !== "name-asc";
+  return searchQuery.trim().length > 0 || selectedTags.length > 0 || sortOption !== "name-asc";
 }

@@ -41,7 +41,7 @@ export function AddItemMenu({
           <Camera className="w-4 h-4" />
           <div className="flex flex-col">
             <PrimitiveText as="span" variant="bodySm">
-              Upload image
+              Detect Items from Image
             </PrimitiveText>
             <PrimitiveText as="span" variant="caption" tone="muted">
               Choose a photo in the next step before reviewing detected items.
@@ -52,7 +52,7 @@ export function AddItemMenu({
           <PencilLine className="w-4 h-4" />
           <div className="flex flex-col">
             <PrimitiveText as="span" variant="bodySm">
-              Upload manually
+              Add Item
             </PrimitiveText>
             <PrimitiveText as="span" variant="caption" tone="muted">
               Enter the item details yourself.
