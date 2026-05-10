@@ -10,6 +10,7 @@ import {
   User,
 } from "../lib/closet";
 import { usePageData } from "../lib/usePageData";
+import { PrimitiveText } from "./primitives/PrimitiveText";
 import { AccessRestrictedState } from "./shared/AccessRestrictedState";
 
 interface UserDetailPageProps {
@@ -78,12 +79,12 @@ export function UserDetailPage({
             Back to all users
           </button>
           <div className="border border-destructive/20 bg-destructive/5 p-6">
-            <p className="text-lg mb-2" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+            <PrimitiveText as="p" variant="title" font="serif" className="mb-2">
               This user could not be loaded.
-            </p>
-            <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+            </PrimitiveText>
+            <PrimitiveText as="p" tone="muted">
               {errorMessage || "The requested user may have been removed."}
-            </p>
+            </PrimitiveText>
           </div>
         </div>
       </div>
@@ -109,29 +110,32 @@ export function UserDetailPage({
             transition={{ duration: 0.45 }}
             className="border border-border bg-gradient-to-br from-stone-100 via-neutral-50 to-stone-200 p-8"
           >
-            <p
-              className="uppercase tracking-[0.3em] text-xs text-muted-foreground mb-4"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
+            <PrimitiveText as="p" variant="overline" tone="muted" className="mb-4">
               User Profile
-            </p>
-            <h1 className="mb-2">{titleize(user.username)}</h1>
-            <p className="text-muted-foreground mb-8" style={{ fontFamily: "Outfit, sans-serif" }}>
+            </PrimitiveText>
+            <PrimitiveText as="h1" variant="display" font="serif" className="mb-2">
+              {titleize(user.username)}
+            </PrimitiveText>
+            <PrimitiveText as="p" tone="muted" className="mb-8">
               {formatPossessive(titleize(user.username))}
-            </p>
+            </PrimitiveText>
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="border border-white/70 bg-white/60 p-5">
-                <p className="text-muted-foreground mb-2">Preferred style</p>
-                <p className="text-2xl" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+                <PrimitiveText as="p" variant="bodySm" tone="muted" className="mb-2">
+                  Preferred style
+                </PrimitiveText>
+                <PrimitiveText as="p" variant="display" font="serif">
                   {preferredStyle ?? "Not set"}
-                </p>
+                </PrimitiveText>
               </div>
               <div className="border border-white/70 bg-white/60 p-5">
-                <p className="text-muted-foreground mb-2">Closet size</p>
-                <p className="text-2xl" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+                <PrimitiveText as="p" variant="bodySm" tone="muted" className="mb-2">
+                  Closet size
+                </PrimitiveText>
+                <PrimitiveText as="p" variant="display" font="serif">
                   {user.clothing_items.length} items
-                </p>
+                </PrimitiveText>
               </div>
             </div>
           </motion.div>
@@ -143,27 +147,26 @@ export function UserDetailPage({
             className="space-y-6"
           >
             <div>
-              <p
-                className="uppercase tracking-[0.3em] text-xs text-muted-foreground mb-3"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
+              <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
                 Clothing Items
-              </p>
-              <h2 className="mb-1">Closet Contents</h2>
-              <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+              </PrimitiveText>
+              <PrimitiveText as="h2" variant="title" font="serif" className="mb-1">
+                Closet Contents
+              </PrimitiveText>
+              <PrimitiveText as="p" tone="muted">
                 Click any item to jump straight into its editable detail page.
-              </p>
+              </PrimitiveText>
             </div>
 
             <div className="space-y-4">
               {user.clothing_items.length === 0 ? (
                 <div className="border border-dashed border-border p-8 text-center">
-                  <p className="text-2xl mb-2" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+                  <PrimitiveText as="p" variant="display" font="serif" className="mb-2">
                     No items yet
-                  </p>
-                  <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  </PrimitiveText>
+                  <PrimitiveText as="p" tone="muted">
                     This user does not have any clothing items in the API right now.
-                  </p>
+                  </PrimitiveText>
                 </div>
               ) : (
                 user.clothing_items.map((item, index) => {
@@ -185,21 +188,15 @@ export function UserDetailPage({
                           </div>
                           <div>
                             <h3 className="mb-1">{item.name}</h3>
-                            <p
-                              className="text-muted-foreground"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
+                            <PrimitiveText as="p" tone="muted">
                               {formatDisplaySize(item.size)}
                               {visibleTags[0] ? ` · ${formatTagLabel(visibleTags[0])}` : ""}
-                            </p>
-                            <p
-                              className="mt-2 text-sm text-muted-foreground"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
+                            </PrimitiveText>
+                            <PrimitiveText as="p" variant="bodySm" tone="muted" className="mt-2">
                               {visibleTags.length > 0
                                 ? visibleTags.map(formatTagLabel).join(" · ")
                                 : "No tags added yet"}
-                            </p>
+                            </PrimitiveText>
                           </div>
                         </div>
                         <ChevronRight className="mt-1 h-4 w-4 shrink-0" />

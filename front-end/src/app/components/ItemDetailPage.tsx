@@ -19,6 +19,7 @@ import { AiCleanImageButton } from "./AiCleanImageButton";
 import { ItemHeroPreview } from "./ItemHeroPreview";
 import { ItemMetadataFields } from "./ItemMetadataFields";
 import { ItemPhotoField } from "./ItemPhotoField";
+import { PrimitiveText } from "./primitives/PrimitiveText";
 import { useItemPhotoState } from "../lib/useItemPhotoState";
 
 interface ItemDetailPageProps {
@@ -186,12 +187,12 @@ export function ItemDetailPage({
           Back to closet
         </button>
         <div className="border border-destructive/20 bg-destructive/5 p-6">
-          <p className="text-lg mb-2" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+          <PrimitiveText as="p" variant="title" font="serif" className="mb-2">
             This item could not be loaded.
-          </p>
-          <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+          </PrimitiveText>
+          <PrimitiveText as="p" tone="muted">
             {errorMessage || "The requested item may have been deleted."}
-          </p>
+          </PrimitiveText>
         </div>
       </div>
     );
@@ -226,13 +227,15 @@ export function ItemDetailPage({
         >
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="uppercase tracking-[0.3em] text-xs text-muted-foreground mb-3">
+              <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
                 Item Details
-              </p>
-              <h2 className="mb-1">Edit Item</h2>
-              <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+              </PrimitiveText>
+              <PrimitiveText as="h2" variant="title" font="serif" className="mb-1">
+                Edit Item
+              </PrimitiveText>
+              <PrimitiveText as="p" tone="muted">
                 Update the metadata shown in the closet and save it back to Rails.
-              </p>
+              </PrimitiveText>
             </div>
 
             <button
@@ -273,13 +276,13 @@ export function ItemDetailPage({
               />
 
               <div className="flex flex-wrap items-center justify-between gap-4 border border-border bg-card px-4 py-3">
-                <p className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                <PrimitiveText as="p" variant="bodySm" tone="muted">
                   {photoState.selectedFile
                     ? "Run the AI cleaner on the newly selected image before saving."
                     : item.image_url
                       ? "Generate a cleaner catalog-style PNG from the current saved image."
                       : "Upload a photo first to use the AI cleaner."}
-                </p>
+                </PrimitiveText>
                 <AiCleanImageButton
                   disabled={photoState.removeExisting || (!photoState.selectedFile && !item.image_url)}
                   isLoading={isCleaningImage}
@@ -291,9 +294,9 @@ export function ItemDetailPage({
           </div>
 
           <div className="border-t border-border pt-5 flex items-center justify-between gap-4">
-            <div className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+            <PrimitiveText as="div" variant="bodySm" tone="muted">
               {isDirty ? "Unsaved changes" : "All changes saved"}
-            </div>
+            </PrimitiveText>
 
             <button
               type="submit"

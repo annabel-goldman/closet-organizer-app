@@ -15,6 +15,7 @@ import {
   updateOutfit,
   User,
 } from "../lib/closet";
+import { PrimitiveText } from "./primitives/PrimitiveText";
 
 interface MyOutfitsPageProps {
   user: User;
@@ -230,20 +231,19 @@ export function MyOutfitsPage({
     <div className="max-w-7xl mx-auto px-6 py-12 space-y-10">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p
-            className="uppercase tracking-[0.3em] text-xs text-muted-foreground mb-3"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
+          <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
             My Outfits
-          </p>
-          <h1 className="mb-2">Lookbook Builder</h1>
-          <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+          </PrimitiveText>
+          <PrimitiveText as="h1" variant="display" font="serif" className="mb-2">
+            Lookbook Builder
+          </PrimitiveText>
+          <PrimitiveText as="p" tone="muted">
             Group your closet pieces into reusable outfit combos.
-          </p>
+          </PrimitiveText>
         </div>
-        <p className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+        <PrimitiveText as="p" variant="bodySm" tone="muted">
           {outfits.length} {outfits.length === 1 ? "outfit" : "outfits"} saved
-        </p>
+        </PrimitiveText>
       </div>
 
       <section ref={formSectionRef} className="border border-border bg-card p-6">
@@ -255,9 +255,7 @@ export function MyOutfitsPage({
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-2">
-              <span className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Name
-              </span>
+              <PrimitiveText as="span" variant="bodySm" tone="muted">Name</PrimitiveText>
               <input
                 value={formState.name}
                 onChange={(event) => setFormField("name", event.target.value)}
@@ -267,9 +265,9 @@ export function MyOutfitsPage({
             </label>
 
             <label className="space-y-2">
-              <span className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+              <PrimitiveText as="span" variant="bodySm" tone="muted">
                 Tags (comma separated)
-              </span>
+              </PrimitiveText>
               <input
                 value={formState.tagInput}
                 onChange={(event) => setFormField("tagInput", event.target.value)}
@@ -280,9 +278,7 @@ export function MyOutfitsPage({
           </div>
 
           <label className="space-y-2 block">
-            <span className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Notes
-            </span>
+            <PrimitiveText as="span" variant="bodySm" tone="muted">Notes</PrimitiveText>
             <textarea
               value={formState.notes}
               onChange={(event) => setFormField("notes", event.target.value)}
@@ -293,26 +289,27 @@ export function MyOutfitsPage({
 
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+              <PrimitiveText as="p" variant="bodySm" tone="muted">
                 Items in this outfit
-              </p>
+              </PrimitiveText>
               <button
                 type="button"
                 onClick={onBrowseCloset}
                 className="inline-flex items-center justify-center border border-border px-3 py-1.5 text-xs transition-colors hover:border-foreground"
-                style={{ fontFamily: "Outfit, sans-serif" }}
               >
                 Add from closet
               </button>
             </div>
 
             {selectedItems.length === 0 ? (
-              <div
-                className="border border-dashed border-border p-4 text-sm text-muted-foreground"
-                style={{ fontFamily: "Outfit, sans-serif" }}
+              <PrimitiveText
+                as="div"
+                variant="bodySm"
+                tone="muted"
+                className="border border-dashed border-border p-4"
               >
                 Use “Add to Outfit” on any closet item, then come back here to save.
-              </div>
+              </PrimitiveText>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {selectedItems.map((item) => (
@@ -321,25 +318,21 @@ export function MyOutfitsPage({
                       {item.image_url ? (
                         <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
                       ) : (
-                        <div
-                          className="h-full w-full flex items-center justify-center text-xs"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        <PrimitiveText
+                          as="div"
+                          variant="caption"
+                          className="h-full w-full flex items-center justify-center"
                         >
                           {buildPlaceholderLabel(item.name)}
-                        </div>
+                        </PrimitiveText>
                       )}
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <p className="truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        {item.name}
-                      </p>
-                      <p
-                        className="text-xs text-muted-foreground truncate"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      >
+                      <PrimitiveText as="p" className="truncate">{item.name}</PrimitiveText>
+                      <PrimitiveText as="p" variant="caption" tone="muted" className="truncate">
                         {item.tags.length > 0 ? formatTagLabel(item.tags[0]) : "Unstyled"}
-                      </p>
+                      </PrimitiveText>
                     </div>
 
                     <button
@@ -361,7 +354,6 @@ export function MyOutfitsPage({
               type="submit"
               disabled={isSaving}
               className="inline-flex items-center justify-center gap-2 border border-border px-4 py-2.5 text-sm transition-colors hover:border-foreground disabled:opacity-50"
-              style={{ fontFamily: "Outfit, sans-serif" }}
             >
               {editingOutfitId ? "Save Changes" : "Save Outfit"}
             </button>
@@ -371,7 +363,6 @@ export function MyOutfitsPage({
                 type="button"
                 onClick={resetForm}
                 className="inline-flex items-center justify-center gap-2 border border-border px-4 py-2.5 text-sm transition-colors hover:border-foreground"
-                style={{ fontFamily: "Outfit, sans-serif" }}
               >
                 Cancel Edit
               </button>
@@ -393,12 +384,12 @@ export function MyOutfitsPage({
           </div>
         ) : outfits.length === 0 ? (
           <div className="border border-dashed border-border p-8 text-center">
-            <p className="text-2xl mb-2" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+            <PrimitiveText as="p" variant="display" font="serif" className="mb-2">
               No outfits yet
-            </p>
-            <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+            </PrimitiveText>
+            <PrimitiveText as="p" tone="muted">
               Build your first look above and it will appear here.
-            </p>
+            </PrimitiveText>
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
@@ -414,9 +405,9 @@ export function MyOutfitsPage({
                   <div>
                     <h3>{outfit.name}</h3>
                     {outfit.tags && outfit.tags.length > 0 ? (
-                      <p className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <PrimitiveText as="p" variant="bodySm" tone="muted">
                         {outfit.tags.join(" · ")}
-                      </p>
+                      </PrimitiveText>
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2">
@@ -438,9 +429,7 @@ export function MyOutfitsPage({
                 </div>
 
                 {outfit.notes ? (
-                  <p className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    {outfit.notes}
-                  </p>
+                  <PrimitiveText as="p" variant="bodySm" tone="muted">{outfit.notes}</PrimitiveText>
                 ) : null}
 
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -459,17 +448,17 @@ export function MyOutfitsPage({
                               className="h-full w-full rounded-full object-cover"
                             />
                           ) : (
-                            <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            <PrimitiveText as="span" variant="caption">
                               {buildPlaceholderLabel(item.name)}
-                            </span>
+                            </PrimitiveText>
                           )}
                         </div>
                         <div>
-                          <p style={{ fontFamily: "Outfit, sans-serif" }}>{item.name}</p>
-                          <p className="text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          <PrimitiveText as="p">{item.name}</PrimitiveText>
+                          <PrimitiveText as="p" variant="caption" tone="muted">
                             <Shirt className="inline w-3 h-3 mr-1" />
                             {item.tags.length > 0 ? formatTagLabel(item.tags[0]) : "Unstyled"}
-                          </p>
+                          </PrimitiveText>
                         </div>
                       </div>
                     </button>
@@ -490,7 +479,6 @@ export function MyOutfitsPage({
               ? "border-foreground/20 bg-background/95 text-foreground"
               : "border-destructive/25 bg-destructive/10 text-destructive"
           }`}
-          style={{ fontFamily: "Outfit, sans-serif" }}
         >
           {flash.message}
         </motion.div>

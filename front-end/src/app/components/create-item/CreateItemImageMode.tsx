@@ -10,6 +10,7 @@ import {
 } from "../../lib/closet";
 import { DetectionReviewCard } from "./DetectionReviewCard";
 import { ItemPhotoField } from "../ItemPhotoField";
+import { PrimitiveText } from "../primitives/PrimitiveText";
 import { UploadWorkspace } from "../UploadWorkspace";
 
 interface CreateItemImageModeProps {
@@ -93,14 +94,16 @@ export function CreateItemImageMode({
         previewTitle={selectedFileName ?? "Upload an image"}
       >
         <div>
-          <p className="uppercase tracking-[0.3em] text-xs text-muted-foreground mb-3">
+          <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
             Image Upload
-          </p>
-          <h1 className="mb-1">Review Detected Items</h1>
-          <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+          </PrimitiveText>
+          <PrimitiveText as="h1" variant="display" font="serif" className="mb-1">
+            Review Detected Items
+          </PrimitiveText>
+          <PrimitiveText as="p" tone="muted">
             Upload an image first, then run detection when you are ready. Verified pieces can be saved
             directly to {formatPossessive(titleize(user.username))}.
-          </p>
+          </PrimitiveText>
         </div>
 
         {errorMessage && (
@@ -110,9 +113,9 @@ export function CreateItemImageMode({
         )}
 
         <div className="border border-border bg-card p-5">
-          <p className="uppercase tracking-[0.2em] text-xs text-muted-foreground mb-3">
+          <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
             Upload Photo
-          </p>
+          </PrimitiveText>
           <ItemPhotoField
             description="Choose the source image now. Detection only runs after you click the button below."
             inputRef={inputRef}
@@ -123,12 +126,12 @@ export function CreateItemImageMode({
         </div>
 
         <div className="border border-border bg-card p-5">
-          <p className="uppercase tracking-[0.2em] text-xs text-muted-foreground mb-3">
+          <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
             Detection
-          </p>
-          <p className="text-sm text-muted-foreground mb-4" style={{ fontFamily: "Outfit, sans-serif" }}>
+          </PrimitiveText>
+          <PrimitiveText as="p" variant="bodySm" tone="muted" className="mb-4">
             We refine and verify each detected crop before it becomes selectable below.
-          </p>
+          </PrimitiveText>
           <div className="flex items-center justify-between gap-4">
             <button
               type="button"
@@ -153,46 +156,48 @@ export function CreateItemImageMode({
       <div className="space-y-4 border-t border-border pt-8">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <p className="uppercase tracking-[0.3em] text-xs text-muted-foreground mb-3">
+            <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
               Detected Items
-            </p>
-            <h2 className="mb-1">Choose what to save</h2>
-            <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+            </PrimitiveText>
+            <PrimitiveText as="h2" variant="title" font="serif" className="mb-1">
+              Choose what to save
+            </PrimitiveText>
+            <PrimitiveText as="p" tone="muted">
               Review what the model found and choose any item you want to save to the closet.
-            </p>
+            </PrimitiveText>
           </div>
-          <div className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+          <PrimitiveText as="div" variant="bodySm" tone="muted">
             {selectedCount} selected
-          </div>
+          </PrimitiveText>
         </div>
 
         {!selectedFileName ? (
           <div className="border border-dashed border-border p-8 text-center">
-            <p className="text-2xl mb-2" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+            <PrimitiveText as="p" variant="display" font="serif" className="mb-2">
               Upload an image to begin
-            </p>
-            <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+            </PrimitiveText>
+            <PrimitiveText as="p" tone="muted">
               Choosing an image from the closet page will bring you here automatically.
-            </p>
+            </PrimitiveText>
           </div>
         ) : isDetecting ? (
           <div className="border border-border bg-card p-8 text-center">
-            <p className="text-2xl mb-2" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+            <PrimitiveText as="p" variant="display" font="serif" className="mb-2">
               Detecting, refining, and verifying crops
-            </p>
-            <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+            </PrimitiveText>
+            <PrimitiveText as="p" tone="muted">
               We are running the automated crop pipeline and preparing item-specific previews.
-            </p>
+            </PrimitiveText>
           </div>
         ) : !outfitUpload ? (
           <div className="border border-dashed border-border p-8 text-center">
-            <p className="text-2xl mb-2" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+            <PrimitiveText as="p" variant="display" font="serif" className="mb-2">
               Detect items when you are ready
-            </p>
-            <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+            </PrimitiveText>
+            <PrimitiveText as="p" tone="muted">
               The selected image is ready. Click the button on the right to populate detected items
               below.
-            </p>
+            </PrimitiveText>
           </div>
         ) : outfitUpload.status === "failed" && outfitUpload.error_message ? (
           <div className="border border-destructive/20 bg-destructive/5 p-6 text-sm">
@@ -200,12 +205,12 @@ export function CreateItemImageMode({
           </div>
         ) : detectionCount === 0 ? (
           <div className="border border-dashed border-border p-8 text-center">
-            <p className="text-2xl mb-2" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+            <PrimitiveText as="p" variant="display" font="serif" className="mb-2">
               No items detected yet
-            </p>
-            <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+            </PrimitiveText>
+            <PrimitiveText as="p" tone="muted">
               Try another image if the visible pieces are not being picked up clearly.
-            </p>
+            </PrimitiveText>
           </div>
         ) : (
           <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
@@ -232,9 +237,9 @@ export function CreateItemImageMode({
       </div>
 
       <div className="border-t border-border pt-6 flex items-center justify-between gap-4">
-        <p className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+        <PrimitiveText as="p" variant="bodySm" tone="muted">
           Selected items will use the best available crop from the uploaded image.
-        </p>
+        </PrimitiveText>
         <button
           type="button"
           onClick={onSaveSelectedItems}

@@ -11,6 +11,7 @@ import {
 } from "../../lib/closet";
 import { AiCleanImageButton } from "../AiCleanImageButton";
 import { ItemMetadataFields } from "../ItemMetadataFields";
+import { PrimitiveText } from "../primitives/PrimitiveText";
 
 interface DetectionReviewCardProps {
   cleanImageError?: string;
@@ -62,9 +63,9 @@ export function DetectionReviewCard({
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="uppercase tracking-[0.2em] text-xs text-muted-foreground mb-2">
+          <PrimitiveText as="p" variant="overline" tone="muted" className="mb-2">
             {formatTagLabel(detection.category)}
-          </p>
+          </PrimitiveText>
           <h3>{suggestedName}</h3>
         </div>
         <div className="h-10 w-10 border border-border rounded-full flex items-center justify-center bg-muted">
@@ -72,14 +73,12 @@ export function DetectionReviewCard({
         </div>
       </div>
 
-      <p className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-        {confidenceLabel}
-      </p>
+      <PrimitiveText as="p" variant="bodySm" tone="muted">{confidenceLabel}</PrimitiveText>
 
       <div className="flex items-center justify-between gap-4">
-        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+        <PrimitiveText as="p" variant="overline" tone="muted">
           {cleanedImageUrl ? "AI-Cleaned Preview" : "Automated Crop Preview"}
-        </p>
+        </PrimitiveText>
         <AiCleanImageButton
           disabled={!cleanedImageUrl && !previewBox}
           isLoading={isCleaningImage}
@@ -111,7 +110,7 @@ export function DetectionReviewCard({
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>
+      <div className="grid gap-3 sm:grid-cols-2">
         <DetectionDetail label="Color" value={detection.details.dominant_color} />
         <DetectionDetail label="Material" value={detection.details.material_guess} />
         <DetectionDetail label="Style" value={detection.details.style_guess} />
@@ -211,8 +210,12 @@ function DetectionCropPreview({
 function DetectionDetail({ label, value }: { label: string; value?: string | null }) {
   return (
     <div className="border border-border/80 bg-background/40 px-3 py-3">
-      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">{label}</p>
-      <p>{value?.trim() ? value : "Not provided"}</p>
+      <PrimitiveText as="p" variant="overline" tone="muted" className="mb-2">
+        {label}
+      </PrimitiveText>
+      <PrimitiveText as="p" variant="bodySm">
+        {value?.trim() ? value : "Not provided"}
+      </PrimitiveText>
     </div>
   );
 }

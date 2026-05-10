@@ -25,6 +25,7 @@ import { AiCleanImageButton } from "./AiCleanImageButton";
 import { CreateItemImageMode } from "./create-item/CreateItemImageMode";
 import { ItemMetadataFields } from "./ItemMetadataFields";
 import { ItemPhotoField } from "./ItemPhotoField";
+import { PrimitiveText } from "./primitives/PrimitiveText";
 import { UploadWorkspace } from "./UploadWorkspace";
 import { useItemPhotoState } from "../lib/useItemPhotoState";
 
@@ -353,12 +354,12 @@ export function CreateItemPage({
           Back
         </button>
         <div className="border border-destructive/20 bg-destructive/5 p-6">
-          <p className="text-lg mb-2" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+          <PrimitiveText as="p" variant="title" font="serif" className="mb-2">
             A user is required before you can add an item.
-          </p>
-          <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+          </PrimitiveText>
+          <PrimitiveText as="p" tone="muted">
             {errorMessage || "Pick a valid user and try again."}
-          </p>
+          </PrimitiveText>
         </div>
       </div>
     );
@@ -422,13 +423,15 @@ export function CreateItemPage({
           previewTitle={previewName}
         >
           <div>
-            <p className="uppercase tracking-[0.3em] text-xs text-muted-foreground mb-3">
+            <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
               Add Item
-            </p>
-            <h2 className="mb-1">Create New Item</h2>
-            <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+            </PrimitiveText>
+            <PrimitiveText as="h2" variant="title" font="serif" className="mb-1">
+              Create New Item
+            </PrimitiveText>
+            <PrimitiveText as="p" tone="muted">
               Fill in the details for {titleize(user.username)} and create a new clothing item in Rails.
-            </p>
+            </PrimitiveText>
           </div>
 
           {errorMessage && (
@@ -447,11 +450,11 @@ export function CreateItemPage({
             />
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border border-border bg-background/40 px-4 py-3">
-              <p className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+              <PrimitiveText as="p" variant="bodySm" tone="muted">
                 {photoState.selectedFile
                   ? "Use sparkle to turn the uploaded item photo into a cleaner catalog-style PNG before you save."
                   : "Upload a photo first to use the AI cleaner."}
-              </p>
+              </PrimitiveText>
               <AiCleanImageButton
                 disabled={!photoState.selectedFile}
                 isLoading={isCleaningUploadedPhoto}
@@ -462,12 +465,12 @@ export function CreateItemPage({
 
           <div className="border border-border bg-card p-5">
             <div className="mb-4">
-              <p className="uppercase tracking-[0.2em] text-xs text-muted-foreground mb-2">
+              <PrimitiveText as="p" variant="overline" tone="muted" className="mb-2">
                 Item Details
-              </p>
-              <p className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+              </PrimitiveText>
+              <PrimitiveText as="p" variant="bodySm" tone="muted">
                 Add the core metadata that should be saved with this item.
-              </p>
+              </PrimitiveText>
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
               <ItemMetadataFields values={formValues} onChange={setFormValues} />
