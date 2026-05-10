@@ -25,6 +25,7 @@ export function ItemHeroPreview({
   title,
 }: ItemHeroPreviewProps) {
   const [isImageExpanded, setIsImageExpanded] = useState(false);
+  const canExpand = Boolean(allowExpand && imageUrl);
 
   return (
     <>
@@ -32,8 +33,21 @@ export function ItemHeroPreview({
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45 }}
-        onClick={() => allowExpand && imageUrl && setIsImageExpanded(true)}
-        className={`relative aspect-[4/5] overflow-hidden border border-border p-8 flex flex-col justify-between bg-gradient-to-br from-stone-100 via-neutral-50 to-stone-200 ${allowExpand && imageUrl ? "cursor-zoom-in" : ""}`}
+        onClick={() => canExpand && setIsImageExpanded(true)}
+        onKeyDown={(event) => {
+          if (!canExpand) {
+            return;
+          }
+
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setIsImageExpanded(true);
+          }
+        }}
+        role={canExpand ? "button" : undefined}
+        tabIndex={canExpand ? 0 : undefined}
+        aria-label={canExpand ? `Expand image for ${title}` : undefined}
+        className={`relative aspect-[4/5] overflow-hidden border border-border p-8 flex flex-col justify-between bg-gradient-to-br from-stone-100 via-neutral-50 to-stone-200 ${canExpand ? "cursor-zoom-in" : ""}`}
       >
         {imageUrl && (
           <>
@@ -92,7 +106,7 @@ export function ItemHeroPreview({
         </div>
       </motion.div>
 
-      {allowExpand && imageUrl && (
+      {canExpand && (
         <Dialog open={isImageExpanded} onOpenChange={setIsImageExpanded}>
           <DialogContent className="max-w-[min(92vw,72rem)] border-none bg-black/95 p-4 shadow-2xl sm:p-6">
             <DialogTitle className="sr-only">{title}</DialogTitle>
