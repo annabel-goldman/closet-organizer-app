@@ -4,15 +4,15 @@ import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 
-import { cn } from "./utils";
+import { cn } from "../ui/utils";
 
-function DropdownMenu({
+function PrimitiveDropdownMenu({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
 }
 
-function DropdownMenuPortal({
+function PrimitiveDropdownMenuPortal({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
   return (
@@ -20,7 +20,7 @@ function DropdownMenuPortal({
   );
 }
 
-function DropdownMenuTrigger({
+function PrimitiveDropdownMenuTrigger({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
   return (
@@ -31,7 +31,7 @@ function DropdownMenuTrigger({
   );
 }
 
-function DropdownMenuContent({
+function PrimitiveDropdownMenuContent({
   className,
   sideOffset = 4,
   ...props
@@ -51,7 +51,7 @@ function DropdownMenuContent({
   );
 }
 
-function DropdownMenuGroup({
+function PrimitiveDropdownMenuGroup({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Group>) {
   return (
@@ -59,7 +59,7 @@ function DropdownMenuGroup({
   );
 }
 
-function DropdownMenuItem({
+function PrimitiveDropdownMenuItem({
   className,
   inset,
   variant = "default",
@@ -82,7 +82,7 @@ function DropdownMenuItem({
   );
 }
 
-function DropdownMenuCheckboxItem({
+function PrimitiveDropdownMenuCheckboxItem({
   className,
   children,
   checked,
@@ -108,7 +108,7 @@ function DropdownMenuCheckboxItem({
   );
 }
 
-function DropdownMenuRadioGroup({
+function PrimitiveDropdownMenuRadioGroup({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
   return (
@@ -119,7 +119,7 @@ function DropdownMenuRadioGroup({
   );
 }
 
-function DropdownMenuRadioItem({
+function PrimitiveDropdownMenuRadioItem({
   className,
   children,
   ...props
@@ -143,7 +143,7 @@ function DropdownMenuRadioItem({
   );
 }
 
-function DropdownMenuLabel({
+function PrimitiveDropdownMenuLabel({
   className,
   inset,
   ...props
@@ -163,7 +163,7 @@ function DropdownMenuLabel({
   );
 }
 
-function DropdownMenuSeparator({
+function PrimitiveDropdownMenuSeparator({
   className,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
@@ -176,7 +176,7 @@ function DropdownMenuSeparator({
   );
 }
 
-function DropdownMenuShortcut({
+function PrimitiveDropdownMenuShortcut({
   className,
   ...props
 }: React.ComponentProps<"span">) {
@@ -192,13 +192,13 @@ function DropdownMenuShortcut({
   );
 }
 
-function DropdownMenuSub({
+function PrimitiveDropdownMenuSub({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>) {
   return <DropdownMenuPrimitive.Sub data-slot="dropdown-menu-sub" {...props} />;
 }
 
-function DropdownMenuSubTrigger({
+function PrimitiveDropdownMenuSubTrigger({
   className,
   inset,
   children,
@@ -222,7 +222,7 @@ function DropdownMenuSubTrigger({
   );
 }
 
-function DropdownMenuSubContent({
+function PrimitiveDropdownMenuSubContent({
   className,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
@@ -239,19 +239,19 @@ function DropdownMenuSubContent({
 }
 
 export {
-  DropdownMenu,
-  DropdownMenuPortal,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
-  DropdownMenuItem,
-  DropdownMenuCheckboxItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
+  PrimitiveDropdownMenu,
+  PrimitiveDropdownMenuPortal,
+  PrimitiveDropdownMenuTrigger,
+  PrimitiveDropdownMenuContent,
+  PrimitiveDropdownMenuGroup,
+  PrimitiveDropdownMenuLabel,
+  PrimitiveDropdownMenuItem,
+  PrimitiveDropdownMenuCheckboxItem,
+  PrimitiveDropdownMenuRadioGroup,
+  PrimitiveDropdownMenuRadioItem,
+  PrimitiveDropdownMenuSeparator,
+  PrimitiveDropdownMenuShortcut,
+  PrimitiveDropdownMenuSub,
+  PrimitiveDropdownMenuSubTrigger,
+  PrimitiveDropdownMenuSubContent,
 };

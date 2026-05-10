@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useState } from "react";
+import { Dispatch, SetStateAction, useDeferredValue, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Search, Users } from "lucide-react";
 import { AddItemMenu } from "./components/AddItemMenu";
@@ -8,15 +8,24 @@ import { ItemDetailPage } from "./components/ItemDetailPage";
 import { MyOutfitsPage } from "./components/MyOutfitsPage";
 import { UserDetailPage } from "./components/UserDetailPage";
 import { UsersDirectoryPage } from "./components/UsersDirectoryPage";
+import {
+  PrimitiveDropdownMenu,
+  PrimitiveDropdownMenuCheckboxItem,
+  PrimitiveDropdownMenuContent,
+  PrimitiveDropdownMenuLabel,
+  PrimitiveDropdownMenuSeparator,
+  PrimitiveDropdownMenuTrigger,
+} from "./components/primitives/PrimitiveDropdownMenu";
+import { PrimitiveDropdownTriggerButton } from "./components/primitives/PrimitiveDropdownTriggerButton";
+import {
+  PrimitiveSelect,
+  PrimitiveSelectContent,
+  PrimitiveSelectItem,
+  PrimitiveSelectTrigger,
+  PrimitiveSelectValue,
+} from "./components/primitives/PrimitiveSelect";
 import { AccessRestrictedState } from "./components/shared/AccessRestrictedState";
 import { Input } from "./components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./components/ui/select";
 import {
   beginGoogleSignIn,
   ClothingItem,
@@ -29,7 +38,7 @@ import {
   User,
 } from "./lib/closet";
 import {
-  buildTagOptions,
+  buildGroupedTagOptions,
   ClosetSortOption,
   filterClothingItems,
   hasActiveClosetControls,
@@ -49,6 +58,13 @@ import { useOutfitDraftState } from "./lib/useOutfitDraftState";
 interface HomeMessageState {
   kind: "error" | "success";
   text: string;
+}
+
+interface ClosetFilterMenuProps {
+  label: string;
+  options: string[];
+  selectedValues: string[];
+  onToggleValue: (value: string) => void;
 }
 
 function updateUserItem(user: User | null, nextItem: ClothingItem) {
@@ -75,6 +91,55 @@ function removeUserItem(user: User | null, itemId: number) {
   };
 }
 
+function formatFilterMenuTrigger(label: string, selectedValues: string[]) {
+  if (selectedValues.length === 0) {
+    return label;
+  }
+
+  const formattedValues = selectedValues.map(titleize);
+  if (formattedValues.length === 1) {
+    return formattedValues[0];
+  }
+
+  return `${formattedValues[0]} +${formattedValues.length - 1}`;
+}
+
+function ClosetFilterMenu({
+  label,
+  options,
+  selectedValues,
+  onToggleValue,
+}: ClosetFilterMenuProps) {
+  const triggerLabel = formatFilterMenuTrigger(label, selectedValues);
+
+  return (
+    <PrimitiveDropdownMenu>
+      <PrimitiveDropdownMenuTrigger asChild>
+        <PrimitiveDropdownTriggerButton
+          disabled={options.length === 0}
+          style={{ fontFamily: "Outfit, sans-serif" }}
+        >
+          {triggerLabel}
+        </PrimitiveDropdownTriggerButton>
+      </PrimitiveDropdownMenuTrigger>
+      <PrimitiveDropdownMenuContent align="start" className="max-h-80 w-64 overflow-y-auto">
+        <PrimitiveDropdownMenuLabel>{label}</PrimitiveDropdownMenuLabel>
+        <PrimitiveDropdownMenuSeparator />
+        {options.map((option) => (
+          <PrimitiveDropdownMenuCheckboxItem
+            key={option}
+            checked={selectedValues.includes(option)}
+            onCheckedChange={() => onToggleValue(option)}
+            onSelect={(event) => event.preventDefault()}
+          >
+            {titleize(option)}
+          </PrimitiveDropdownMenuCheckboxItem>
+        ))}
+      </PrimitiveDropdownMenuContent>
+    </PrimitiveDropdownMenu>
+  );
+}
+
 export default function App() {
   const [route, setRoute] = useState<AppRoute>(() => getRouteFromLocation());
   const [user, setUser] = useState<User | null>(null);
@@ -82,7 +147,9 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState("");
   const [homeMessage, setHomeMessage] = useState<HomeMessageState | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTag, setSelectedTag] = useState("all");
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [selectedOtherTags, setSelectedOtherTags] = useState<string[]>([]);
   const [sortOption, setSortOption] = useState<ClosetSortOption>("name-asc");
   const [outfitDraftNotice, setOutfitDraftNotice] = useState("");
   const [outfitDraft, setOutfitDraft] = useOutfitDraftState(user);
@@ -172,14 +239,26 @@ export default function App() {
       : null;
   const isAdminRoute = route.kind === "users" || route.kind === "user";
   const isUnauthorizedAdminRoute = Boolean(user && !user.admin && isAdminRoute);
-  const tagOptions = buildTagOptions(clothingItems);
+  const groupedTagOptions = buildGroupedTagOptions(clothingItems);
+  const selectedFilterTags = [...selectedBrands, ...selectedColors, ...selectedOtherTags];
   const filteredClothingItems = filterClothingItems(
     clothingItems,
     deferredSearchQuery,
-    selectedTag,
+    selectedFilterTags,
     sortOption,
   );
-  const hasActiveFilters = hasActiveClosetControls(searchQuery, selectedTag, sortOption);
+  const hasActiveFilters = hasActiveClosetControls(searchQuery, selectedFilterTags, sortOption);
+
+  function toggleSelectedValue(
+    value: string,
+    setSelectedValues: Dispatch<SetStateAction<string[]>>,
+  ) {
+    setSelectedValues((current) =>
+      current.includes(value)
+        ? current.filter((entry) => entry !== value)
+        : [...current, value].sort((left, right) => left.localeCompare(right)),
+    );
+  }
 
   function addItemToOutfitDraft(itemId: number) {
     setOutfitDraft((current) => {
@@ -480,7 +559,7 @@ export default function App() {
               transition={{ duration: 0.6, delay: 0.3 }}
               className="mb-8 space-y-5"
             >
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.9fr)_minmax(14rem,1fr)_12rem] lg:items-start">
+              <div className="grid gap-3 min-[660px]:grid-cols-[minmax(0,3.2fr)_repeat(3,minmax(0,0.8fr))_minmax(0,1fr)] min-[660px]:items-start">
                 <div className="relative min-w-0 self-start">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -492,52 +571,47 @@ export default function App() {
                 </div>
 
                 <div className="min-w-0">
-                  <Select value={selectedTag} onValueChange={setSelectedTag}>
-                    <SelectTrigger className="h-14 w-full bg-stone-200 hover:bg-stone-200">
-                      <SelectValue placeholder="All tags" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All tags</SelectItem>
-                      {tagOptions.map((tag) => (
-                        <SelectItem key={tag} value={tag}>
-                          {titleize(tag)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <ClosetFilterMenu
+                    label="Tags"
+                    options={groupedTagOptions.other}
+                    selectedValues={selectedOtherTags}
+                    onToggleValue={(value) => toggleSelectedValue(value, setSelectedOtherTags)}
+                  />
                 </div>
 
-                <Select value={sortOption} onValueChange={(value) => setSortOption(value as ClosetSortOption)}>
-                  <SelectTrigger className="h-14 w-full bg-stone-200 hover:bg-stone-200">
-                    <SelectValue placeholder="Sort items" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="name-asc">Name A-Z</SelectItem>
-                    <SelectItem value="newest-added">Newest added</SelectItem>
-                    <SelectItem value="oldest-added">Oldest added</SelectItem>
-                    <SelectItem value="recent-purchase">Most recent purchase</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="min-w-0">
+                  <ClosetFilterMenu
+                    label="Colors"
+                    options={groupedTagOptions.colors}
+                    selectedValues={selectedColors}
+                    onToggleValue={(value) => toggleSelectedValue(value, setSelectedColors)}
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <ClosetFilterMenu
+                    label="Brands"
+                    options={groupedTagOptions.brands}
+                    selectedValues={selectedBrands}
+                    onToggleValue={(value) => toggleSelectedValue(value, setSelectedBrands)}
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <PrimitiveSelect value={sortOption} onValueChange={(value) => setSortOption(value as ClosetSortOption)}>
+                    <PrimitiveSelectTrigger className="h-14 w-full bg-stone-200 hover:bg-stone-200">
+                      <PrimitiveSelectValue placeholder="Sort items" />
+                    </PrimitiveSelectTrigger>
+                    <PrimitiveSelectContent>
+                      <PrimitiveSelectItem value="name-asc">Name A-Z</PrimitiveSelectItem>
+                      <PrimitiveSelectItem value="newest-added">Newest added</PrimitiveSelectItem>
+                      <PrimitiveSelectItem value="oldest-added">Oldest added</PrimitiveSelectItem>
+                      <PrimitiveSelectItem value="recent-purchase">Most recent purchase</PrimitiveSelectItem>
+                    </PrimitiveSelectContent>
+                  </PrimitiveSelect>
+                </div>
               </div>
 
-              {hasActiveFilters ? (
-                <div className="flex items-center justify-between gap-4 border border-border bg-card px-4 py-3">
-                  <p className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Refine your closet with free-text search, tag filters, and sorting.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setSearchQuery("");
-                      setSelectedTag("all");
-                      setSortOption("name-asc");
-                    }}
-                    className="inline-flex items-center justify-center border border-border px-3 py-2 text-sm transition-colors hover:border-foreground"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    Clear filters
-                  </button>
-                </div>
-              ) : null}
             </motion.div>
 
             {user && filteredClothingItems.length > 0 ? (
@@ -581,27 +655,20 @@ export default function App() {
       <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-5">
           <button
-            onClick={() => navigateTo("/")}
-            className="inline-flex items-center justify-center border border-border px-4 py-2.5 text-sm transition-colors hover:border-foreground"
+            onClick={() => navigateTo(user ? "/closet" : "/")}
+            className={`inline-flex items-center justify-center border px-4 py-2.5 text-sm transition-colors ${
+              user && isClosetRoute(route)
+                ? "border-foreground bg-foreground text-background"
+                : "border-border hover:border-foreground"
+            }`}
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
-            Home
+            {user ? "Closet" : "Home"}
           </button>
 
           <div className="flex items-center gap-3">
             {user ? (
               <nav className="flex items-center gap-2">
-                <button
-                  onClick={() => navigateTo("/closet")}
-                  className={`inline-flex items-center justify-center border px-4 py-2.5 text-sm transition-colors ${
-                    isClosetRoute(route)
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-border text-foreground hover:border-foreground"
-                  }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  Closet
-                </button>
                 <button
                   onClick={() => navigateTo("/outfits")}
                   className={`inline-flex items-center justify-center border px-4 py-2.5 text-sm transition-colors ${
