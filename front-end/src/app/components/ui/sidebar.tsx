@@ -7,7 +7,7 @@ import { PanelLeftIcon } from "lucide-react";
 
 import { useIsMobile } from "./use-mobile";
 import { cn } from "./utils";
-import { Button } from "./button";
+import { PrimitiveButton } from "../primitives/PrimitiveButton";
 import { Input } from "./input";
 import { Separator } from "./separator";
 import {
@@ -257,11 +257,11 @@ function SidebarTrigger({
   className,
   onClick,
   ...props
-}: React.ComponentProps<typeof Button>) {
+}: React.ComponentProps<typeof PrimitiveButton>) {
   const { toggleSidebar } = useSidebar();
 
   return (
-    <Button
+    <PrimitiveButton
       data-sidebar="trigger"
       data-slot="sidebar-trigger"
       variant="ghost"
@@ -275,7 +275,7 @@ function SidebarTrigger({
     >
       <PanelLeftIcon />
       <span className="sr-only">Toggle Sidebar</span>
-    </Button>
+    </PrimitiveButton>
   );
 }
 

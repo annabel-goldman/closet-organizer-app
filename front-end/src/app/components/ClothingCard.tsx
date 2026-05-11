@@ -1,9 +1,11 @@
 import { motion } from "motion/react";
 import { Plus } from "lucide-react";
 import { useState } from "react";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
+import { PrimitiveText } from "./primitives/PrimitiveText";
 import {
-  formatTagLabel,
   formatDisplaySize,
+  formatTagLabel,
 } from "../lib/closet";
 
 interface ClothingCardProps {
@@ -29,7 +31,8 @@ export function ClothingCard({
 }: ClothingCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const visibleTags = tags.slice(0, 3);
-  const itemMetadata = visibleTags.map(formatTagLabel).join(" · ");
+  const detailParts = [formatDisplaySize(size), ...visibleTags.slice(1).map(formatTagLabel)];
+  const itemMetadata = detailParts.join(" · ");
   const handleSelect = () => onSelect?.(id);
 
   return (
@@ -69,20 +72,14 @@ export function ClothingCard({
           >
             <div className="space-y-2">
               {tags[0] && (
-                <p
-                  className="uppercase tracking-[0.25em] text-xs"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
+                <PrimitiveText as="p" variant="overline">
                   {formatTagLabel(tags[0])}
-                </p>
+                </PrimitiveText>
               )}
               {itemMetadata && (
-                <p
-                  className="text-sm opacity-70"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
+                <PrimitiveText as="p" variant="bodySm" className="opacity-70">
                   {itemMetadata}
-                </p>
+                </PrimitiveText>
               )}
             </div>
           </div>
@@ -94,27 +91,20 @@ export function ClothingCard({
           className="absolute inset-0 bg-gradient-to-t from-neutral-950/88 via-neutral-900/46 to-neutral-900/10"
         />
 
-        <div className="absolute inset-x-0 top-0 p-5">
-          <p
-            className="uppercase tracking-[0.3em] text-[11px] mb-3"
-            style={{
-              color: image_url ? "rgba(255,255,255,0.75)" : "rgba(68,64,60,0.72)",
-              fontFamily: "Outfit, sans-serif",
-            }}
-          >
-            Clothing Item
-          </p>
-          <h3
+        <div className="absolute inset-x-0 top-0 p-5 pt-8">
+          <PrimitiveText
+            as="h3"
+            variant="display"
+            font="serif"
             className="max-w-[11ch] break-words"
             style={{
               color: image_url ? "white" : "rgba(68, 64, 60, 0.92)",
-              fontFamily: "Cormorant Garamond, serif",
               fontSize: "clamp(2rem, 4vw, 3rem)",
               lineHeight: "0.95",
             }}
           >
             {name}
-          </h3>
+          </PrimitiveText>
         </div>
 
         <motion.div
@@ -122,34 +112,19 @@ export function ClothingCard({
           animate={{ opacity: isHovered ? 1 : 0, y: isHovered ? 0 : 20 }}
           className="absolute bottom-4 left-4 right-4"
         >
-          <button
+          <PrimitiveButton
             onClick={(event) => {
               event.stopPropagation();
               onAddToOutfit?.(id);
             }}
-            className="w-full bg-white/90 backdrop-blur-sm px-4 py-2 hover:bg-white transition-colors flex items-center justify-center gap-2"
+            className="h-auto w-full bg-white/90 px-4 py-2 backdrop-blur-sm hover:bg-white"
           >
             <Plus className="w-5 h-5" />
-            <span style={{ fontFamily: 'Outfit, sans-serif' }}>Add to Outfit</span>
-          </button>
+            <PrimitiveText as="span" variant="bodySm">
+              Add to Outfit
+            </PrimitiveText>
+          </PrimitiveButton>
         </motion.div>
-      </div>
-
-      <div className="mt-3 space-y-1">
-        <div className="flex items-center gap-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-          <span className="uppercase tracking-wider">{formatDisplaySize(size)}</span>
-          {tags[0] && (
-            <>
-              <span>·</span>
-              <span>{formatTagLabel(tags[0])}</span>
-            </>
-          )}
-        </div>
-        {tags[1] && (
-          <p className="italic opacity-60" style={{ fontFamily: 'Outfit, sans-serif' }}>
-            {visibleTags.slice(1).map(formatTagLabel).join(" · ")}
-          </p>
-        )}
       </div>
     </motion.div>
   );
