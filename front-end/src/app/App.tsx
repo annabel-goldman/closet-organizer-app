@@ -1,6 +1,6 @@
-import { useDeferredValue, useEffect, useState } from "react";
+import { Dispatch, SetStateAction, useDeferredValue, useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Search, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Search, Users, X } from "lucide-react";
 import { AddItemMenu } from "./components/AddItemMenu";
 import { ClothingCard } from "./components/ClothingCard";
 import { CreateItemPage } from "./components/CreateItemPage";
@@ -8,15 +8,28 @@ import { ItemDetailPage } from "./components/ItemDetailPage";
 import { MyOutfitsPage } from "./components/MyOutfitsPage";
 import { UserDetailPage } from "./components/UserDetailPage";
 import { UsersDirectoryPage } from "./components/UsersDirectoryPage";
+import {
+  PrimitiveButton,
+} from "./components/primitives/PrimitiveButton";
+import {
+  PrimitiveDropdownMenu,
+  PrimitiveDropdownMenuCheckboxItem,
+  PrimitiveDropdownMenuContent,
+  PrimitiveDropdownMenuLabel,
+  PrimitiveDropdownMenuSeparator,
+  PrimitiveDropdownMenuTrigger,
+} from "./components/primitives/PrimitiveDropdownMenu";
+import { PrimitiveDropdownTriggerButton } from "./components/primitives/PrimitiveDropdownTriggerButton";
+import {
+  PrimitiveSelect,
+  PrimitiveSelectContent,
+  PrimitiveSelectItem,
+  PrimitiveSelectTrigger,
+  PrimitiveSelectValue,
+} from "./components/primitives/PrimitiveSelect";
+import { PrimitiveText } from "./components/primitives/PrimitiveText";
 import { AccessRestrictedState } from "./components/shared/AccessRestrictedState";
 import { Input } from "./components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./components/ui/select";
 import {
   beginGoogleSignIn,
   ClothingItem,
@@ -29,7 +42,7 @@ import {
   User,
 } from "./lib/closet";
 import {
-  buildTagOptions,
+  buildGroupedTagOptions,
   ClosetSortOption,
   filterClothingItems,
   hasActiveClosetControls,
@@ -49,6 +62,14 @@ import { useOutfitDraftState } from "./lib/useOutfitDraftState";
 interface HomeMessageState {
   kind: "error" | "success";
   text: string;
+}
+
+interface ClosetFilterMenuProps {
+  label: string;
+  options: string[];
+  selectedValues: string[];
+  onClear: () => void;
+  onToggleValue: (value: string) => void;
 }
 
 function updateUserItem(user: User | null, nextItem: ClothingItem) {
@@ -75,6 +96,75 @@ function removeUserItem(user: User | null, itemId: number) {
   };
 }
 
+function formatFilterMenuTrigger(label: string, selectedValues: string[]) {
+  if (selectedValues.length === 0) {
+    return label;
+  }
+
+  const formattedValues = selectedValues.map(titleize);
+  if (formattedValues.length === 1) {
+    return formattedValues[0];
+  }
+
+  return `${formattedValues[0]} +${formattedValues.length - 1}`;
+}
+
+function ClosetFilterMenu({
+  label,
+  options,
+  selectedValues,
+  onClear,
+  onToggleValue,
+}: ClosetFilterMenuProps) {
+  const triggerLabel = formatFilterMenuTrigger(label, selectedValues);
+  const hasSelections = selectedValues.length > 0;
+
+  return (
+    <div className="relative">
+      <PrimitiveDropdownMenu>
+        <PrimitiveDropdownMenuTrigger asChild>
+          <PrimitiveDropdownTriggerButton
+            disabled={options.length === 0}
+            className={hasSelections ? "pr-16" : undefined}
+          >
+            {triggerLabel}
+          </PrimitiveDropdownTriggerButton>
+        </PrimitiveDropdownMenuTrigger>
+        <PrimitiveDropdownMenuContent align="start" className="max-h-80 w-64 overflow-y-auto">
+          <PrimitiveDropdownMenuLabel>{label}</PrimitiveDropdownMenuLabel>
+          <PrimitiveDropdownMenuSeparator />
+          {options.map((option) => (
+            <PrimitiveDropdownMenuCheckboxItem
+              key={option}
+              checked={selectedValues.includes(option)}
+              onCheckedChange={() => onToggleValue(option)}
+              onSelect={(event) => event.preventDefault()}
+            >
+              {titleize(option)}
+            </PrimitiveDropdownMenuCheckboxItem>
+          ))}
+        </PrimitiveDropdownMenuContent>
+      </PrimitiveDropdownMenu>
+      {hasSelections ? (
+        <PrimitiveButton
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute top-1/2 right-7 z-10 size-7 -translate-y-1/2 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={(event) => {
+            event.stopPropagation();
+            onClear();
+          }}
+          aria-label={`Clear ${label.toLowerCase()} filters`}
+          title={`Clear ${label.toLowerCase()} filters`}
+        >
+          <X className="size-4" />
+        </PrimitiveButton>
+      ) : null}
+    </div>
+  );
+}
+
 export default function App() {
   const [route, setRoute] = useState<AppRoute>(() => getRouteFromLocation());
   const [user, setUser] = useState<User | null>(null);
@@ -82,7 +172,9 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState("");
   const [homeMessage, setHomeMessage] = useState<HomeMessageState | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTag, setSelectedTag] = useState("all");
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [selectedOtherTags, setSelectedOtherTags] = useState<string[]>([]);
   const [sortOption, setSortOption] = useState<ClosetSortOption>("name-asc");
   const [outfitDraftNotice, setOutfitDraftNotice] = useState("");
   const [outfitDraft, setOutfitDraft] = useOutfitDraftState(user);
@@ -172,14 +264,30 @@ export default function App() {
       : null;
   const isAdminRoute = route.kind === "users" || route.kind === "user";
   const isUnauthorizedAdminRoute = Boolean(user && !user.admin && isAdminRoute);
-  const tagOptions = buildTagOptions(clothingItems);
+  const groupedTagOptions = buildGroupedTagOptions(clothingItems);
+  const selectedFilterTags = [...selectedBrands, ...selectedColors, ...selectedOtherTags];
   const filteredClothingItems = filterClothingItems(
     clothingItems,
     deferredSearchQuery,
-    selectedTag,
+    selectedFilterTags,
     sortOption,
   );
-  const hasActiveFilters = hasActiveClosetControls(searchQuery, selectedTag, sortOption);
+  const hasActiveFilters = hasActiveClosetControls(searchQuery, selectedFilterTags, sortOption);
+
+  function toggleSelectedValue(
+    value: string,
+    setSelectedValues: Dispatch<SetStateAction<string[]>>,
+  ) {
+    setSelectedValues((current) =>
+      current.includes(value)
+        ? current.filter((entry) => entry !== value)
+        : [...current, value].sort((left, right) => left.localeCompare(right)),
+    );
+  }
+
+  function clearSelectedValues(setSelectedValues: Dispatch<SetStateAction<string[]>>) {
+    setSelectedValues([]);
+  }
 
   function addItemToOutfitDraft(itemId: number) {
     setOutfitDraft((current) => {
@@ -210,23 +318,21 @@ export default function App() {
   }
 
   const globalAction = user ? (
-    <button
+    <PrimitiveButton
       onClick={() => void handleLogout()}
-      className="inline-flex items-center justify-center gap-3 border border-border px-4 py-2.5 text-sm transition-colors hover:border-foreground"
-      style={{ fontFamily: "Outfit, sans-serif" }}
+      variant="outline"
     >
       <Users className="h-4 w-4" />
       Sign Out
-    </button>
+    </PrimitiveButton>
   ) : (
-    <button
+    <PrimitiveButton
       onClick={() => beginGoogleSignIn()}
-      className="inline-flex items-center justify-center gap-3 border border-border px-4 py-2.5 text-sm transition-colors hover:border-foreground"
-      style={{ fontFamily: "Outfit, sans-serif" }}
+      variant="outline"
     >
       Sign In
       <ArrowRight className="h-4 w-4" />
-    </button>
+    </PrimitiveButton>
   );
 
   let pageContent;
@@ -244,31 +350,36 @@ export default function App() {
           transition={{ duration: 0.5 }}
           className="max-w-2xl text-center"
         >
-          <h1
+          <PrimitiveText
+            as="h1"
+            variant="display"
+            font="serif"
             className="mb-6"
             style={{
-              fontFamily: "Cormorant Garamond, serif",
               fontSize: "clamp(3rem, 8vw, 5.5rem)",
               lineHeight: "0.95",
             }}
           >
             Closet Organizer
-          </h1>
-          <p
-            className="mb-10 text-lg text-muted-foreground"
-            style={{ fontFamily: "Outfit, sans-serif", lineHeight: "1.7" }}
+          </PrimitiveText>
+          <PrimitiveText
+            as="p"
+            variant="title"
+            tone="muted"
+            className="mb-10"
+            style={{ lineHeight: "1.7" }}
           >
             Organize clothing items, manage closet details.
-          </p>
+          </PrimitiveText>
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <button
+            <PrimitiveButton
               onClick={() => beginGoogleSignIn()}
-              className="inline-flex items-center justify-center gap-3 border border-border px-6 py-3 transition-colors hover:border-foreground"
-              style={{ fontFamily: "Outfit, sans-serif" }}
+              variant="outline"
+              className="h-auto px-6 py-3"
             >
               Sign in with Google
               <ArrowRight className="h-4 w-4" />
-            </button>
+            </PrimitiveButton>
           </div>
           {homeMessage ? (
             <div
@@ -278,7 +389,7 @@ export default function App() {
                   : "border border-destructive/30 bg-destructive/10 text-destructive"
               }`}
             >
-              <p style={{ fontFamily: "Outfit, sans-serif" }}>{homeMessage.text}</p>
+              <PrimitiveText as="p" variant="bodySm">{homeMessage.text}</PrimitiveText>
             </div>
           ) : null}
         </motion.div>
@@ -288,23 +399,21 @@ export default function App() {
     pageContent = (
       <div className="max-w-3xl mx-auto px-6 py-16">
         <div className="border border-border bg-card p-8">
-          <p
-            className="uppercase tracking-[0.3em] text-xs text-muted-foreground mb-3"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
+          <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
             Page Not Found
-          </p>
-          <h1 className="mb-3">We couldn&apos;t find that page.</h1>
-          <p className="mb-6 text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+          </PrimitiveText>
+          <PrimitiveText as="h1" variant="display" font="serif" className="mb-3">
+            We couldn&apos;t find that page.
+          </PrimitiveText>
+          <PrimitiveText as="p" tone="muted" className="mb-6">
             The link may be out of date, or the page may have been moved.
-          </p>
-          <button
+          </PrimitiveText>
+          <PrimitiveButton
             onClick={() => navigateTo(user ? "/closet" : "/")}
-            className="inline-flex items-center justify-center border border-border px-4 py-2.5 text-sm transition-colors hover:border-foreground"
-            style={{ fontFamily: "Outfit, sans-serif" }}
+            variant="outline"
           >
             {user ? "Back to closet" : "Back home"}
-          </button>
+          </PrimitiveButton>
         </div>
       </div>
     );
@@ -400,32 +509,37 @@ export default function App() {
       <div className="max-w-7xl mx-auto px-6 py-12">
         <div className="mb-8 flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
           <div>
-            <motion.h1
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
-              className="mb-2 tracking-tight"
-              style={{
-                fontFamily: "Cormorant Garamond, serif",
-                fontSize: "clamp(2.5rem, 5vw, 4rem)",
-                lineHeight: "1",
-              }}
             >
-              {closetTitle}
-            </motion.h1>
-            <motion.p
+              <PrimitiveText
+                as="h1"
+                variant="display"
+                font="serif"
+                className="mb-2 tracking-tight"
+                style={{
+                  fontSize: "clamp(2.5rem, 5vw, 4rem)",
+                  lineHeight: "1",
+                }}
+              >
+                {closetTitle}
+              </PrimitiveText>
+            </motion.div>
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.8, delay: 0.2 }}
-              className="tracking-wide text-muted-foreground"
-              style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              {isLoading
-                ? "Loading items from your backend..."
-                : `${clothingItems.length} ${clothingItems.length === 1 ? "item" : "items"}${
-                    preferredStyle ? ` · ${preferredStyle} style` : ""
-                  }`}
-            </motion.p>
+              <PrimitiveText as="p" tone="muted" className="tracking-wide">
+                {isLoading
+                  ? "Loading items from your backend..."
+                  : `${clothingItems.length} ${clothingItems.length === 1 ? "item" : "items"}${
+                      preferredStyle ? ` · ${preferredStyle} style` : ""
+                    }`}
+              </PrimitiveText>
+            </motion.div>
           </div>
 
           <motion.div
@@ -455,12 +569,12 @@ export default function App() {
 
         {errorMessage ? (
           <div className="border border-destructive/20 bg-destructive/5 p-6">
-            <p className="mb-2 text-lg" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+            <PrimitiveText as="p" variant="title" font="serif" className="mb-2">
               The closet data could not be loaded.
-            </p>
-            <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+            </PrimitiveText>
+            <PrimitiveText as="p" tone="muted">
               {errorMessage}. Make sure both dev servers are running through `./start.sh`.
-            </p>
+            </PrimitiveText>
           </div>
         ) : isLoading ? (
           <div className="grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-4">
@@ -480,7 +594,7 @@ export default function App() {
               transition={{ duration: 0.6, delay: 0.3 }}
               className="mb-8 space-y-5"
             >
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.9fr)_minmax(14rem,1fr)_12rem] lg:items-start">
+              <div className="grid gap-3 min-[660px]:grid-cols-[minmax(0,3.2fr)_repeat(3,minmax(0,0.8fr))_minmax(0,1fr)] min-[660px]:items-start">
                 <div className="relative min-w-0 self-start">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -492,52 +606,50 @@ export default function App() {
                 </div>
 
                 <div className="min-w-0">
-                  <Select value={selectedTag} onValueChange={setSelectedTag}>
-                    <SelectTrigger className="h-14 w-full bg-stone-200 hover:bg-stone-200">
-                      <SelectValue placeholder="All tags" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All tags</SelectItem>
-                      {tagOptions.map((tag) => (
-                        <SelectItem key={tag} value={tag}>
-                          {titleize(tag)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <ClosetFilterMenu
+                    label="Tags"
+                    options={groupedTagOptions.other}
+                    selectedValues={selectedOtherTags}
+                    onClear={() => clearSelectedValues(setSelectedOtherTags)}
+                    onToggleValue={(value) => toggleSelectedValue(value, setSelectedOtherTags)}
+                  />
                 </div>
 
-                <Select value={sortOption} onValueChange={(value) => setSortOption(value as ClosetSortOption)}>
-                  <SelectTrigger className="h-14 w-full bg-stone-200 hover:bg-stone-200">
-                    <SelectValue placeholder="Sort items" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="name-asc">Name A-Z</SelectItem>
-                    <SelectItem value="newest-added">Newest added</SelectItem>
-                    <SelectItem value="oldest-added">Oldest added</SelectItem>
-                    <SelectItem value="recent-purchase">Most recent purchase</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="min-w-0">
+                  <ClosetFilterMenu
+                    label="Colors"
+                    options={groupedTagOptions.colors}
+                    selectedValues={selectedColors}
+                    onClear={() => clearSelectedValues(setSelectedColors)}
+                    onToggleValue={(value) => toggleSelectedValue(value, setSelectedColors)}
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <ClosetFilterMenu
+                    label="Brands"
+                    options={groupedTagOptions.brands}
+                    selectedValues={selectedBrands}
+                    onClear={() => clearSelectedValues(setSelectedBrands)}
+                    onToggleValue={(value) => toggleSelectedValue(value, setSelectedBrands)}
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <PrimitiveSelect value={sortOption} onValueChange={(value) => setSortOption(value as ClosetSortOption)}>
+                    <PrimitiveSelectTrigger className="h-14 w-full bg-stone-200 hover:bg-stone-200">
+                      <PrimitiveSelectValue placeholder="Sort items" />
+                    </PrimitiveSelectTrigger>
+                    <PrimitiveSelectContent>
+                      <PrimitiveSelectItem value="name-asc">Name A-Z</PrimitiveSelectItem>
+                      <PrimitiveSelectItem value="newest-added">Newest added</PrimitiveSelectItem>
+                      <PrimitiveSelectItem value="oldest-added">Oldest added</PrimitiveSelectItem>
+                      <PrimitiveSelectItem value="recent-purchase">Most recent purchase</PrimitiveSelectItem>
+                    </PrimitiveSelectContent>
+                  </PrimitiveSelect>
+                </div>
               </div>
 
-              {hasActiveFilters ? (
-                <div className="flex items-center justify-between gap-4 border border-border bg-card px-4 py-3">
-                  <p className="text-sm text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Refine your closet with free-text search, tag filters, and sorting.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setSearchQuery("");
-                      setSelectedTag("all");
-                      setSortOption("name-asc");
-                    }}
-                    className="inline-flex items-center justify-center border border-border px-3 py-2 text-sm transition-colors hover:border-foreground"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    Clear filters
-                  </button>
-                </div>
-              ) : null}
             </motion.div>
 
             {user && filteredClothingItems.length > 0 ? (
@@ -554,16 +666,16 @@ export default function App() {
               </div>
             ) : (
               <div className="border border-dashed border-border p-10 text-center">
-                <p className="mb-3 text-2xl" style={{ fontFamily: "Cormorant Garamond, serif" }}>
+                <PrimitiveText as="p" variant="display" font="serif" className="mb-3">
                   {user ? "No matching items found" : "No closet data found"}
-                </p>
-                <p className="text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                </PrimitiveText>
+                <PrimitiveText as="p" tone="muted">
                   {user
                     ? hasActiveFilters
                       ? "Try a different tag, search phrase, or sort."
                       : "Add a new item to start building out this closet."
                     : "Sign in with Google to load your closet."}
-                </p>
+                </PrimitiveText>
               </div>
             )}
           </>
@@ -580,51 +692,44 @@ export default function App() {
     <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-5">
-          <button
-            onClick={() => navigateTo("/")}
-            className="inline-flex items-center justify-center border border-border px-4 py-2.5 text-sm transition-colors hover:border-foreground"
-            style={{ fontFamily: "Outfit, sans-serif" }}
+          <PrimitiveButton
+            onClick={() => navigateTo(user ? "/closet" : "/")}
+            variant="outline"
+            className={`${
+              user && isClosetRoute(route)
+                ? "border-foreground bg-foreground text-background"
+                : "border-border hover:border-foreground"
+            }`}
           >
-            Home
-          </button>
+            {user ? "Closet" : "Home"}
+          </PrimitiveButton>
 
           <div className="flex items-center gap-3">
             {user ? (
               <nav className="flex items-center gap-2">
-                <button
-                  onClick={() => navigateTo("/closet")}
-                  className={`inline-flex items-center justify-center border px-4 py-2.5 text-sm transition-colors ${
-                    isClosetRoute(route)
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-border text-foreground hover:border-foreground"
-                  }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  Closet
-                </button>
-                <button
+                <PrimitiveButton
                   onClick={() => navigateTo("/outfits")}
-                  className={`inline-flex items-center justify-center border px-4 py-2.5 text-sm transition-colors ${
+                  variant="outline"
+                  className={`${
                     isOutfitRoute(route)
                       ? "border-foreground bg-foreground text-background"
                       : "border-border text-foreground hover:border-foreground"
                   }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   My Outfits
-                </button>
+                </PrimitiveButton>
                 {user.admin ? (
-                  <button
+                  <PrimitiveButton
                     onClick={() => navigateTo("/users")}
-                    className={`inline-flex items-center justify-center border px-4 py-2.5 text-sm transition-colors ${
+                    variant="outline"
+                    className={`${
                       isUsersRoute(route)
                         ? "border-foreground bg-foreground text-background"
                         : "border-border text-foreground hover:border-foreground"
                     }`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
                   >
                     Users
-                  </button>
+                  </PrimitiveButton>
                 ) : null}
               </nav>
             ) : null}
@@ -640,7 +745,6 @@ export default function App() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           className="fixed bottom-6 right-6 z-50 max-w-sm border border-foreground/20 bg-background/95 px-4 py-3 text-sm shadow-lg backdrop-blur"
-          style={{ fontFamily: "Outfit, sans-serif" }}
         >
           {outfitDraftNotice} Draft has {outfitDraft.itemIds.length}{" "}
           {outfitDraft.itemIds.length === 1 ? "item" : "items"}.
@@ -649,10 +753,10 @@ export default function App() {
 
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-6 py-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p style={{ fontFamily: "Outfit, sans-serif" }}>
+          <PrimitiveText as="p" variant="bodySm">
             Curating closets and serving looks, one hanger at a time.
-          </p>
-          <p style={{ fontFamily: "Outfit, sans-serif" }}>Pressed, polished, and ready for the runway.</p>
+          </PrimitiveText>
+          <PrimitiveText as="p" variant="bodySm">Pressed, polished, and ready for the runway.</PrimitiveText>
         </div>
       </footer>
     </div>

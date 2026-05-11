@@ -1,10 +1,12 @@
 import { Camera, ChevronDown, PencilLine, Plus } from "lucide-react";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
+  PrimitiveDropdownMenu,
+  PrimitiveDropdownMenuContent,
+  PrimitiveDropdownMenuItem,
+  PrimitiveDropdownMenuTrigger,
+} from "./primitives/PrimitiveDropdownMenu";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
+import { PrimitiveText } from "./primitives/PrimitiveText";
 
 interface AddItemMenuProps {
   disabled?: boolean;
@@ -18,36 +20,46 @@ export function AddItemMenu({
   onSelectManual,
 }: AddItemMenuProps) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
+    <PrimitiveDropdownMenu>
+      <PrimitiveDropdownMenuTrigger asChild>
+        <PrimitiveButton
           type="button"
           disabled={disabled}
-          className="flex items-center justify-center gap-3 px-5 py-3 border border-border hover:border-foreground transition-colors disabled:opacity-50"
-          style={{ fontFamily: "Outfit, sans-serif" }}
+          variant="outline"
+          className="h-auto gap-3 px-5 py-3"
         >
           <Plus className="w-4 h-4" />
-          Add Item
+          <PrimitiveText as="span" variant="bodySm">
+            Add Item
+          </PrimitiveText>
           <ChevronDown className="w-4 h-4" />
-        </button>
-      </DropdownMenuTrigger>
+        </PrimitiveButton>
+      </PrimitiveDropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuItem onSelect={onSelectImage}>
+      <PrimitiveDropdownMenuContent align="end" className="w-56">
+        <PrimitiveDropdownMenuItem onSelect={onSelectImage}>
           <Camera className="w-4 h-4" />
           <div className="flex flex-col">
-            <span>Upload image</span>
-            <span className="text-xs text-muted-foreground">Choose a photo in the next step before reviewing detected items.</span>
+            <PrimitiveText as="span" variant="bodySm">
+              Detect Items from Image
+            </PrimitiveText>
+            <PrimitiveText as="span" variant="caption" tone="muted">
+              Choose a photo in the next step before reviewing detected items.
+            </PrimitiveText>
           </div>
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onSelectManual}>
+        </PrimitiveDropdownMenuItem>
+        <PrimitiveDropdownMenuItem onSelect={onSelectManual}>
           <PencilLine className="w-4 h-4" />
           <div className="flex flex-col">
-            <span>Upload manually</span>
-            <span className="text-xs text-muted-foreground">Enter the item details yourself.</span>
+            <PrimitiveText as="span" variant="bodySm">
+              Add Item
+            </PrimitiveText>
+            <PrimitiveText as="span" variant="caption" tone="muted">
+              Enter the item details yourself.
+            </PrimitiveText>
           </div>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </PrimitiveDropdownMenuItem>
+      </PrimitiveDropdownMenuContent>
+    </PrimitiveDropdownMenu>
   );
 }

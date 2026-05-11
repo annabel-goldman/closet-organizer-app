@@ -6,6 +6,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "./ui/dialog";
+import { PrimitiveText } from "./primitives/PrimitiveText";
 
 interface ItemHeroPreviewProps {
   allowExpand?: boolean;
@@ -61,47 +62,50 @@ export function ItemHeroPreview({
         )}
 
         <div>
-          <p
-            className="relative uppercase tracking-[0.3em] text-xs mb-4"
+          <PrimitiveText
+            as="p"
+            variant="overline"
+            className="relative mb-4"
             style={{
               color: imageUrl ? "rgba(255,255,255,0.78)" : undefined,
-              fontFamily: "Outfit, sans-serif",
             }}
           >
             {label}
-          </p>
-          <h1
+          </PrimitiveText>
+          <PrimitiveText
+            as="h1"
+            variant="display"
+            font="serif"
             className="relative mb-0 max-w-[12ch] break-words"
             style={{
               color: imageUrl ? "white" : "rgba(68, 64, 60, 0.85)",
-              fontFamily: "Cormorant Garamond, serif",
               fontSize: "clamp(2.75rem, 5vw, 4.75rem)",
               lineHeight: "0.95",
             }}
           >
             {title}
-          </h1>
+          </PrimitiveText>
         </div>
 
         <div className="relative space-y-3">
-          <p
+          <PrimitiveText
+            as="p"
             style={{
               color: imageUrl ? "rgba(255,255,255,0.82)" : undefined,
-              fontFamily: "Outfit, sans-serif",
             }}
           >
             {primaryDetail}
-          </p>
+          </PrimitiveText>
           {secondaryDetail && (
-            <p
-              className="text-sm"
+            <PrimitiveText
+              as="p"
+              variant="bodySm"
               style={{
                 color: imageUrl ? "rgba(255,255,255,0.82)" : undefined,
-                fontFamily: "Outfit, sans-serif",
               }}
             >
               {secondaryDetail}
-            </p>
+            </PrimitiveText>
           )}
         </div>
       </motion.div>

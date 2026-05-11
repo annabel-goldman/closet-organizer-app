@@ -6,7 +6,10 @@ import {
 } from "lucide-react";
 
 import { cn } from "./utils";
-import { Button, buttonVariants } from "./button";
+import {
+  PrimitiveButton,
+  primitiveButtonVariants,
+} from "../primitives/PrimitiveButton";
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
   return (
@@ -39,7 +42,7 @@ function PaginationItem({ ...props }: React.ComponentProps<"li">) {
 
 type PaginationLinkProps = {
   isActive?: boolean;
-} & Pick<React.ComponentProps<typeof Button>, "size"> &
+} & Pick<React.ComponentProps<typeof PrimitiveButton>, "size"> &
   React.ComponentProps<"a">;
 
 function PaginationLink({
@@ -54,7 +57,7 @@ function PaginationLink({
       data-slot="pagination-link"
       data-active={isActive}
       className={cn(
-        buttonVariants({
+        primitiveButtonVariants({
           variant: isActive ? "outline" : "ghost",
           size,
         }),

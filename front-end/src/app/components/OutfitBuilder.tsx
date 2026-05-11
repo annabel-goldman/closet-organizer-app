@@ -1,5 +1,7 @@
 import { motion } from "motion/react";
 import { Plus, X } from "lucide-react";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
+import { PrimitiveText } from "./primitives/PrimitiveText";
 
 interface OutfitItem {
   id: number;
@@ -38,16 +40,18 @@ export function OutfitBuilder({ outfits, isOpen, onClose }: OutfitBuilderProps) 
         className="bg-background max-w-4xl w-full max-h-[90vh] overflow-y-auto p-8 relative"
         onClick={(e) => e.stopPropagation()}
       >
-        <button
+        <PrimitiveButton
           onClick={onClose}
-          className="absolute top-6 right-6 p-2 hover:bg-muted transition-colors"
+          variant="ghost"
+          size="icon"
+          className="absolute top-6 right-6"
         >
           <X className="w-6 h-6" />
-        </button>
+        </PrimitiveButton>
 
-        <h2 className="mb-8" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+        <PrimitiveText as="h2" variant="display" font="serif" className="mb-8">
           Saved Outfits
-        </h2>
+        </PrimitiveText>
 
         <div className="space-y-8">
           {outfits.map((outfit, index) => (
@@ -60,16 +64,16 @@ export function OutfitBuilder({ outfits, isOpen, onClose }: OutfitBuilderProps) 
             >
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="mb-1" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+                  <PrimitiveText as="h3" variant="title" font="serif" className="mb-1">
                     {outfit.name}
-                  </h3>
-                  <p className="text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  </PrimitiveText>
+                  <PrimitiveText as="p" tone="muted">
                     {outfit.date}
-                  </p>
+                  </PrimitiveText>
                 </div>
-                <button className="px-4 py-2 border border-foreground hover:bg-foreground hover:text-background transition-colors">
-                  <span style={{ fontFamily: 'Outfit, sans-serif' }}>Wear Today</span>
-                </button>
+                <PrimitiveButton variant="outline" className="border-foreground hover:bg-foreground hover:text-background">
+                  Wear Today
+                </PrimitiveButton>
               </div>
 
               <div className="grid grid-cols-4 gap-4">
@@ -86,12 +90,15 @@ export function OutfitBuilder({ outfits, isOpen, onClose }: OutfitBuilderProps) 
             </motion.div>
           ))}
 
-          <button className="w-full py-8 border-2 border-dashed border-border hover:border-foreground transition-colors flex flex-col items-center justify-center gap-3">
+          <PrimitiveButton
+            variant="outline"
+            className="h-auto w-full flex-col gap-3 border-2 border-dashed py-8 hover:border-foreground"
+          >
             <Plus className="w-8 h-8" />
-            <span className="uppercase tracking-wider" style={{ fontFamily: 'Outfit, sans-serif' }}>
+            <PrimitiveText as="span" variant="overline">
               Create New Outfit
-            </span>
-          </button>
+            </PrimitiveText>
+          </PrimitiveButton>
         </div>
       </motion.div>
     </motion.div>
