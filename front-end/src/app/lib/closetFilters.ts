@@ -84,31 +84,24 @@ export function buildTagOptions(items: ClothingItem[]) {
 
 export function buildGroupedTagOptions(items: ClothingItem[]): GroupedTagOptions {
   const uniqueTags = buildTagOptions(items);
-  const brandCandidates = new Set(
-    items
-      .map((item) => item.tags[0]?.trim().toLowerCase())
-      .filter(Boolean),
-  );
 
-  const grouped = uniqueTags.reduce<GroupedTagOptions>(
+  const grouped = uniqueTags.reduce<Pick<GroupedTagOptions, "colors" | "other">>(
     (result, tag) => {
       const normalizedTag = tag.trim().toLowerCase();
 
       if (COLOR_TAGS.has(normalizedTag)) {
         result.colors.push(tag);
-      } else if (brandCandidates.has(normalizedTag)) {
-        result.brands.push(tag);
       } else {
         result.other.push(tag);
       }
 
       return result;
     },
-    { brands: [], colors: [], other: [] },
+    { colors: [], other: [] },
   );
 
   return {
-    brands: grouped.brands.sort((left, right) => left.localeCompare(right)),
+    brands: [],
     colors: grouped.colors.sort((left, right) => left.localeCompare(right)),
     other: grouped.other.sort((left, right) => left.localeCompare(right)),
   };
