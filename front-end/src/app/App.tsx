@@ -118,6 +118,7 @@ function ClosetFilterMenu({
 }: ClosetFilterMenuProps) {
   const triggerLabel = formatFilterMenuTrigger(label, selectedValues);
   const hasSelections = selectedValues.length > 0;
+  const filterDescription = `Filter closet items by ${label.toLowerCase()}`;
 
   return (
     <div className="relative">
@@ -126,6 +127,7 @@ function ClosetFilterMenu({
           <PrimitiveDropdownTriggerButton
             disabled={options.length === 0}
             className={hasSelections ? "pr-16" : undefined}
+            aria-label={filterDescription}
           >
             {triggerLabel}
           </PrimitiveDropdownTriggerButton>
@@ -596,8 +598,12 @@ export default function App() {
             >
               <div className="grid gap-3 min-[660px]:grid-cols-[minmax(0,3.2fr)_repeat(3,minmax(0,0.8fr))_minmax(0,1fr)] min-[660px]:items-start">
                 <div className="relative min-w-0 self-start">
+                  <label htmlFor="closet-search" className="sr-only">
+                    Search closet items
+                  </label>
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
+                    id="closet-search"
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Search by name or describe an item with tags"
@@ -636,8 +642,14 @@ export default function App() {
                 </div>
 
                 <div className="min-w-0">
+                  <label id="closet-sort-label" className="sr-only">
+                    Sort closet items
+                  </label>
                   <PrimitiveSelect value={sortOption} onValueChange={(value) => setSortOption(value as ClosetSortOption)}>
-                    <PrimitiveSelectTrigger className="h-14 w-full bg-stone-200 hover:bg-stone-200">
+                    <PrimitiveSelectTrigger
+                      aria-labelledby="closet-sort-label"
+                      className="h-14 w-full bg-stone-200 hover:bg-stone-200"
+                    >
                       <PrimitiveSelectValue placeholder="Sort items" />
                     </PrimitiveSelectTrigger>
                     <PrimitiveSelectContent>
@@ -649,6 +661,27 @@ export default function App() {
                   </PrimitiveSelect>
                 </div>
               </div>
+
+              {hasActiveFilters ? (
+                <div className="flex items-center justify-between gap-4 border border-border bg-card px-4 py-3">
+                  <PrimitiveText as="p" tone="muted">
+                    Refine your closet with free-text search, tag filters, and sorting.
+                  </PrimitiveText>
+                  <PrimitiveButton
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setSelectedOtherTags([]);
+                      setSelectedColors([]);
+                      setSelectedBrands([]);
+                      setSortOption("name-asc");
+                    }}
+                  >
+                    Clear filters
+                  </PrimitiveButton>
+                </div>
+              ) : null}
 
             </motion.div>
 
