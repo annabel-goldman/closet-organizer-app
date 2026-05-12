@@ -487,6 +487,9 @@ export function MyOutfitsPage({
               ? "border-foreground/20 bg-background/95 text-foreground"
               : "border-destructive/25 bg-destructive/10 text-destructive"
           }`}
+          role={flash.kind === "error" ? "alert" : "status"}
+          aria-live={flash.kind === "error" ? "assertive" : "polite"}
+          aria-atomic="true"
         >
           {flash.message}
         </motion.div>
