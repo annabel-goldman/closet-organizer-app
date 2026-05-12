@@ -118,6 +118,7 @@ function ClosetFilterMenu({
 }: ClosetFilterMenuProps) {
   const triggerLabel = formatFilterMenuTrigger(label, selectedValues);
   const hasSelections = selectedValues.length > 0;
+  const filterDescription = `Filter closet items by ${label.toLowerCase()}`;
 
   return (
     <div className="relative">
@@ -126,6 +127,7 @@ function ClosetFilterMenu({
           <PrimitiveDropdownTriggerButton
             disabled={options.length === 0}
             className={hasSelections ? "pr-16" : undefined}
+            aria-label={filterDescription}
           >
             {triggerLabel}
           </PrimitiveDropdownTriggerButton>
@@ -595,8 +597,12 @@ export default function App() {
             >
               <div className="grid gap-3 min-[660px]:grid-cols-[minmax(0,3.2fr)_repeat(2,minmax(0,0.8fr))_minmax(0,1fr)] min-[660px]:items-start">
                 <div className="relative min-w-0 self-start">
+                  <label htmlFor="closet-search" className="sr-only">
+                    Search closet items
+                  </label>
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
+                    id="closet-search"
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Search by name or describe an item with tags"
@@ -625,8 +631,14 @@ export default function App() {
                 </div>
 
                 <div className="min-w-0">
+                  <label id="closet-sort-label" className="sr-only">
+                    Sort closet items
+                  </label>
                   <PrimitiveSelect value={sortOption} onValueChange={(value) => setSortOption(value as ClosetSortOption)}>
-                    <PrimitiveSelectTrigger className="h-14 w-full bg-stone-200 hover:bg-stone-200">
+                    <PrimitiveSelectTrigger
+                      aria-labelledby="closet-sort-label"
+                      className="h-14 w-full bg-stone-200 hover:bg-stone-200"
+                    >
                       <PrimitiveSelectValue placeholder="Sort items" />
                     </PrimitiveSelectTrigger>
                     <PrimitiveSelectContent>
@@ -638,6 +650,26 @@ export default function App() {
                   </PrimitiveSelect>
                 </div>
               </div>
+
+              {hasActiveFilters ? (
+                <div className="flex items-center justify-between gap-4 border border-border bg-card px-4 py-3">
+                  <PrimitiveText as="p" tone="muted">
+                    Refine your closet with free-text search, tag filters, and sorting.
+                  </PrimitiveText>
+                  <PrimitiveButton
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setSelectedOtherTags([]);
+                      setSelectedColors([]);
+                      setSortOption("name-asc");
+                    }}
+                  >
+                    Clear filters
+                  </PrimitiveButton>
+                </div>
+              ) : null}
 
             </motion.div>
 
@@ -679,6 +711,13 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:border focus:border-foreground focus:bg-background focus:px-4 focus:py-2"
+      >
+        Skip to main content
+      </a>
+
       <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-5">
           <PrimitiveButton
@@ -727,13 +766,18 @@ export default function App() {
         </div>
       </header>
 
-      <main className={`flex-1 ${route.kind === "home" ? "flex" : ""}`}>{pageContent}</main>
+      <main id="main-content" className={`flex-1 ${route.kind === "home" ? "flex" : ""}`}>
+        {pageContent}
+      </main>
 
       {outfitDraftNotice ? (
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           className="fixed bottom-6 right-6 z-50 max-w-sm border border-foreground/20 bg-background/95 px-4 py-3 text-sm shadow-lg backdrop-blur"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
         >
           {outfitDraftNotice} Draft has {outfitDraft.itemIds.length}{" "}
           {outfitDraft.itemIds.length === 1 ? "item" : "items"}.

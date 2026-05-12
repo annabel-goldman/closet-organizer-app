@@ -433,12 +433,12 @@ export function CreateItemPage({
               Create New Item
             </PrimitiveText>
             <PrimitiveText as="p" tone="muted">
-              Fill in the details for {titleize(user.username)} and create a new clothing item in Rails.
+              Add the item details for {titleize(user.username)} and save it to the closet.
             </PrimitiveText>
           </div>
 
           {errorMessage && (
-            <div className="border border-destructive/20 bg-destructive/5 p-4 text-sm">
+            <div className="border border-destructive/20 bg-destructive/5 p-4 text-sm" role="alert" aria-live="assertive">
               {errorMessage}
             </div>
           )}

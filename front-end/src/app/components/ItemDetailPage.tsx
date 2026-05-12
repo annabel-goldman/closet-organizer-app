@@ -237,7 +237,7 @@ export function ItemDetailPage({
                 Edit Item
               </PrimitiveText>
               <PrimitiveText as="p" tone="muted">
-                Update the metadata shown in the closet and save it back to Rails.
+                Update item details and save your changes.
               </PrimitiveText>
             </div>
 
@@ -254,13 +254,13 @@ export function ItemDetailPage({
           </div>
 
           {errorMessage && (
-            <div className="border border-destructive/20 bg-destructive/5 p-4 text-sm">
+            <div className="border border-destructive/20 bg-destructive/5 p-4 text-sm" role="alert" aria-live="assertive">
               {errorMessage}
             </div>
           )}
 
           {successMessage && (
-            <div className="border border-emerald-300/40 bg-emerald-50 p-4 text-sm text-emerald-900">
+            <div className="border border-emerald-300/40 bg-emerald-50 p-4 text-sm text-emerald-900" role="status" aria-live="polite">
               {successMessage}
             </div>
           )}
