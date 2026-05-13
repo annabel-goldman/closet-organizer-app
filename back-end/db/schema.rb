@@ -10,7 +10,11 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_04_022100) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_12_120000) do
+  # These are extensions that must be enabled in order to support this database
+  enable_extension "pg_catalog.plpgsql"
+  enable_extension "pg_stat_statements"
+
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -40,6 +44,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_04_022100) do
   end
 
   create_table "clothing_items", force: :cascade do |t|
+    t.string "brand"
     t.text "clean_image_error_message"
     t.datetime "clean_image_generated_at"
     t.string "clean_image_model"

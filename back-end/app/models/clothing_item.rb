@@ -5,6 +5,7 @@ class ClothingItem < ApplicationRecord
   has_one_attached :photo
   has_one_attached :cleaned_photo
   before_validation :normalize_tags
+  before_validation :normalize_brand
 
   enum :size, {
     xs: 0,
@@ -51,5 +52,9 @@ class ClothingItem < ApplicationRecord
 
   def normalize_tags
     self.tags = TagListNormalizer.call(tags)
+  end
+
+  def normalize_brand
+    self.brand = brand.to_s.strip.presence
   end
 end

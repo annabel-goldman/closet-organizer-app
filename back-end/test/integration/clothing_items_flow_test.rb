@@ -28,7 +28,8 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
           user_id: @user.id,
           size: "large",
           date: "2026-04-20",
-          tags: [ "wool", "camel", "tailored", "studio north" ]
+          tags: [ "wool", "camel", "tailored", "studio north" ],
+          brand: "Studio North"
         }
       }, headers: auth_headers(@user), as: :json
     end
@@ -36,6 +37,7 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_response :created
     assert_equal "Camel Coat", response_json["name"]
     assert_equal "large", response_json["size"]
+    assert_equal "Studio North", response_json["brand"]
     assert_equal [ "wool", "camel", "tailored", "studio north" ], response_json["tags"]
   end
 

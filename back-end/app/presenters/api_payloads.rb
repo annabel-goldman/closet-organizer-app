@@ -22,6 +22,7 @@ class ApiPayloads
       only: %i[
         id
         name
+        brand
         date
         user_id
         created_at

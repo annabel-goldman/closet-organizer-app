@@ -174,6 +174,7 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState("");
   const [homeMessage, setHomeMessage] = useState<HomeMessageState | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [selectedOtherTags, setSelectedOtherTags] = useState<string[]>([]);
   const [sortOption, setSortOption] = useState<ClosetSortOption>("name-asc");
@@ -266,14 +267,21 @@ export default function App() {
   const isAdminRoute = route.kind === "users" || route.kind === "user";
   const isUnauthorizedAdminRoute = Boolean(user && !user.admin && isAdminRoute);
   const groupedTagOptions = buildGroupedTagOptions(clothingItems);
-  const selectedFilterTags = [...selectedColors, ...selectedOtherTags];
   const filteredClothingItems = filterClothingItems(
     clothingItems,
     deferredSearchQuery,
-    selectedFilterTags,
+    selectedBrands,
+    selectedColors,
+    selectedOtherTags,
     sortOption,
   );
-  const hasActiveFilters = hasActiveClosetControls(searchQuery, selectedFilterTags, sortOption);
+  const hasActiveFilters = hasActiveClosetControls(
+    searchQuery,
+    selectedBrands,
+    selectedColors,
+    selectedOtherTags,
+    sortOption,
+  );
 
   function toggleSelectedValue(
     value: string,
@@ -595,7 +603,7 @@ export default function App() {
               transition={{ duration: 0.6, delay: 0.3 }}
               className="mb-8 space-y-5"
             >
-              <div className="grid gap-3 min-[660px]:grid-cols-[minmax(0,3.2fr)_repeat(2,minmax(0,0.8fr))_minmax(0,1fr)] min-[660px]:items-start">
+              <div className="grid gap-3 min-[660px]:grid-cols-[minmax(0,3.2fr)_repeat(3,minmax(0,0.8fr))_minmax(0,1fr)] min-[660px]:items-start">
                 <div className="relative min-w-0 self-start">
                   <label htmlFor="closet-search" className="sr-only">
                     Search closet items
@@ -627,6 +635,16 @@ export default function App() {
                     selectedValues={selectedColors}
                     onClear={() => clearSelectedValues(setSelectedColors)}
                     onToggleValue={(value) => toggleSelectedValue(value, setSelectedColors)}
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <ClosetFilterMenu
+                    label="Brands"
+                    options={groupedTagOptions.brands}
+                    selectedValues={selectedBrands}
+                    onClear={() => clearSelectedValues(setSelectedBrands)}
+                    onToggleValue={(value) => toggleSelectedValue(value, setSelectedBrands)}
                   />
                 </div>
 
@@ -663,6 +681,7 @@ export default function App() {
                       setSearchQuery("");
                       setSelectedOtherTags([]);
                       setSelectedColors([]);
+                      setSelectedBrands([]);
                       setSortOption("name-asc");
                     }}
                   >

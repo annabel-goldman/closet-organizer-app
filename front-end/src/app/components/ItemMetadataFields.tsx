@@ -60,6 +60,19 @@ export function ItemMetadataFields({ onChange, values }: ItemMetadataFieldsProps
       </label>
 
       <label className="space-y-2 sm:col-span-2">
+        <PrimitiveText as="span" variant="label">Brand</PrimitiveText>
+        <input
+          value={values.brand}
+          onChange={(event) => updateField("brand", event.target.value)}
+          className="w-full border border-border bg-card px-4 py-3"
+          placeholder="Optional, e.g. COS, Nike"
+        />
+        <PrimitiveText as="p" variant="bodySm" tone="muted">
+          Used for the Brands filter on your closet. Tags stay separate.
+        </PrimitiveText>
+      </label>
+
+      <label className="space-y-2 sm:col-span-2">
         <PrimitiveText as="span" variant="label">Tags</PrimitiveText>
         <textarea
           value={values.tags}
