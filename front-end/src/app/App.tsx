@@ -267,14 +267,21 @@ export default function App() {
   const isAdminRoute = route.kind === "users" || route.kind === "user";
   const isUnauthorizedAdminRoute = Boolean(user && !user.admin && isAdminRoute);
   const groupedTagOptions = buildGroupedTagOptions(clothingItems);
-  const selectedFilterTags = [...selectedBrands, ...selectedColors, ...selectedOtherTags];
   const filteredClothingItems = filterClothingItems(
     clothingItems,
     deferredSearchQuery,
-    selectedFilterTags,
+    selectedBrands,
+    selectedColors,
+    selectedOtherTags,
     sortOption,
   );
-  const hasActiveFilters = hasActiveClosetControls(searchQuery, selectedFilterTags, sortOption);
+  const hasActiveFilters = hasActiveClosetControls(
+    searchQuery,
+    selectedBrands,
+    selectedColors,
+    selectedOtherTags,
+    sortOption,
+  );
 
   function toggleSelectedValue(
     value: string,

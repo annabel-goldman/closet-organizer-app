@@ -37,6 +37,7 @@ export interface UserSummary {
 export interface ClothingItem {
   id: number;
   name: string;
+  brand?: string | null;
   size: string;
   date: string | null;
   user_id: number;
@@ -128,6 +129,7 @@ export type CreateItemMode = "manual" | "image";
 
 export interface ClothingItemFormValues {
   name: string;
+  brand: string;
   size: string;
   date: string;
   tags: string;
@@ -242,6 +244,7 @@ export function saveOutfitDraftItemIds(userId: number, itemIds: number[]) {
 export function emptyClothingItemFormValues(): ClothingItemFormValues {
   return {
     name: "",
+    brand: "",
     size: "medium",
     date: "",
     tags: "",
@@ -312,6 +315,7 @@ export function toDateInputValue(value: string | null | undefined) {
 export function toClothingItemFormValues(item: ClothingItem): ClothingItemFormValues {
   return {
     name: item.name,
+    brand: item.brand?.trim() ?? "",
     size: item.size,
     date: toDateInputValue(item.date),
     tags: formatTagInput(item.tags),
@@ -323,6 +327,7 @@ export function toClothingItemFormValuesFromDetection(
 ): ClothingItemFormValues {
   return {
     name: detection.suggested_name?.trim() || titleize(detection.category),
+    brand: "",
     size: "medium",
     date: "",
     tags: formatTagInput([
@@ -534,6 +539,7 @@ function normalizeTagList(rawTags: unknown): string[] {
 function normalizeClothingItemPayload(item: ClothingItem): ClothingItem {
   return {
     ...item,
+    brand: item.brand?.trim() ? item.brand.trim() : null,
     tags: normalizeTagList((item as ClothingItem & { tags?: unknown }).tags),
   };
 }
@@ -556,6 +562,7 @@ function buildClothingItemFormData(
   formData.append("clothing_item[user_id]", String(userId));
   formData.append("clothing_item[size]", values.size);
   formData.append("clothing_item[date]", values.date);
+  formData.append("clothing_item[brand]", values.brand.trim());
   parseTagInput(values.tags).forEach((tag) => {
     formData.append("clothing_item[tags][]", tag);
   });

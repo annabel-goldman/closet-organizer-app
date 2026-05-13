@@ -16,6 +16,19 @@ class ClothingItemTest < ActiveSupport::TestCase
     assert_equal users(:one), clothing_items(:one).user
   end
 
+  test "normalizes blank brand to nil" do
+    item = ClothingItem.new(
+      user: users(:one),
+      name: "Basic Tee",
+      size: :small,
+      brand: "   "
+    )
+
+    item.valid?
+
+    assert_nil item.brand
+  end
+
   test "normalizes tags into a clean list" do
     item = ClothingItem.new(
       user: users(:one),
