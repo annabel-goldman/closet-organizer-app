@@ -1,6 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { motion } from "motion/react";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, Plus, Upload } from "lucide-react";
 import {
   ClothingItem,
   ClothingItemFormValues,
@@ -12,7 +11,6 @@ import {
   fetchOutfitUpload,
   fetchUser,
   formatDisplaySize,
-  formatPossessive,
   generateOutfitDetectionCleanImage,
   OutfitDetection,
   OutfitUpload,
@@ -23,11 +21,10 @@ import {
 import { usePageData } from "../lib/usePageData";
 import { AiCleanImageButton } from "./AiCleanImageButton";
 import { CreateItemImageMode } from "./create-item/CreateItemImageMode";
+import { ItemEditorWorkspace } from "./ItemEditorWorkspace";
 import { ItemMetadataFields } from "./ItemMetadataFields";
-import { ItemPhotoField } from "./ItemPhotoField";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
-import { UploadWorkspace } from "./UploadWorkspace";
 import { useItemPhotoState } from "../lib/useItemPhotoState";
 
 interface CreateItemPageProps {
@@ -52,7 +49,6 @@ export function CreateItemPage({
   const [isCleaningUploadedPhoto, setIsCleaningUploadedPhoto] = useState(false);
   const [outfitUpload, setOutfitUpload] = useState<OutfitUpload | null>(null);
   const [selectedDetectionIds, setSelectedDetectionIds] = useState<number[]>([]);
-  const [editingDetectionIds, setEditingDetectionIds] = useState<number[]>([]);
   const [cleaningDetectionIds, setCleaningDetectionIds] = useState<number[]>([]);
   const [detectionCleanErrors, setDetectionCleanErrors] = useState<Record<number, string>>({});
   const [editedDetections, setEditedDetections] = useState<Record<number, ClothingItemFormValues>>(
@@ -91,7 +87,6 @@ export function CreateItemPage({
   function resetDetectionState() {
     setOutfitUpload(null);
     setSelectedDetectionIds([]);
-    setEditingDetectionIds([]);
     setCleaningDetectionIds([]);
     setDetectionCleanErrors({});
     setEditedDetections({});
@@ -165,6 +160,10 @@ export function CreateItemPage({
   }
 
   function handleImageFileChange(file: File | null) {
+    if (!file) {
+      return;
+    }
+
     detectionPollControllerRef.current?.abort();
     photoState.updateSelectedFile(file);
     resetDetectionState();
@@ -192,25 +191,6 @@ export function CreateItemPage({
 
   function getDetectionDraft(detection: OutfitDetection) {
     return editedDetections[detection.id] ?? toClothingItemFormValuesFromDetection(detection);
-  }
-
-  function toggleDetectionEditing(detection: OutfitDetection) {
-    setEditedDetections((current) => {
-      if (current[detection.id]) {
-        return current;
-      }
-
-      return {
-        ...current,
-        [detection.id]: toClothingItemFormValuesFromDetection(detection),
-      };
-    });
-
-    setEditingDetectionIds((current) =>
-      current.includes(detection.id)
-        ? current.filter((id) => id !== detection.id)
-        : [...current, detection.id],
-    );
   }
 
   function updateDetectionDraft(detectionId: number, nextValues: ClothingItemFormValues) {
@@ -349,8 +329,8 @@ export function CreateItemPage({
       <div className="max-w-5xl mx-auto px-6 py-12">
         <PrimitiveButton
           onClick={onBack}
-          variant="ghost"
-          className="mb-8 h-auto px-0 py-0 text-muted-foreground"
+          variant="outline"
+          className="mb-8 h-auto px-5 py-3"
         >
           <ArrowLeft className="w-4 h-4" />
           Back
@@ -373,7 +353,6 @@ export function CreateItemPage({
         cleaningDetectionIds={cleaningDetectionIds}
         detectionCleanErrors={detectionCleanErrors}
         detections={detections}
-        editingDetectionIds={editingDetectionIds}
         errorMessage={errorMessage}
         getDetectionDraft={getDetectionDraft}
         inputRef={photoState.inputRef}
@@ -386,7 +365,6 @@ export function CreateItemPage({
         onDraftChange={updateDetectionDraft}
         onFileChange={handleImageFileChange}
         onSaveSelectedItems={() => void handleSaveSelectedItems()}
-        onToggleEdit={toggleDetectionEditing}
         onToggleSelection={toggleDetectionSelection}
         outfitUpload={outfitUpload}
         selectedCount={selectedCount}
@@ -401,97 +379,67 @@ export function CreateItemPage({
   const previewName = formValues.name.trim() || "Untitled Item";
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-12">
-      <PrimitiveButton
-        onClick={onBack}
-        variant="ghost"
-        className="mb-8 h-auto px-0 py-0 text-muted-foreground"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back
-      </PrimitiveButton>
+    <ItemEditorWorkspace
+      backLabel="Back"
+      formLabel="Add Item"
+      imageUrl={photoState.imageUrl}
+      onBack={onBack}
+      onPreviewClick={() => photoState.inputRef.current?.click()}
+      onPreviewClear={photoState.clearSelectedFile}
+      onPreviewEdit={() => photoState.inputRef.current?.click()}
+      onSubmit={handleManualSubmit}
+      previewAriaLabel={photoState.selectedFile ? "Preview image" : "Upload photo"}
+      previewBackgroundDecoration={
+        <Upload
+          className="h-40 w-40 text-stone-700/18 sm:h-52 sm:w-52"
+          strokeWidth={1.1}
+        />
+      }
+      previewTopAction={
+        <AiCleanImageButton
+          className="size-11 border border-white/75 shadow-sm bg-white/70 p-0 backdrop-blur-sm hover:bg-white/85"
+          disabled={!photoState.selectedFile}
+          iconOnly
+          isLoading={isCleaningUploadedPhoto}
+          label="AI clean PNG"
+          onClick={() => void handleCleanUploadedPhoto()}
+        />
+      }
+      previewLabel="New Clothing Item"
+      previewPrimaryDetail={formatDisplaySize(formValues.size)}
+      previewTitle={previewName}
+      footer={
+        <div className="mt-auto pt-2 flex items-center justify-end">
+          <PrimitiveButton
+            type="submit"
+            disabled={isCreating}
+            className="h-auto bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
+          >
+            <Plus className="w-4 h-4" />
+            {isCreating ? "Creating..." : "Create Item"}
+          </PrimitiveButton>
+        </div>
+      }
+    >
+      <input
+        ref={photoState.inputRef}
+        type="file"
+        accept="image/*"
+        onChange={(event) => handleImageFileChange(event.target.files?.[0] ?? null)}
+        className="sr-only"
+      />
 
-      <motion.form
-        initial={{ opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45 }}
-        onSubmit={handleManualSubmit}
-        className="space-y-6"
-      >
-        <UploadWorkspace
-          imageUrl={photoState.imageUrl}
-          previewLabel="New Clothing Item"
-          previewPrimaryDetail={formatDisplaySize(formValues.size)}
-          previewSecondaryDetail={`Adding to ${formatPossessive(titleize(user.username))}`}
-          previewTitle={previewName}
-        >
-          <div>
-            <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
-              Add Item
-            </PrimitiveText>
-            <PrimitiveText as="h2" variant="title" font="serif" className="mb-1">
-              Create New Item
-            </PrimitiveText>
-            <PrimitiveText as="p" tone="muted">
-              Add the item details for {titleize(user.username)} and save it to the closet.
-            </PrimitiveText>
-          </div>
+      {errorMessage && (
+        <div className="border border-destructive/20 bg-destructive/5 p-4 text-sm" role="alert" aria-live="assertive">
+          {errorMessage}
+        </div>
+      )}
 
-          {errorMessage && (
-            <div className="border border-destructive/20 bg-destructive/5 p-4 text-sm" role="alert" aria-live="assertive">
-              {errorMessage}
-            </div>
-          )}
-
-          <div className="border border-border bg-card p-5">
-            <ItemPhotoField
-              description="Upload a photo to display behind the item title in the closet and detail views."
-              inputRef={photoState.inputRef}
-              onClearSelection={photoState.clearSelectedFile}
-              onFileChange={photoState.updateSelectedFile}
-              selectedFileName={photoState.selectedFile?.name}
-            />
-
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border border-border bg-background/40 px-4 py-3">
-              <PrimitiveText as="p" variant="bodySm" tone="muted">
-                {photoState.selectedFile
-                  ? "Use sparkle to turn the uploaded item photo into a cleaner catalog-style PNG before you save."
-                  : "Upload a photo first to use the AI cleaner."}
-              </PrimitiveText>
-              <AiCleanImageButton
-                disabled={!photoState.selectedFile}
-                isLoading={isCleaningUploadedPhoto}
-                onClick={() => void handleCleanUploadedPhoto()}
-              />
-            </div>
-          </div>
-
-          <div className="border border-border bg-card p-5">
-            <div className="mb-4">
-              <PrimitiveText as="p" variant="overline" tone="muted" className="mb-2">
-                Item Details
-              </PrimitiveText>
-              <PrimitiveText as="p" variant="bodySm" tone="muted">
-                Add the core metadata that should be saved with this item.
-              </PrimitiveText>
-            </div>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <ItemMetadataFields values={formValues} onChange={setFormValues} />
-            </div>
-          </div>
-
-          <div className="border-t border-border pt-5 flex items-center justify-end">
-            <PrimitiveButton
-              type="submit"
-              disabled={isCreating}
-              className="h-auto bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
-            >
-              <Plus className="w-4 h-4" />
-              {isCreating ? "Creating..." : "Create Item"}
-            </PrimitiveButton>
-          </div>
-        </UploadWorkspace>
-      </motion.form>
-    </div>
+      <div className="border border-border bg-card p-5">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <ItemMetadataFields values={formValues} onChange={setFormValues} />
+        </div>
+      </div>
+    </ItemEditorWorkspace>
   );
 }
