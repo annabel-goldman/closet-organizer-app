@@ -17,7 +17,7 @@ class FallbackController < ActionController::Base
   def fallback_html
     <<~HTML.html_safe
       <!doctype html>
-      <html>
+      <html lang="en">
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width,initial-scale=1">
