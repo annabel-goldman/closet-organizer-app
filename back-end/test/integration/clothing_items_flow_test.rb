@@ -41,6 +41,22 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_equal [ "wool", "camel", "tailored", "studio north" ], response_json["tags"]
   end
 
+  test "defaults size to na when omitted" do
+    assert_difference("ClothingItem.count", 1) do
+      post clothing_items_url, params: {
+        clothing_item: {
+          name: "Defaulted Item",
+          user_id: @user.id,
+          tags: [ "simple" ]
+        }
+      }, headers: auth_headers(@user), as: :json
+    end
+
+    assert_response :created
+    assert_equal "na", response_json["size"]
+    assert_nil response_json["date"]
+  end
+
   test "can create a clothing item with a photo" do
     assert_difference("ClothingItem.count", 1) do
       post clothing_items_url, params: {

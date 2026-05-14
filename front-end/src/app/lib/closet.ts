@@ -245,7 +245,7 @@ export function emptyClothingItemFormValues(): ClothingItemFormValues {
   return {
     name: "",
     brand: "",
-    size: "medium",
+    size: "na",
     date: "",
     tags: "",
   };
@@ -293,6 +293,10 @@ export function formatTagLabel(tag: string) {
 export function formatDisplaySize(size: string) {
   const normalized = size.trim().toLowerCase();
 
+  if (normalized === "na") {
+    return "N/A";
+  }
+
   if (normalized === "xl" || normalized === "xs") {
     return normalized.toUpperCase();
   }
@@ -328,7 +332,7 @@ export function toClothingItemFormValuesFromDetection(
   return {
     name: detection.suggested_name?.trim() || titleize(detection.category),
     brand: "",
-    size: "medium",
+    size: "na",
     date: "",
     tags: formatTagInput([
       detection.details.dominant_color?.trim() ?? "",
