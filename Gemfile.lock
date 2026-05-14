@@ -100,6 +100,8 @@ GEM
     base64 (0.3.0)
     bcrypt (3.1.22)
     bcrypt_pbkdf (1.1.2)
+    bcrypt_pbkdf (1.1.2-arm64-darwin)
+    bcrypt_pbkdf (1.1.2-x86_64-darwin)
     bigdecimal (4.1.2)
     bindex (0.8.1)
     bootsnap (1.24.1)
@@ -212,7 +214,7 @@ GEM
       bigdecimal (>= 3.1, < 5)
     net-http (0.9.1)
       uri (>= 0.11.1)
-    net-imap (0.6.3)
+    net-imap (0.6.4)
       date
       net-protocol
     net-pop (0.1.2)
@@ -480,6 +482,7 @@ DEPENDENCIES
   importmap-rails
   jbuilder
   kamal
+  net-imap (>= 0.6.4)
   omniauth
   omniauth-google-oauth2
   omniauth-rails_csrf_protection
