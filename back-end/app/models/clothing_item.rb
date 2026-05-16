@@ -4,6 +4,7 @@ class ClothingItem < ApplicationRecord
   has_many :outfits, through: :outfit_items
   has_one_attached :photo
   has_one_attached :cleaned_photo
+  before_validation :normalize_category
   before_validation :normalize_tags
   before_validation :normalize_brand
 
@@ -56,5 +57,9 @@ class ClothingItem < ApplicationRecord
 
   def normalize_brand
     self.brand = brand.to_s.strip.presence
+  end
+
+  def normalize_category
+    self.category = category.to_s.strip.downcase.presence
   end
 end

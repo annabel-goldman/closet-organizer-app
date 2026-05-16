@@ -9,13 +9,20 @@ class OpenrouterImageCleaner
   DEFAULT_BASE_URL = "https://openrouter.ai/api/v1".freeze
   DEFAULT_MODEL = "google/gemini-2.5-flash-image".freeze
 
-  def self.call(source_photo, prompt_context: {})
-    new(source_photo, prompt_context: prompt_context).call
+  def self.call(source_photo, prompt_context: {}, reference_photos: [], metadata_context: {})
+    new(
+      source_photo,
+      prompt_context: prompt_context,
+      reference_photos: reference_photos,
+      metadata_context: metadata_context
+    ).call
   end
 
-  def initialize(source_photo, prompt_context: {})
+  def initialize(source_photo, prompt_context: {}, reference_photos: [], metadata_context: {})
     @source_photo = source_photo
     @prompt_context = prompt_context
+    @reference_photos = Array(reference_photos).compact
+    @metadata_context = metadata_context
   end
 
   def call
@@ -48,7 +55,7 @@ class OpenrouterImageCleaner
 
   private
 
-  attr_reader :prompt_context, :source_photo
+  attr_reader :metadata_context, :prompt_context, :reference_photos, :source_photo
 
   def perform_request(model:, prompt:, data_url:)
     uri = URI.parse("#{base_url}/chat/completions")
@@ -87,18 +94,7 @@ class OpenrouterImageCleaner
         },
         {
           role: "user",
-          content: [
-            {
-              type: "text",
-              text: prompt
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: data_url
-              }
-            }
-          ]
+          content: request_content(prompt: prompt, data_url: data_url)
         }
       ]
     }
@@ -116,6 +112,7 @@ class OpenrouterImageCleaner
     hard_constraints = Array(prompt_context[:hard_constraints]).compact_blank
     soft_hints = Array(prompt_context[:soft_hints]).compact_blank
     appearance_summary = prompt_context[:appearance_summary].presence
+    metadata_lines = metadata_prompt_lines
 
     <<~PROMPT
       Create a single realistic catalog-style PNG of the same clothing item shown in the reference image.
@@ -129,13 +126,44 @@ class OpenrouterImageCleaner
       - Keep the style photorealistic and suitable for an ecommerce product card.
       - Do not invent a different garment or change the dominant color/pattern.
       - Treat the structured fields and description below as identity constraints from an earlier identification pass.
+      - The first image is the latest item-focused photo. Any additional images are original/reference context for the same item.
       - If the image and the text disagree, preserve the same garment identity as faithfully as possible instead of inventing a new item.
 
       #{details.join("\n")}
+      #{metadata_lines.present? ? "\nCurrent metadata context:\n#{metadata_lines.join("\n")}" : ""}
       #{appearance_summary.present? ? "\nAppearance summary:\n#{appearance_summary}" : ""}
       #{hard_constraints.present? ? "\nHard constraints:\n#{hard_constraints.map { |constraint| "- #{constraint}" }.join("\n")}" : ""}
       #{soft_hints.present? ? "\nSoft hints:\n#{soft_hints.map { |hint| "- #{hint}" }.join("\n")}" : ""}
     PROMPT
+  end
+
+  def request_content(prompt:, data_url:)
+    content = [
+      {
+        type: "text",
+        text: prompt
+      },
+      {
+        type: "text",
+        text: "Latest item-focused photo:"
+      },
+      {
+        type: "image_url",
+        image_url: {
+          url: data_url
+        }
+      }
+    ]
+
+    reference_photos.each_with_index do |photo, index|
+      content << {
+        type: "text",
+        text: index.zero? ? "Original/reference source image:" : "Additional reference image:"
+      }
+      content << image_part_for(photo)
+    end
+
+    content
   end
 
   def extract_generated_image_data_url(response)
@@ -185,6 +213,49 @@ class OpenrouterImageCleaner
   def source_photo_data_url(file_path, content_type)
     encoded = Base64.strict_encode64(File.binread(file_path))
     "data:#{content_type};base64,#{encoded}"
+  end
+
+  def image_part_for(photo)
+    {
+      type: "image_url",
+      image_url: {
+        url: photo_data_url(photo)
+      }
+    }
+  end
+
+  def photo_data_url(photo)
+    with_photo_file(photo) do |file_path, content_type|
+      encoded = Base64.strict_encode64(File.binread(file_path))
+      return "data:#{content_type};base64,#{encoded}"
+    end
+  end
+
+  def with_photo_file(photo)
+    if photo.respond_to?(:blob)
+      photo.blob.open do |file|
+        yield file.path, photo.blob.content_type.presence || "image/png"
+      end
+    elsif photo.respond_to?(:tempfile) && photo.tempfile.present?
+      yield photo.tempfile.path, photo.content_type.presence || "image/png"
+    else
+      content_type = photo.respond_to?(:content_type) ? photo.content_type.presence : nil
+      yield photo.path, content_type || "image/png"
+    end
+  end
+
+  def metadata_prompt_lines
+    return [] if metadata_context.blank?
+
+    lines = []
+    lines << "- Name: #{metadata_context[:name]}" if metadata_context[:name].present?
+    lines << "- Brand: #{metadata_context[:brand]}" if metadata_context[:brand].present?
+    lines << "- Size: #{metadata_context[:size]}" if metadata_context[:size].present?
+    lines << "- Date: #{metadata_context[:date]}" if metadata_context[:date].present?
+    if metadata_context[:tags].present?
+      lines << "- Tags: #{Array(metadata_context[:tags]).join(', ')}"
+    end
+    lines
   end
 
   def ensure_configuration!

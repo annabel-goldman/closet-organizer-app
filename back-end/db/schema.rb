@@ -10,11 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_12_120000) do
-  # These are extensions that must be enabled in order to support this database
-  enable_extension "pg_catalog.plpgsql"
-  enable_extension "pg_stat_statements"
-
+ActiveRecord::Schema[8.1].define(version: 2026_05_15_130000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -45,6 +41,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_12_120000) do
 
   create_table "clothing_items", force: :cascade do |t|
     t.string "brand"
+    t.string "category"
     t.text "clean_image_error_message"
     t.datetime "clean_image_generated_at"
     t.string "clean_image_model"
@@ -54,9 +51,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_12_120000) do
     t.datetime "date"
     t.string "name"
     t.integer "size"
+    t.integer "source_outfit_detection_id"
+    t.integer "source_outfit_upload_id"
     t.json "tags"
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
+    t.index ["source_outfit_detection_id"], name: "index_clothing_items_on_source_outfit_detection_id"
+    t.index ["source_outfit_upload_id"], name: "index_clothing_items_on_source_outfit_upload_id"
     t.index ["user_id"], name: "index_clothing_items_on_user_id"
   end
 

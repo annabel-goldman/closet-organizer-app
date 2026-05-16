@@ -18,12 +18,14 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal @clothing_item.name, response_json["name"]
+    assert_equal @clothing_item.category, response_json["category"]
   end
 
   test "can create a clothing item" do
     assert_difference("ClothingItem.count", 1) do
       post clothing_items_url, params: {
         clothing_item: {
+          category: "coat",
           name: "Camel Coat",
           user_id: @user.id,
           size: "large",
@@ -35,6 +37,7 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :created
+    assert_equal "coat", response_json["category"]
     assert_equal "Camel Coat", response_json["name"]
     assert_equal "large", response_json["size"]
     assert_equal "Studio North", response_json["brand"]
@@ -46,6 +49,7 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
       post clothing_items_url, params: {
         clothing_item: {
           name: "Photo Tee",
+          category: "shirt",
           user_id: @user.id,
           size: "medium",
           tags: [ "white", "tee", "casual" ],
@@ -128,6 +132,9 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_predicate created_item.photo, :attached?
     assert_equal "image/png", created_item.photo.blob.content_type
     assert_match(/crop\.png\z/, created_item.photo.blob.filename.to_s)
+    assert_equal "shirt", created_item.category
+    assert_equal upload.id, created_item.source_outfit_upload_id
+    assert_equal detection.id, created_item.source_outfit_detection_id
   end
 
   test "prefers a cleaned outfit detection image when creating a clothing item" do
@@ -174,11 +181,14 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     created_item = ClothingItem.order(:created_at).last
     assert_predicate created_item.photo, :attached?
     assert_match(/item-photo\.png\z/, created_item.photo.blob.filename.to_s)
+    assert_equal upload.id, created_item.source_outfit_upload_id
+    assert_equal detection.id, created_item.source_outfit_detection_id
   end
 
   test "can update a clothing item" do
     patch clothing_item_url(@clothing_item), params: {
       clothing_item: {
+        category: "blouse",
         name: "Ivory Silk Blouse",
         user_id: @user.id,
         size: "small",
@@ -190,6 +200,7 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     @clothing_item.reload
+    assert_equal "blouse", @clothing_item.category
     assert_equal "Ivory Silk Blouse", @clothing_item.name
     assert_equal "small", @clothing_item.size
     assert_equal [ "silk", "ivory", "dressy", "maison" ], @clothing_item.tags
@@ -219,9 +230,16 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
 
   test "can generate a clean image for an existing clothing item photo" do
     @clothing_item.photo.attach(item_photo_upload_png)
+    captured = {}
 
-    with_image_cleaner_stub do
-      post generate_clean_image_clothing_item_url(@clothing_item), headers: auth_headers(@user), as: :json
+    with_image_cleaner_stub(capture: captured) do
+      post generate_clean_image_clothing_item_url(@clothing_item), params: {
+        ai_context: {
+          name: "Ivory Silk Blouse",
+          brand: "Maison North",
+          tags: [ "ivory", "silk", "blouse" ]
+        }
+      }, headers: auth_headers(@user)
     end
 
     assert_response :success
@@ -230,6 +248,33 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_predicate @clothing_item.cleaned_photo, :attached?
     assert_equal "succeeded", response_json["clean_image_status"]
     assert_equal response_json["cleaned_image_url"], response_json["image_url"]
+    assert_equal "Ivory Silk Blouse", captured.dig(:metadata_context, :name)
+    assert_equal "Maison North", captured.dig(:metadata_context, :brand)
+  end
+
+  test "can generate metadata suggestions for an existing clothing item photo" do
+    @clothing_item.photo.attach(item_photo_upload_png)
+    captured = {}
+
+    with_metadata_suggester_stub(capture: captured) do
+      post generate_metadata_suggestions_clothing_item_url(@clothing_item), params: {
+        ai_context: {
+          category: "blouse",
+          name: "Ivory Silk Blouse",
+          brand: "Maison North",
+          tags: [ "ivory", "silk", "blouse" ]
+        }
+      }, headers: auth_headers(@user)
+    end
+
+    assert_response :success
+    assert_equal "blouse", response_json["category"]
+    assert_equal "Ivory Silk Blouse", response_json["name"]
+    assert_equal "Maison North", response_json["brand"]
+    assert_equal [ "ivory", "silk", "blouse" ], response_json["tags"]
+    assert_equal "blouse", captured.dig(:metadata_context, :category)
+    assert_equal "Ivory Silk Blouse", captured.dig(:metadata_context, :name)
+    assert_equal "Maison North", captured.dig(:metadata_context, :brand)
   end
 
   test "can delete a clothing item" do
@@ -250,11 +295,42 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     Rack::Test::UploadedFile.new(file_fixture("item-photo.png"), "image/png")
   end
 
-  def with_image_cleaner_stub
+  def with_metadata_suggester_stub(capture: nil)
+    original = OpenrouterMetadataSuggester.method(:call)
+
+    OpenrouterMetadataSuggester.singleton_class.send(:define_method, :call) do |_source_photo, category_hint: nil, reference_photos: [], metadata_context: {}|
+      capture&.replace(
+        category_hint: category_hint,
+        reference_photos: reference_photos,
+        metadata_context: metadata_context
+      )
+
+      {
+        category: category_hint.presence || metadata_context[:category] || "blouse",
+        name: category_hint.present? ? "#{category_hint.to_s.titleize} Item" : "Ivory Silk Blouse",
+        brand: "Maison North",
+        tags: [ "ivory", "silk", "blouse" ],
+        provider: "openrouter",
+        vision_model: "openai/gpt-4.1-mini"
+      }
+    end
+
+    yield
+  ensure
+    OpenrouterMetadataSuggester.singleton_class.send(:define_method, :call, original)
+  end
+
+  def with_image_cleaner_stub(capture: nil)
     original = OpenrouterImageCleaner.method(:call)
     fixture_path = file_fixture("item-photo.png")
 
-    OpenrouterImageCleaner.singleton_class.send(:define_method, :call) do |_source_photo, prompt_context: {}|
+    OpenrouterImageCleaner.singleton_class.send(:define_method, :call) do |_source_photo, prompt_context: {}, reference_photos: [], metadata_context: {}|
+      capture&.replace(
+        prompt_context: prompt_context,
+        reference_photos: reference_photos,
+        metadata_context: metadata_context
+      )
+
       tempfile = Tempfile.new([ "cleaned-photo", ".png" ])
       tempfile.binmode
       tempfile.write(File.binread(fixture_path))

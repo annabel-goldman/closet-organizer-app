@@ -29,6 +29,19 @@ class ClothingItemTest < ActiveSupport::TestCase
     assert_nil item.brand
   end
 
+  test "normalizes category to lowercase" do
+    item = ClothingItem.new(
+      user: users(:one),
+      name: "Basic Tee",
+      size: :small,
+      category: "  Sweater  "
+    )
+
+    item.valid?
+
+    assert_equal "sweater", item.category
+  end
+
   test "normalizes tags into a clean list" do
     item = ClothingItem.new(
       user: users(:one),

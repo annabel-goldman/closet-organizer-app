@@ -1,6 +1,7 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
 one:
+  category: blouse
   name: Ivory Blouse
   size: medium
   tags:
@@ -12,6 +13,7 @@ one:
   user: one
 
 two:
+  category: jacket
   name: Denim Jacket
   size: large
   tags:
