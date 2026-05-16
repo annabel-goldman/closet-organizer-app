@@ -58,4 +58,11 @@ class ClothingItemTest < ActiveSupport::TestCase
 
     assert_equal [ "cos", "workwear" ], item.tags
   end
+
+  test "defaults size to na on create" do
+    item = ClothingItem.create!(user: users(:one), name: "Everyday Tee")
+
+    assert_equal "na", item.size
+    assert_nil item.date
+  end
 end

@@ -1,10 +1,12 @@
 import { RefObject } from "react";
+import { Upload } from "lucide-react";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 
 interface ItemPhotoFieldProps {
-  description: string;
+  description?: string;
   hasExistingPhoto?: boolean;
+  hidePickerTrigger?: boolean;
   inputRef: RefObject<HTMLInputElement | null>;
   isRemovingExisting?: boolean;
   onClearSelection: () => void;
@@ -17,6 +19,7 @@ interface ItemPhotoFieldProps {
 export function ItemPhotoField({
   description,
   hasExistingPhoto = false,
+  hidePickerTrigger = false,
   inputRef,
   isRemovingExisting = false,
   onClearSelection,
@@ -29,19 +32,30 @@ export function ItemPhotoField({
 
   return (
     <label className="space-y-2 sm:col-span-2">
-      <PrimitiveText as="span" variant="label">
-        Photo
-      </PrimitiveText>
       <input
         ref={inputRef}
         type="file"
         accept="image/*"
         onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
-        className="w-full border border-border bg-card px-4 py-3 file:mr-4 file:border-0 file:bg-transparent file:font-medium"
+        className="sr-only"
       />
-      <PrimitiveText as="p" variant="bodySm" tone="muted">
-        {description}
-      </PrimitiveText>
+      {hidePickerTrigger ? null : (
+        <PrimitiveButton
+          type="button"
+          variant="outline"
+          size="icon"
+          className="size-12"
+          onClick={() => inputRef.current?.click()}
+          aria-label="Upload photo"
+        >
+          <Upload className="w-5 h-5" />
+        </PrimitiveButton>
+      )}
+      {description ? (
+        <PrimitiveText as="p" variant="bodySm" tone="muted">
+          {description}
+        </PrimitiveText>
+      ) : null}
 
       {isShowingPhotoRow && (
         <div className="flex items-center justify-between gap-4 border border-border bg-card px-4 py-3">

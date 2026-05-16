@@ -4,6 +4,7 @@ class ClothingItem < ApplicationRecord
   has_many :outfits, through: :outfit_items
   has_one_attached :photo
   has_one_attached :cleaned_photo
+  before_validation :apply_defaults, on: :create
   before_validation :normalize_category
   before_validation :normalize_tags
   before_validation :normalize_brand
@@ -13,7 +14,8 @@ class ClothingItem < ApplicationRecord
     small: 1,
     medium: 2,
     large: 3,
-    xl: 4
+    xl: 4,
+    na: 5
   }
   enum :clean_image_status, {
     idle: 0,
@@ -57,6 +59,10 @@ class ClothingItem < ApplicationRecord
 
   def normalize_brand
     self.brand = brand.to_s.strip.presence
+  end
+
+  def apply_defaults
+    self.size = :na if size.blank?
   end
 
   def normalize_category

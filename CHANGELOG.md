@@ -23,6 +23,12 @@
 - Kicked off Milestone 2 with improved keyboard access and aria-label coverage for the item image preview experience.
 - Expanded image preview interaction options so preview controls are easier to discover and use without a mouse.
 
+## v1.0.12 - 2026-05-15
+
+- Added `erb_lint` gem and `.erb_lint.yml` config to lint ERB templates for safety, indentation, whitespace, and unused capture issues.
+- Added `bin/erblint` executable wrapper to run ERB linting locally.
+- Integrated ERB linting as a `Style: ERB templates` step in `bin/ci` and the GitHub Actions `lint` job.
+
 ## v1.0.11 - 2026-05-09
 
 - Split the frontend app shell into smaller route, filter, API, async-loading, and draft-persistence modules to make the main app flow easier to follow.
