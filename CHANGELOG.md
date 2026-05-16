@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- Added persisted clothing item categories and detection-source links so AI-detected item types survive into saved closet records.
+- Added AI metadata suggestion endpoints for clothing items, outfit detections, and temporary image previews, and passed richer metadata/reference-image context into AI clean-image generation.
+- Refined the add, edit, and detect-item flows with a shared editor workspace, category-aware metadata panels, richer detection previews, safer overwrite confirmation dialogs, compact AI action buttons, and footer/filter polish.
+- Hardened local startup checks so `start.sh` can surface missing Ruby/Node toolchains earlier and fall back to common local Ruby install paths more gracefully.
+
+## v2.0.2 - 2026-05-14
+
+- Reworked the add, edit, and detect-item flows into a more structured item editing workspace with clearer separation between metadata, photo management, and detection review.
+- Added richer detection review UI, including larger preview treatment, thumbnail strip navigation, and stronger crop inspection for image-based item creation.
+- Extended shared primitive controls and item form components to support the refreshed item workflow without falling back to new ad hoc button, dropdown, or typography styles.
+
+## v2.0.1 - 2026-05-10
+
+- Fixed accessible labels for closet filter controls so the closet search and filter bar reads more clearly for assistive technology.
+- Tightened the filter control semantics in the main app shell without changing the underlying closet filtering behavior.
+
+## v2.0.0 - 2026-05-10
+
+- Kicked off Milestone 2 with improved keyboard access and aria-label coverage for the item image preview experience.
+- Expanded image preview interaction options so preview controls are easier to discover and use without a mouse.
+
 ## v1.0.11 - 2026-05-09
 
 - Split the frontend app shell into smaller route, filter, API, async-loading, and draft-persistence modules to make the main app flow easier to follow.

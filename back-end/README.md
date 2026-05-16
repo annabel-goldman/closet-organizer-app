@@ -1,6 +1,6 @@
 # Digital Closet Organizer API
 
-Rails 8 JSON backend for the Closet Organizer Milestone 1 app.
+Rails 8 JSON backend for Closet Organizer.
 
 ## Stack
 
@@ -20,15 +20,9 @@ Rails 8 JSON backend for the Closet Organizer Milestone 1 app.
 - user-scoped clothing item CRUD
 - admin-only user directory access
 - saved outfit CRUD with owned-item validation
-- outfit photo upload, async analysis, and detection persistence
-- AI-assisted image cleanup for clothing items and verified detections
-- SPA fallback for browser HTML requests
-
-## Internal Structure Notes
-
-- `app/presenters/api_payloads.rb` centralizes JSON payload shaping for users, clothing items, outfits, uploads, and detections.
-- `app/services/managed_tempfiles.rb` tracks tempfiles created during crop and image-clean flows so cleanup happens in one place.
-- `app/services/prepared_image_source.rb` wraps attachment-like image inputs used by crop and AI-clean flows.
+- outfit photo upload, detection persistence, crop refinement, and review support
+- AI-assisted image cleanup and metadata suggestion flows for clothing items and outfit detections
+- HTML fallback routes for the SPA frontend
 
 ## Local Setup
 
@@ -48,7 +42,7 @@ To run the full monorepo together, use [start.sh](../start.sh) from the reposito
 
 ## Bundler And Deploys
 
-Heroku resolves gems from the repository root `Gemfile`, which in turn loads this backend `Gemfile`.
+Heroku resolves gems from the repository root `Gemfile`, which loads this backend `Gemfile`.
 
 If you add, remove, or change a gem here, update and commit both lockfiles:
 
@@ -78,6 +72,7 @@ GET     /clothing_items/:id
 PATCH   /clothing_items/:id
 DELETE  /clothing_items/:id
 POST    /clothing_items/:id/generate_clean_image
+POST    /clothing_items/:id/generate_metadata_suggestions
 GET     /outfits
 POST    /outfits
 GET     /outfits/:id
@@ -86,6 +81,8 @@ DELETE  /outfits/:id
 POST    /outfit_uploads
 GET     /outfit_uploads/:id
 POST    /outfit_detections/:id/generate_clean_image
+POST    /outfit_detections/:id/generate_metadata_suggestions
+POST    /image_variants/metadata_suggestions
 POST    /image_variants/preview
 ```
 
@@ -95,6 +92,27 @@ Notes:
 - `/` resolves to `clothing_items#index` inside the JSON scope.
 - HTML browser requests for SPA routes fall back to the frontend shell.
 - `ApplicationController` returns `404` JSON for missing records and `422` JSON for validation failures.
+
+## Important Internal Files
+
+- `app/presenters/api_payloads.rb`
+  Centralizes JSON payload shaping for users, clothing items, outfits, uploads, and detections
+- `app/controllers/clothing_items_controller.rb`
+  Handles clothing item CRUD, photo attachment and cropping, clean-image generation, and metadata suggestions
+- `app/controllers/outfit_detections_controller.rb`
+  Handles detection-based clean-image and metadata suggestion requests
+- `app/controllers/image_variants_controller.rb`
+  Handles temporary AI preview generation and metadata suggestions for uploaded but unsaved images
+- `app/services/openrouter_image_cleaner.rb`
+  Calls OpenRouter image generation for cleaned item imagery
+- `app/services/openrouter_metadata_suggester.rb`
+  Calls OpenRouter structured vision responses for item metadata suggestions
+- `app/services/outfit_upload_analyzer.rb`
+  Coordinates upload analysis, detection creation, and crop refinement workflow
+- `app/services/managed_tempfiles.rb`
+  Tracks tempfiles used during crop and AI image flows
+- `app/services/prepared_image_source.rb`
+  Normalizes attachment-like image sources used across crop and AI workflows
 
 ## Data Model
 
@@ -115,10 +133,14 @@ Notes:
 ### `ClothingItem`
 
 - `name`
+- `category`
+- `brand`
 - `size`
 - `date`
 - `tags`
 - `user_id`
+- `source_outfit_upload_id`
+- `source_outfit_detection_id`
 - `photo` via Active Storage
 - `cleaned_photo` via Active Storage
 - clean-image status metadata
@@ -130,6 +152,7 @@ Supported `size` enum values:
 - `medium`
 - `large`
 - `xl`
+- `na`
 
 ### `Outfit`
 
@@ -171,6 +194,17 @@ Supported `status` enum values:
 - `cleaned_photo` via Active Storage
 - crop-status and clean-image status metadata
 
+## Environment
+
+See [back-end/.env.example](./.env.example) for expected variables.
+
+- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` enable Google sign-in.
+- `OPENROUTER_API_KEY` is required for outfit detection, metadata suggestion, and image-cleaning features.
+- `OPENROUTER_MODEL` defaults to `openai/gpt-4.1-mini`.
+- `OPENROUTER_METADATA_MODEL` can override the metadata suggestion model independently.
+- `OUTFIT_CROP_CYCLE_LIMIT` controls refinement and verification retries.
+- Active Storage can be configured for S3-style storage through the provided AWS variables.
+
 ## Seeds
 
 `db/seeds.rb` currently creates:
@@ -201,24 +235,7 @@ bin/brakeman --no-pager
 bin/bundler-audit
 ```
 
-Current backend coverage includes model tests, integration tests for auth-sensitive flows, clothing items, outfits, uploads, and clean-image services.
-
-Recent cleanup work also keeps backend verification anchored on:
-
-- `bundle exec rails test`
-- `bundle exec rubocop`
-- presenter-backed payload rendering
-- shared tempfile/image-source handling for AI cleanup and crop flows
-
-## Environment
-
-See `back-end/.env.example` for expected variables.
-
-- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` enable Google sign-in.
-- `OPENROUTER_API_KEY` is required for outfit detection and image-cleaning features.
-- `OPENROUTER_MODEL` defaults to `openai/gpt-4.1-mini`.
-- `OUTFIT_CROP_CYCLE_LIMIT` controls refinement and verification retries.
-- Active Storage can be configured for S3-style storage through the provided AWS variables.
+Current backend coverage includes model tests plus integration coverage for auth-sensitive flows, clothing items, outfits, image variants, uploads, and clean-image services.
 
 ## Frontend Integration
 
