@@ -1,24 +1,26 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { motion } from "motion/react";
-import { ArrowLeft, Save, Trash2 } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, Save, Trash2, Upload } from "lucide-react";
 import {
+  buildItemPreviewMetadata,
   createCleanPreviewFile,
   ClothingItem,
   ClothingItemFormValues,
   destroyClothingItem,
   fetchClothingItem,
-  formatDisplaySize,
-  formatTagLabel,
   generateClothingItemCleanImage,
+  generateClothingItemMetadataSuggestions,
+  mergeMetadataSuggestion,
   parseTagInput,
+  previewMetadataSuggestions,
   saveClothingItem,
   toClothingItemFormValues,
 } from "../lib/closet";
 import { usePageData } from "../lib/usePageData";
 import { AiCleanImageButton } from "./AiCleanImageButton";
-import { ItemHeroPreview } from "./ItemHeroPreview";
+import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
+import { ItemEditorWorkspace } from "./ItemEditorWorkspace";
 import { ItemMetadataFields } from "./ItemMetadataFields";
-import { ItemPhotoField } from "./ItemPhotoField";
+import { ItemMetadataPanel } from "./ItemMetadataPanel";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { useItemPhotoState } from "../lib/useItemPhotoState";
@@ -40,12 +42,14 @@ export function ItemDetailPage({
 }: ItemDetailPageProps) {
   const shouldUseInitialItem = Boolean(initialItem?.id === itemId);
   const photoState = useItemPhotoState(initialItem?.image_url);
+  const originalUploadedPhotoRef = useRef<File | null>(null);
   const [formValues, setFormValues] = useState<ClothingItemFormValues | null>(
     shouldUseInitialItem && initialItem ? toClothingItemFormValues(initialItem) : null,
   );
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCleaningImage, setIsCleaningImage] = useState(false);
+  const [isAutofillingMetadata, setIsAutofillingMetadata] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const {
     data: item,
@@ -65,11 +69,13 @@ export function ItemDetailPage({
   useEffect(() => {
     if (!item) {
       setFormValues(null);
+      originalUploadedPhotoRef.current = null;
       return;
     }
 
     setFormValues(toClothingItemFormValues(item));
     photoState.reset();
+    originalUploadedPhotoRef.current = null;
   }, [item]);
 
   const isDirty = useMemo(() => {
@@ -84,7 +90,28 @@ export function ItemDetailPage({
   }, [formValues, item, photoState.removeExisting, photoState.selectedFile]);
 
   const previewName = formValues?.name.trim() || item?.name?.trim() || "Untitled Item";
-  const previewTags = formValues ? parseTagInput(formValues.tags).slice(0, 2) : [];
+  const previewMetadata = formValues
+    ? buildItemPreviewMetadata(formValues.size, parseTagInput(formValues.tags))
+    : "";
+
+  function handleEditImageFileChange(file: File | null) {
+    if (file) {
+      originalUploadedPhotoRef.current = file;
+      photoState.updateSelectedFile(file);
+    }
+  }
+
+  function handlePreviewClear() {
+    if (photoState.selectedFile) {
+      originalUploadedPhotoRef.current = null;
+      photoState.clearSelectedFile();
+      return;
+    }
+
+    if (item.image_url && !photoState.removeExisting) {
+      photoState.markExistingForRemoval();
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -144,11 +171,14 @@ export function ItemDetailPage({
 
     try {
       if (photoState.selectedFile) {
-        const cleanedFile = await createCleanPreviewFile(photoState.selectedFile);
+        const cleanedFile = await createCleanPreviewFile(photoState.selectedFile, {
+          metadata: formValues,
+          originalSourcePhoto: originalUploadedPhotoRef.current,
+        });
         photoState.updateSelectedFile(cleanedFile);
         setSuccessMessage("AI-cleaned preview ready. Save changes to keep it.");
       } else {
-        const updatedItem = await generateClothingItemCleanImage(item.id);
+        const updatedItem = await generateClothingItemCleanImage(item.id, formValues);
         setItem(updatedItem);
         setSuccessMessage("AI-cleaned image saved to this item.");
         onItemSaved(updatedItem);
@@ -159,6 +189,33 @@ export function ItemDetailPage({
       );
     } finally {
       setIsCleaningImage(false);
+    }
+  }
+
+  async function handleAutofillMetadata() {
+    if (!item || !formValues) {
+      return;
+    }
+
+    setIsAutofillingMetadata(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const suggestion = photoState.selectedFile
+        ? await previewMetadataSuggestions(photoState.selectedFile, undefined, {
+            metadata: formValues,
+            originalSourcePhoto: originalUploadedPhotoRef.current,
+          })
+        : await generateClothingItemMetadataSuggestions(item.id, formValues);
+
+      setFormValues((current) => (current ? mergeMetadataSuggestion(current, suggestion) : current));
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Unable to autofill this item's metadata.",
+      );
+    } finally {
+      setIsAutofillingMetadata(false);
     }
   }
 
@@ -201,118 +258,105 @@ export function ItemDetailPage({
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-12">
-      <PrimitiveButton
-        onClick={onBack}
-        variant="ghost"
-        className="mb-8 h-auto px-0 py-0 text-muted-foreground"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to closet
-      </PrimitiveButton>
-
-      <div className="grid gap-10 lg:grid-cols-[1.1fr_1fr] items-start">
-        <ItemHeroPreview
-          allowExpand
-          imageUrl={photoState.imageUrl}
-          label="Clothing Item"
-          primaryDetail={formatDisplaySize(formValues.size)}
-          secondaryDetail={previewTags.length > 0 ? previewTags.map(formatTagLabel).join(" · ") : null}
-          title={previewName}
-        />
-
-        <motion.form
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.06 }}
-          onSubmit={handleSubmit}
-          className="space-y-6"
+    <ItemEditorWorkspace
+      backLabel="Back to closet"
+      formLabel="Edit Item"
+      formTopAction={
+        <PrimitiveButton
+          type="button"
+          onClick={() => void handleDelete()}
+          disabled={isDeleting}
+          variant="outline"
+          className="border-destructive/30 text-destructive hover:bg-destructive/5"
         >
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
-                Item Details
-              </PrimitiveText>
-              <PrimitiveText as="h2" variant="title" font="serif" className="mb-1">
-                Edit Item
-              </PrimitiveText>
-              <PrimitiveText as="p" tone="muted">
-                Update item details and save your changes.
-              </PrimitiveText>
-            </div>
+          <Trash2 className="w-4 h-4" />
+          {isDeleting ? "Deleting..." : "Delete"}
+        </PrimitiveButton>
+      }
+      imageUrl={photoState.imageUrl}
+      onBack={onBack}
+      onPreviewClick={() => photoState.inputRef.current?.click()}
+      onPreviewClear={handlePreviewClear}
+      onPreviewEdit={() => photoState.inputRef.current?.click()}
+      onSubmit={handleSubmit}
+      previewAriaLabel={photoState.imageUrl ? "Preview image" : "Upload photo"}
+      previewBackgroundDecoration={
+        <Upload
+          className="h-40 w-40 text-stone-700/18 sm:h-52 sm:w-52"
+          strokeWidth={1.1}
+        />
+      }
+      previewTopAction={
+        <AiCleanImageButton
+          className="size-11 border border-white/75 shadow-sm bg-white/70 p-0 backdrop-blur-sm hover:bg-white/85"
+          disabled={photoState.removeExisting || (!photoState.selectedFile && !item.image_url)}
+          iconOnly
+          isLoading={isCleaningImage}
+          label="AI clean PNG"
+          onClick={() => void handleCleanImage()}
+        />
+      }
+      previewLabel="Clothing Item"
+      previewPrimaryDetail={previewMetadata}
+      previewTitle={previewName}
+      footer={
+        <div className="mt-auto pt-2 flex items-center justify-between gap-4">
+          <PrimitiveText as="div" variant="bodySm" tone="muted">
+            {isDirty ? "Unsaved changes" : "All changes saved"}
+          </PrimitiveText>
 
-            <PrimitiveButton
-              type="button"
-              onClick={() => void handleDelete()}
-              disabled={isDeleting}
-              variant="outline"
-              className="border-destructive/30 text-destructive hover:bg-destructive/5"
-            >
-              <Trash2 className="w-4 h-4" />
-              {isDeleting ? "Deleting..." : "Delete"}
-            </PrimitiveButton>
-          </div>
+          <PrimitiveButton
+            type="submit"
+            disabled={isSaving || !isDirty}
+            className="h-auto bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
+          >
+            <Save className="w-4 h-4" />
+            {isSaving ? "Saving..." : "Save Changes"}
+          </PrimitiveButton>
+        </div>
+      }
+    >
+      <input
+        ref={photoState.inputRef}
+        type="file"
+        accept="image/*"
+        onChange={(event) => handleEditImageFileChange(event.target.files?.[0] ?? null)}
+        className="sr-only"
+      />
 
-          {errorMessage && (
-            <div className="border border-destructive/20 bg-destructive/5 p-4 text-sm" role="alert" aria-live="assertive">
-              {errorMessage}
-            </div>
-          )}
+      {errorMessage && (
+        <div className="border border-destructive/20 bg-destructive/5 p-4 text-sm" role="alert" aria-live="assertive">
+          {errorMessage}
+        </div>
+      )}
 
-          {successMessage && (
-            <div className="border border-emerald-300/40 bg-emerald-50 p-4 text-sm text-emerald-900" role="status" aria-live="polite">
-              {successMessage}
-            </div>
-          )}
+      {successMessage && (
+        <div className="border border-emerald-300/40 bg-emerald-50 p-4 text-sm text-emerald-900" role="status" aria-live="polite">
+          {successMessage}
+        </div>
+      )}
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-4 sm:col-span-2">
-              <ItemPhotoField
-                description="Upload a photo to display behind the item title throughout the closet."
-                hasExistingPhoto={Boolean(item.image_url)}
-                inputRef={photoState.inputRef}
-                isRemovingExisting={photoState.removeExisting}
-                onClearSelection={photoState.clearSelectedFile}
-                onFileChange={photoState.updateSelectedFile}
-                onKeepExisting={photoState.keepExistingPhoto}
-                onRemoveExisting={photoState.markExistingForRemoval}
-                selectedFileName={photoState.selectedFile?.name}
-              />
-
-              <div className="flex flex-wrap items-center justify-between gap-4 border border-border bg-card px-4 py-3">
-                <PrimitiveText as="p" variant="bodySm" tone="muted">
-                  {photoState.selectedFile
-                    ? "Run the AI cleaner on the newly selected image before saving."
-                    : item.image_url
-                      ? "Generate a cleaner catalog-style PNG from the current saved image."
-                      : "Upload a photo first to use the AI cleaner."}
-                </PrimitiveText>
-                <AiCleanImageButton
-                  disabled={photoState.removeExisting || (!photoState.selectedFile && !item.image_url)}
-                  isLoading={isCleaningImage}
-                  onClick={() => void handleCleanImage()}
-                />
-              </div>
-            </div>
-            <ItemMetadataFields values={formValues} onChange={setFormValues} />
-          </div>
-
-          <div className="border-t border-border pt-5 flex items-center justify-between gap-4">
-            <PrimitiveText as="div" variant="bodySm" tone="muted">
-              {isDirty ? "Unsaved changes" : "All changes saved"}
-            </PrimitiveText>
-
-            <PrimitiveButton
-              type="submit"
-              disabled={isSaving || !isDirty}
-              className="h-auto bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
-            >
-              <Save className="w-4 h-4" />
-              {isSaving ? "Saving..." : "Save Changes"}
-            </PrimitiveButton>
-          </div>
-        </motion.form>
-      </div>
-    </div>
+      <ItemMetadataPanel
+        action={
+          <AiMetadataAutofillButton
+            className="mt-0.5 h-9 w-9 shrink-0 self-start"
+            disabled={photoState.removeExisting || (!photoState.selectedFile && !item.image_url)}
+            isLoading={isAutofillingMetadata}
+            label="AI autofill type, name, brand, and tags"
+            onClick={() => void handleAutofillMetadata()}
+          />
+        }
+        category={formValues.category}
+        title={previewName}
+      >
+        <div className="grid gap-5 sm:grid-cols-2">
+          <ItemMetadataFields
+            onChange={setFormValues}
+            showAutofillButton={false}
+            values={formValues}
+          />
+        </div>
+      </ItemMetadataPanel>
+    </ItemEditorWorkspace>
   );
 }

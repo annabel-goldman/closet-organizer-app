@@ -1,0 +1,101 @@
+import { FormEvent, ReactNode } from "react";
+import { motion } from "motion/react";
+import { ArrowLeft } from "lucide-react";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
+import { PrimitiveText } from "./primitives/PrimitiveText";
+import { UploadWorkspace } from "./UploadWorkspace";
+
+interface ItemEditorWorkspaceProps {
+  backLabel?: string;
+  children: ReactNode;
+  footer: ReactNode;
+  formLabel: string;
+  formTopAction?: ReactNode;
+  imageUrl?: string | null;
+  onBack: () => void;
+  onPreviewClear?: () => void;
+  onPreviewClick?: () => void;
+  onPreviewEdit?: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  previewAriaLabel?: string;
+  previewBackgroundDecoration?: ReactNode;
+  previewLabel: string;
+  previewPrimaryDetail: string;
+  previewSecondaryDetail?: string | null;
+  previewTitle: string;
+  previewTopAction?: ReactNode;
+}
+
+export function ItemEditorWorkspace({
+  backLabel = "Back",
+  children,
+  footer,
+  formLabel,
+  formTopAction,
+  imageUrl,
+  onBack,
+  onPreviewClear,
+  onPreviewClick,
+  onPreviewEdit,
+  onSubmit,
+  previewAriaLabel,
+  previewBackgroundDecoration,
+  previewLabel,
+  previewPrimaryDetail,
+  previewSecondaryDetail,
+  previewTitle,
+  previewTopAction,
+}: ItemEditorWorkspaceProps) {
+  return (
+    <div className="max-w-7xl mx-auto px-6 py-12">
+      <div className="mb-8 flex items-center justify-between gap-4">
+        <PrimitiveButton
+          onClick={onBack}
+          variant="outline"
+          className="h-auto px-5 py-3"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          {backLabel}
+        </PrimitiveButton>
+
+        {formTopAction ? (
+          <div className="flex items-center justify-end gap-4">
+            <PrimitiveText as="p" variant="overline" tone="muted">
+              {formLabel}
+            </PrimitiveText>
+            {formTopAction}
+          </div>
+        ) : (
+          <PrimitiveText as="p" variant="overline" tone="muted">
+            {formLabel}
+          </PrimitiveText>
+        )}
+      </div>
+
+      <motion.form
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45 }}
+        onSubmit={onSubmit}
+        className="space-y-6"
+      >
+        <UploadWorkspace
+          imageUrl={imageUrl}
+          onPreviewClick={onPreviewClick}
+          onPreviewClear={onPreviewClear}
+          onPreviewEdit={onPreviewEdit}
+          previewAriaLabel={previewAriaLabel}
+          previewBackgroundDecoration={previewBackgroundDecoration}
+          previewTopAction={previewTopAction}
+          previewLabel={previewLabel}
+          previewPrimaryDetail={previewPrimaryDetail}
+          previewSecondaryDetail={previewSecondaryDetail}
+          previewTitle={previewTitle}
+        >
+          {children}
+          {footer}
+        </UploadWorkspace>
+      </motion.form>
+    </div>
+  );
+}

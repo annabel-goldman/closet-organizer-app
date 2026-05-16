@@ -37,6 +37,7 @@ export interface UserSummary {
 export interface ClothingItem {
   id: number;
   name: string;
+  category?: string | null;
   brand?: string | null;
   size: string;
   date: string | null;
@@ -128,6 +129,7 @@ export interface Outfit {
 export type CreateItemMode = "manual" | "image";
 
 export interface ClothingItemFormValues {
+  category: string;
   name: string;
   brand: string;
   size: string;
@@ -150,6 +152,20 @@ export interface TemporaryCleanImageResult {
   content_type: string;
   data_url: string;
   filename: string;
+}
+
+export interface ClothingItemMetadataSuggestion {
+  category: string;
+  name: string;
+  brand: string;
+  tags: string[];
+  provider?: string | null;
+  vision_model?: string | null;
+}
+
+interface AiImageOptions {
+  metadata?: ClothingItemFormValues;
+  originalSourcePhoto?: File | null;
 }
 
 export interface OutfitDraft {
@@ -243,6 +259,7 @@ export function saveOutfitDraftItemIds(userId: number, itemIds: number[]) {
 
 export function emptyClothingItemFormValues(): ClothingItemFormValues {
   return {
+    category: "",
     name: "",
     brand: "",
     size: "medium",
@@ -300,6 +317,26 @@ export function formatDisplaySize(size: string) {
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
+export function buildItemPreviewMetadata(size: string, tags: string[]) {
+  const visibleTags = tags.slice(0, 3);
+  return [formatDisplaySize(size), ...visibleTags.slice(1).map(formatTagLabel)]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+export function mergeMetadataSuggestion(
+  values: ClothingItemFormValues,
+  suggestion: ClothingItemMetadataSuggestion,
+) {
+  return {
+    ...values,
+    category: normalizeCategoryValue(suggestion.category) || values.category,
+    name: suggestion.name.trim() || values.name,
+    brand: suggestion.brand.trim() || values.brand,
+    tags: suggestion.tags.length > 0 ? formatTagInput(suggestion.tags) : values.tags,
+  };
+}
+
 export function buildPlaceholderLabel(name: string) {
   return name
     .split(" ")
@@ -314,6 +351,7 @@ export function toDateInputValue(value: string | null | undefined) {
 
 export function toClothingItemFormValues(item: ClothingItem): ClothingItemFormValues {
   return {
+    category: normalizeCategoryValue(item.category) || "",
     name: item.name,
     brand: item.brand?.trim() ?? "",
     size: item.size,
@@ -326,6 +364,7 @@ export function toClothingItemFormValuesFromDetection(
   detection: OutfitDetection,
 ): ClothingItemFormValues {
   return {
+    category: normalizeCategoryValue(detection.category) || "",
     name: detection.suggested_name?.trim() || titleize(detection.category),
     brand: "",
     size: "medium",
@@ -487,21 +526,91 @@ export async function destroyClothingItem(id: number) {
   });
 }
 
-export async function generateClothingItemCleanImage(id: number) {
+export async function generateClothingItemCleanImage(
+  id: number,
+  metadata?: ClothingItemFormValues,
+) {
   return requestJson<ClothingItem>(`${API_BASE_URL}/clothing_items/${id}/generate_clean_image`, {
     method: "POST",
+    body: buildAiContextFormData(metadata),
   });
 }
 
-export async function generateOutfitDetectionCleanImage(id: number) {
+export async function generateOutfitDetectionCleanImage(
+  id: number,
+  metadata?: ClothingItemFormValues,
+) {
   return requestJson<OutfitDetection>(`${API_BASE_URL}/outfit_detections/${id}/generate_clean_image`, {
     method: "POST",
+    body: buildAiContextFormData(metadata),
   });
 }
 
-export async function previewCleanImage(photo: File) {
+export async function generateClothingItemMetadataSuggestions(
+  id: number,
+  metadata?: ClothingItemFormValues,
+) {
+  return normalizeMetadataSuggestionPayload(
+    await requestJson<ClothingItemMetadataSuggestion>(
+      `${API_BASE_URL}/clothing_items/${id}/generate_metadata_suggestions`,
+      {
+        method: "POST",
+        body: buildAiContextFormData(metadata),
+      },
+    ),
+  );
+}
+
+export async function generateOutfitDetectionMetadataSuggestions(
+  id: number,
+  metadata?: ClothingItemFormValues,
+) {
+  return normalizeMetadataSuggestionPayload(
+    await requestJson<ClothingItemMetadataSuggestion>(
+      `${API_BASE_URL}/outfit_detections/${id}/generate_metadata_suggestions`,
+      {
+        method: "POST",
+        body: buildAiContextFormData(metadata),
+      },
+    ),
+  );
+}
+
+export async function previewMetadataSuggestions(
+  photo: File,
+  categoryHint?: string,
+  options: AiImageOptions = {},
+) {
   const formData = new FormData();
   formData.append("image_variant[source_photo]", photo);
+
+  if (categoryHint?.trim()) {
+    formData.append("image_variant[category_hint]", categoryHint.trim());
+  }
+
+  appendAiContextFormData(formData, options.metadata);
+
+  if (options.originalSourcePhoto && options.originalSourcePhoto !== photo) {
+    formData.append("image_variant[original_source_photo]", options.originalSourcePhoto);
+  }
+
+  return normalizeMetadataSuggestionPayload(
+    await requestJson<ClothingItemMetadataSuggestion>(`${API_BASE_URL}/image_variants/metadata_suggestions`, {
+      method: "POST",
+      body: formData,
+    }),
+  );
+}
+
+export async function previewCleanImage(photo: File, options: AiImageOptions = {}) {
+  const formData = new FormData();
+  formData.append("image_variant[source_photo]", photo);
+
+  appendAiContextFormData(formData, options.metadata);
+
+  if (options.originalSourcePhoto && options.originalSourcePhoto !== photo) {
+    formData.append("image_variant[original_source_photo]", options.originalSourcePhoto);
+  }
 
   return requestJson<TemporaryCleanImageResult>(`${API_BASE_URL}/image_variants/preview`, {
     method: "POST",
@@ -509,8 +618,8 @@ export async function previewCleanImage(photo: File) {
   });
 }
 
-export async function createCleanPreviewFile(photo: File) {
-  const preview = await previewCleanImage(photo);
+export async function createCleanPreviewFile(photo: File, options: AiImageOptions = {}) {
+  const preview = await previewCleanImage(photo, options);
   return fileFromDataUrl(preview.data_url, preview.filename, preview.content_type);
 }
 
@@ -536,11 +645,28 @@ function normalizeTagList(rawTags: unknown): string[] {
   return [];
 }
 
+function normalizeCategoryValue(rawCategory: unknown) {
+  return typeof rawCategory === "string" ? rawCategory.trim().toLowerCase() : "";
+}
+
 function normalizeClothingItemPayload(item: ClothingItem): ClothingItem {
   return {
     ...item,
+    category: normalizeCategoryValue(item.category) || null,
     brand: item.brand?.trim() ? item.brand.trim() : null,
     tags: normalizeTagList((item as ClothingItem & { tags?: unknown }).tags),
+  };
+}
+
+function normalizeMetadataSuggestionPayload(
+  suggestion: ClothingItemMetadataSuggestion,
+): ClothingItemMetadataSuggestion {
+  return {
+    ...suggestion,
+    category: normalizeCategoryValue(suggestion.category),
+    name: suggestion.name?.trim?.() || "",
+    brand: suggestion.brand?.trim?.() || "",
+    tags: normalizeTagList((suggestion as ClothingItemMetadataSuggestion & { tags?: unknown }).tags),
   };
 }
 
@@ -551,6 +677,30 @@ function normalizeUserPayload(user: User): User {
   };
 }
 
+function buildAiContextFormData(metadata?: ClothingItemFormValues) {
+  const formData = new FormData();
+  appendAiContextFormData(formData, metadata);
+  return formData;
+}
+
+function appendAiContextFormData(formData: FormData, metadata?: ClothingItemFormValues) {
+  if (!metadata) {
+    return formData;
+  }
+
+  formData.append("ai_context[name]", metadata.name);
+  formData.append("ai_context[category]", metadata.category.trim().toLowerCase());
+  formData.append("ai_context[brand]", metadata.brand.trim());
+  formData.append("ai_context[size]", metadata.size);
+  formData.append("ai_context[date]", metadata.date);
+
+  parseTagInput(metadata.tags).forEach((tag) => {
+    formData.append("ai_context[tags][]", tag);
+  });
+
+  return formData;
+}
+
 function buildClothingItemFormData(
   userId: number,
   values: ClothingItemFormValues,
@@ -559,6 +709,7 @@ function buildClothingItemFormData(
   const formData = new FormData();
 
   formData.append("clothing_item[name]", values.name);
+  formData.append("clothing_item[category]", values.category.trim().toLowerCase());
   formData.append("clothing_item[user_id]", String(userId));
   formData.append("clothing_item[size]", values.size);
   formData.append("clothing_item[date]", values.date);
