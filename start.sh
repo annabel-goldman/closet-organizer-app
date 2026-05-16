@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$ROOT_DIR/back-end"
 FRONTEND_DIR="$ROOT_DIR/front-end"
+EXPECTED_RUBY_VERSION="$(<"$ROOT_DIR/.ruby-version")"
 
 print_usage() {
   cat <<'EOF'
@@ -27,6 +28,75 @@ EOF
 is_valid_port() {
   local port="$1"
   [[ "$port" =~ ^[0-9]+$ ]] && ((port >= 1 && port <= 65535))
+}
+
+prepend_path_dir() {
+  local dir="$1"
+
+  [[ -d "$dir" ]] || return 0
+
+  case ":$PATH:" in
+    *":$dir:"*) ;;
+    *) PATH="$dir:$PATH" ;;
+  esac
+}
+
+bootstrap_local_path() {
+  prepend_path_dir /usr/local/sbin
+  prepend_path_dir /usr/local/bin
+  prepend_path_dir /usr/local/opt/ruby/bin
+  prepend_path_dir /opt/homebrew/sbin
+  prepend_path_dir /opt/homebrew/bin
+  prepend_path_dir /opt/homebrew/opt/ruby/bin
+
+  export PATH
+  hash -r
+}
+
+bundler_v2_available() {
+  ruby -rbundler -e 'exit Bundler::VERSION.split(".").first.to_i >= 2 ? 0 : 1' >/dev/null 2>&1
+}
+
+find_compatible_ruby_bin_dir() {
+  local candidate
+
+  for candidate in "${RUBY_BIN_DIR:-}" /opt/homebrew/opt/ruby/bin /usr/local/opt/ruby/bin; do
+    [[ -n "$candidate" ]] || continue
+    [[ -x "$candidate/ruby" && -x "$candidate/bundle" ]] || continue
+
+    if PATH="$candidate:$PATH" "$candidate/ruby" -rbundler -e 'exit Bundler::VERSION.split(".").first.to_i >= 2 ? 0 : 1' >/dev/null 2>&1; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+ensure_supported_ruby_toolchain() {
+  local candidate
+
+  if bundler_v2_available; then
+    return 0
+  fi
+
+  candidate="$(find_compatible_ruby_bin_dir || true)"
+  if [[ -n "$candidate" ]]; then
+    export PATH="$candidate:$PATH"
+    hash -r
+    echo "Using Ruby toolchain from ${candidate}"
+    return 0
+  fi
+
+  echo "This project needs Bundler 2+ and expects Ruby ${EXPECTED_RUBY_VERSION}." >&2
+  echo "Current ruby:   $(command -v ruby 2>/dev/null || echo 'not found')" >&2
+  echo "Current bundle: $(command -v bundle 2>/dev/null || echo 'not found')" >&2
+  echo "Activate a newer Ruby before running start.sh, or set RUBY_BIN_DIR to a bin directory that has ruby and bundle." >&2
+  exit 1
+}
+
+node_version_supported() {
+  node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit((major === 20 && minor >= 19) || major >= 22 ? 0 : 1)' >/dev/null 2>&1
 }
 
 load_env_file() {
@@ -217,6 +287,26 @@ fi
 
 if [[ ! -f "$FRONTEND_DIR/package.json" ]]; then
   echo "Missing frontend package.json at $FRONTEND_DIR/package.json" >&2
+  exit 1
+fi
+
+bootstrap_local_path
+ensure_supported_ruby_toolchain
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "npm was not found on PATH after bootstrapping common local install locations." >&2
+  echo "Current PATH: $PATH" >&2
+  echo "Install Node.js or update PATH before running start.sh." >&2
+  exit 1
+fi
+
+if ! command -v node >/dev/null 2>&1 || ! node_version_supported; then
+  echo "This project needs Node.js 20.19+ or 22.12+ for Vite." >&2
+  echo "Current node: $(command -v node 2>/dev/null || echo 'not found')" >&2
+  if command -v node >/dev/null 2>&1; then
+    echo "Current version: $(node -v)" >&2
+  fi
+  echo "Activate or install a newer Node.js before running start.sh." >&2
   exit 1
 fi
 
