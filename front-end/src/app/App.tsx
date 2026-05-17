@@ -1,6 +1,6 @@
 import { Dispatch, SetStateAction, useDeferredValue, useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Search, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Search, Users } from "lucide-react";
 import { AddItemMenu } from "./components/AddItemMenu";
 import { ClothingCard } from "./components/ClothingCard";
 import { CreateItemPage } from "./components/CreateItemPage";
@@ -147,22 +147,6 @@ function ClosetFilterMenu({
           ))}
         </PrimitiveDropdownMenuContent>
       </PrimitiveDropdownMenu>
-      {hasSelections ? (
-        <PrimitiveButton
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="absolute top-1/2 right-7 z-10 size-7 -translate-y-1/2 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={(event) => {
-            event.stopPropagation();
-            onClear();
-          }}
-          aria-label={`Clear ${label.toLowerCase()} filters`}
-          title={`Clear ${label.toLowerCase()} filters`}
-        >
-          <X className="size-4" />
-        </PrimitiveButton>
-      ) : null}
     </div>
   );
 }
@@ -803,7 +787,7 @@ export default function App() {
         </motion.div>
       ) : null}
 
-      <footer className="border-t border-border">
+      <footer className="mt-12 border-t border-border">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-6 py-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <PrimitiveText as="p" variant="bodySm">
             Curating closets and serving looks, one hanger at a time.

@@ -22,24 +22,38 @@ export function AiCleanImageButton({
   const buttonLabel = isLoading ? "Cleaning..." : label;
   const isDisabled = disabled || isLoading;
 
+  if (iconOnly) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={`inline-flex ${isDisabled ? "cursor-default" : "cursor-pointer"}`}>
+            <PrimitiveButton
+              type="button"
+              onClick={onClick}
+              disabled={isDisabled}
+              variant="outline"
+              className={className}
+              aria-label={buttonLabel}
+            >
+              <Sparkles className="w-4 h-4" />
+            </PrimitiveButton>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent sideOffset={8}>{buttonLabel}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className={`inline-flex ${isDisabled ? "cursor-default" : "cursor-pointer"}`}>
-          <PrimitiveButton
-            type="button"
-            onClick={onClick}
-            disabled={isDisabled}
-            variant="outline"
-            className={className}
-            aria-label={buttonLabel}
-          >
-            <Sparkles className="w-4 h-4" />
-            {iconOnly ? null : buttonLabel}
-          </PrimitiveButton>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent sideOffset={8}>{label}</TooltipContent>
-    </Tooltip>
+    <PrimitiveButton
+      type="button"
+      onClick={onClick}
+      disabled={isDisabled}
+      variant="outline"
+      className={className}
+    >
+      <Sparkles className="w-4 h-4" />
+      {buttonLabel}
+    </PrimitiveButton>
   );
 }

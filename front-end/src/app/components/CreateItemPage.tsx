@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Plus, Upload } from "lucide-react";
 import {
+  buildItemPreviewMetadata,
   ClothingItem,
   ClothingItemFormValues,
   createClothingItem,
@@ -10,20 +11,26 @@ import {
   emptyClothingItemFormValues,
   fetchOutfitUpload,
   fetchUser,
-  formatDisplaySize,
   generateOutfitDetectionCleanImage,
+  generateOutfitDetectionMetadataSuggestions,
+  mergeMetadataSuggestion,
   OutfitDetection,
   OutfitUpload,
-  titleize,
+  parseTagInput,
+  preferredDetectionBox,
+  previewMetadataSuggestions,
   toClothingItemFormValuesFromDetection,
   User,
 } from "../lib/closet";
 import { usePageData } from "../lib/usePageData";
 import { AiCleanImageButton } from "./AiCleanImageButton";
+import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import { CreateItemImageMode } from "./create-item/CreateItemImageMode";
 import { ItemEditorWorkspace } from "./ItemEditorWorkspace";
 import { ItemMetadataFields } from "./ItemMetadataFields";
+import { ItemMetadataPanel } from "./ItemMetadataPanel";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
+import { PrimitiveConfirmationDialog } from "./primitives/PrimitiveConfirmationDialog";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { useItemPhotoState } from "../lib/useItemPhotoState";
 
@@ -43,11 +50,18 @@ export function CreateItemPage({
   onItemsCreated,
 }: CreateItemPageProps) {
   const detectionPollControllerRef = useRef<AbortController | null>(null);
+  const detectionMetadataRunRef = useRef(0);
+  const originalUploadedPhotoRef = useRef<File | null>(null);
   const [formValues, setFormValues] = useState(emptyClothingItemFormValues);
   const [isCreating, setIsCreating] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [isCleaningUploadedPhoto, setIsCleaningUploadedPhoto] = useState(false);
+  const [isAutofillingMetadata, setIsAutofillingMetadata] = useState(false);
+  const [autofillingDetectionId, setAutofillingDetectionId] = useState<number | null>(null);
+  const [isPreparingDetectedMetadata, setIsPreparingDetectedMetadata] = useState(false);
+  const [isReplaceImageWarningOpen, setIsReplaceImageWarningOpen] = useState(false);
   const [outfitUpload, setOutfitUpload] = useState<OutfitUpload | null>(null);
+  const [pendingReplacementFile, setPendingReplacementFile] = useState<File | null>(null);
   const [selectedDetectionIds, setSelectedDetectionIds] = useState<number[]>([]);
   const [cleaningDetectionIds, setCleaningDetectionIds] = useState<number[]>([]);
   const [detectionCleanErrors, setDetectionCleanErrors] = useState<Record<number, string>>({});
@@ -85,11 +99,42 @@ export function CreateItemPage({
   }, []);
 
   function resetDetectionState() {
+    detectionMetadataRunRef.current += 1;
     setOutfitUpload(null);
     setSelectedDetectionIds([]);
     setCleaningDetectionIds([]);
     setDetectionCleanErrors({});
     setEditedDetections({});
+    setAutofillingDetectionId(null);
+    setIsPreparingDetectedMetadata(false);
+  }
+
+  function applyImageFileSelection(file: File) {
+    detectionPollControllerRef.current?.abort();
+    originalUploadedPhotoRef.current = file;
+    photoState.updateSelectedFile(file);
+    resetDetectionState();
+    setErrorMessage("");
+  }
+
+  function closeReplaceImageWarning(open: boolean) {
+    setIsReplaceImageWarningOpen(open);
+
+    if (!open) {
+      setPendingReplacementFile(null);
+      if (photoState.inputRef.current) {
+        photoState.inputRef.current.value = "";
+      }
+    }
+  }
+
+  function confirmReplaceImage() {
+    if (pendingReplacementFile) {
+      applyImageFileSelection(pendingReplacementFile);
+    }
+
+    setPendingReplacementFile(null);
+    setIsReplaceImageWarningOpen(false);
   }
 
   async function waitForOutfitUpload(uploadId: number, signal: AbortSignal) {
@@ -143,9 +188,13 @@ export function CreateItemPage({
 
         if (completedUpload.status === "failed" && completedUpload.error_message) {
           setErrorMessage(completedUpload.error_message);
+        } else if (completedUpload.status === "succeeded") {
+          await autofillDetectedMetadata(completedUpload.detections);
         }
       } else if (nextUpload.status === "failed" && nextUpload.error_message) {
         setErrorMessage(nextUpload.error_message);
+      } else if (nextUpload.status === "succeeded") {
+        await autofillDetectedMetadata(nextUpload.detections);
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -164,14 +213,20 @@ export function CreateItemPage({
       return;
     }
 
-    detectionPollControllerRef.current?.abort();
-    photoState.updateSelectedFile(file);
-    resetDetectionState();
-    setErrorMessage("");
+    const shouldWarnBeforeReplacingImage = isImageMode && Boolean(outfitUpload);
+
+    if (shouldWarnBeforeReplacingImage) {
+      setPendingReplacementFile(file);
+      setIsReplaceImageWarningOpen(true);
+      return;
+    }
+
+    applyImageFileSelection(file);
   }
 
   function clearImageSelection() {
     detectionPollControllerRef.current?.abort();
+    originalUploadedPhotoRef.current = null;
     photoState.clearSelectedFile();
     resetDetectionState();
     setErrorMessage("");
@@ -193,6 +248,10 @@ export function CreateItemPage({
     return editedDetections[detection.id] ?? toClothingItemFormValuesFromDetection(detection);
   }
 
+  function hasDetectionDraft(detectionId: number) {
+    return Boolean(editedDetections[detectionId]);
+  }
+
   function updateDetectionDraft(detectionId: number, nextValues: ClothingItemFormValues) {
     setEditedDetections((current) => ({
       ...current,
@@ -210,7 +269,10 @@ export function CreateItemPage({
     setErrorMessage("");
 
     try {
-      const cleanedFile = await createCleanPreviewFile(photoState.selectedFile);
+      const cleanedFile = await createCleanPreviewFile(photoState.selectedFile, {
+        metadata: formValues,
+        originalSourcePhoto: originalUploadedPhotoRef.current,
+      });
       photoState.updateSelectedFile(cleanedFile);
     } catch (error) {
       setErrorMessage(
@@ -221,7 +283,104 @@ export function CreateItemPage({
     }
   }
 
-  async function handleCleanDetectionImage(detectionId: number) {
+  async function handleAutofillManualMetadata() {
+    if (!photoState.selectedFile) {
+      setErrorMessage("Upload a photo before using AI autofill.");
+      return;
+    }
+
+    setIsAutofillingMetadata(true);
+    setErrorMessage("");
+
+    try {
+      const suggestion = await previewMetadataSuggestions(photoState.selectedFile, undefined, {
+        metadata: formValues,
+        originalSourcePhoto: originalUploadedPhotoRef.current,
+      });
+      setFormValues((current) => mergeMetadataSuggestion(current, suggestion));
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Unable to autofill this item's metadata.",
+      );
+    } finally {
+      setIsAutofillingMetadata(false);
+    }
+  }
+
+  async function handleAutofillDetectionMetadata(detection: OutfitDetection) {
+    setAutofillingDetectionId(detection.id);
+    setErrorMessage("");
+
+    try {
+      const suggestion = await generateOutfitDetectionMetadataSuggestions(
+        detection.id,
+        getDetectionDraft(detection),
+      );
+      updateDetectionDraft(
+        detection.id,
+        mergeMetadataSuggestion(getDetectionDraft(detection), suggestion),
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Unable to autofill this detected item's metadata.",
+      );
+    } finally {
+      setAutofillingDetectionId(null);
+    }
+  }
+
+  async function autofillDetectedMetadata(nextDetections: OutfitDetection[]) {
+    const detectionIdsToAutofill = nextDetections
+      .filter((detection) => Boolean(detection.cleaned_image_url || preferredDetectionBox(detection)))
+      .map((detection) => detection.id);
+
+    if (detectionIdsToAutofill.length === 0) {
+      return;
+    }
+
+    const runId = ++detectionMetadataRunRef.current;
+    setIsPreparingDetectedMetadata(true);
+
+    try {
+      for (const detection of nextDetections) {
+        if (!detectionIdsToAutofill.includes(detection.id)) {
+          continue;
+        }
+
+        setAutofillingDetectionId(detection.id);
+
+        try {
+          const suggestion = await generateOutfitDetectionMetadataSuggestions(detection.id);
+          if (detectionMetadataRunRef.current !== runId) {
+            return;
+          }
+
+          setEditedDetections((current) => ({
+            ...current,
+            [detection.id]: mergeMetadataSuggestion(
+              current[detection.id] ?? toClothingItemFormValuesFromDetection(detection),
+              suggestion,
+            ),
+          }));
+        } catch {
+          if (detectionMetadataRunRef.current !== runId) {
+            return;
+          }
+        } finally {
+          if (detectionMetadataRunRef.current === runId) {
+            setAutofillingDetectionId((current) => (current === detection.id ? null : current));
+          }
+        }
+      }
+    } finally {
+      if (detectionMetadataRunRef.current === runId) {
+        setIsPreparingDetectedMetadata(false);
+      }
+    }
+  }
+
+  async function handleCleanDetectionImage(detection: OutfitDetection) {
+    const detectionId = detection.id;
     setCleaningDetectionIds((current) => [...current, detectionId]);
     setDetectionCleanErrors((current) => {
       const next = { ...current };
@@ -230,7 +389,10 @@ export function CreateItemPage({
     });
 
     try {
-      const updatedDetection = await generateOutfitDetectionCleanImage(detectionId);
+      const updatedDetection = await generateOutfitDetectionCleanImage(
+        detectionId,
+        getDetectionDraft(detection),
+      );
       setOutfitUpload((current) => {
         if (!current) {
           return current;
@@ -349,34 +511,47 @@ export function CreateItemPage({
 
   if (isImageMode) {
     return (
-      <CreateItemImageMode
-        cleaningDetectionIds={cleaningDetectionIds}
-        detectionCleanErrors={detectionCleanErrors}
-        detections={detections}
-        errorMessage={errorMessage}
-        getDetectionDraft={getDetectionDraft}
-        inputRef={photoState.inputRef}
-        isCreating={isCreating}
-        isDetecting={isDetecting}
-        onBack={onBack}
-        onClearImageSelection={clearImageSelection}
-        onCleanDetectionImage={(detectionId) => void handleCleanDetectionImage(detectionId)}
-        onDetectItems={() => photoState.selectedFile && void detectItems(photoState.selectedFile)}
-        onDraftChange={updateDetectionDraft}
-        onFileChange={handleImageFileChange}
-        onSaveSelectedItems={() => void handleSaveSelectedItems()}
-        onToggleSelection={toggleDetectionSelection}
-        outfitUpload={outfitUpload}
-        selectedCount={selectedCount}
-        selectedDetectionIds={selectedDetectionIds}
-        selectedFileName={photoState.selectedFile?.name}
-        sourceImageUrl={sourceImageUrl}
-        user={user}
-      />
+      <>
+        <CreateItemImageMode
+          cleaningDetectionIds={cleaningDetectionIds}
+          detectionCleanErrors={detectionCleanErrors}
+          detections={detections}
+          errorMessage={errorMessage}
+          getDetectionDraft={getDetectionDraft}
+          hasDetectionDraft={hasDetectionDraft}
+          inputRef={photoState.inputRef}
+          isPreparingDetectedMetadata={isPreparingDetectedMetadata}
+          isCreating={isCreating}
+          isDetecting={isDetecting}
+          onBack={onBack}
+          onClearImageSelection={clearImageSelection}
+          onCleanDetectionImage={(detection) => void handleCleanDetectionImage(detection)}
+          onDetectItems={() => photoState.selectedFile && void detectItems(photoState.selectedFile)}
+          onDraftChange={updateDetectionDraft}
+          onRequestDetectionAutofill={(detection) => void handleAutofillDetectionMetadata(detection)}
+          onFileChange={handleImageFileChange}
+          autofillingDetectionId={autofillingDetectionId}
+          onSaveSelectedItems={() => void handleSaveSelectedItems()}
+          onToggleSelection={toggleDetectionSelection}
+          outfitUpload={outfitUpload}
+          selectedCount={selectedCount}
+          selectedDetectionIds={selectedDetectionIds}
+          selectedFileName={photoState.selectedFile?.name}
+          sourceImageUrl={sourceImageUrl}
+          user={user}
+        />
+        <PrimitiveConfirmationDialog
+          description="Uploading a new image will discard all currently detected items. Proceed?"
+          onConfirm={confirmReplaceImage}
+          onOpenChange={closeReplaceImageWarning}
+          open={isReplaceImageWarningOpen}
+        />
+      </>
     );
   }
 
   const previewName = formValues.name.trim() || "Untitled Item";
+  const previewMetadata = buildItemPreviewMetadata(formValues.size, parseTagInput(formValues.tags));
 
   return (
     <ItemEditorWorkspace
@@ -406,7 +581,7 @@ export function CreateItemPage({
         />
       }
       previewLabel="New Clothing Item"
-      previewPrimaryDetail={formatDisplaySize(formValues.size)}
+      previewPrimaryDetail={previewMetadata}
       previewTitle={previewName}
       footer={
         <div className="mt-auto pt-2 flex items-center justify-end">
@@ -435,11 +610,27 @@ export function CreateItemPage({
         </div>
       )}
 
-      <div className="border border-border bg-card p-5">
+      <ItemMetadataPanel
+        action={
+          <AiMetadataAutofillButton
+            className="mt-0.5 h-9 w-9 shrink-0 self-start"
+            disabled={!photoState.selectedFile}
+            isLoading={isAutofillingMetadata}
+            label="AI autofill type, name, brand, and tags"
+            onClick={() => void handleAutofillManualMetadata()}
+          />
+        }
+        category={formValues.category}
+        title={previewName}
+      >
         <div className="grid gap-5 sm:grid-cols-2">
-          <ItemMetadataFields values={formValues} onChange={setFormValues} />
+          <ItemMetadataFields
+            onChange={setFormValues}
+            showAutofillButton={false}
+            values={formValues}
+          />
         </div>
-      </div>
+      </ItemMetadataPanel>
     </ItemEditorWorkspace>
   );
 }

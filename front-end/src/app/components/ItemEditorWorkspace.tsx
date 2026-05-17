@@ -48,14 +48,29 @@ export function ItemEditorWorkspace({
 }: ItemEditorWorkspaceProps) {
   return (
     <div className="max-w-7xl mx-auto px-6 py-12">
-      <PrimitiveButton
-        onClick={onBack}
-        variant="outline"
-        className="mb-8 h-auto px-5 py-3"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        {backLabel}
-      </PrimitiveButton>
+      <div className="mb-8 flex items-center justify-between gap-4">
+        <PrimitiveButton
+          onClick={onBack}
+          variant="outline"
+          className="h-auto px-5 py-3"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          {backLabel}
+        </PrimitiveButton>
+
+        {formTopAction ? (
+          <div className="flex items-center justify-end gap-4">
+            <PrimitiveText as="p" variant="overline" tone="muted">
+              {formLabel}
+            </PrimitiveText>
+            {formTopAction}
+          </div>
+        ) : (
+          <PrimitiveText as="p" variant="overline" tone="muted">
+            {formLabel}
+          </PrimitiveText>
+        )}
+      </div>
 
       <motion.form
         initial={{ opacity: 0, y: 18 }}
@@ -77,19 +92,6 @@ export function ItemEditorWorkspace({
           previewSecondaryDetail={previewSecondaryDetail}
           previewTitle={previewTitle}
         >
-          {formTopAction ? (
-            <div className="flex items-start justify-between gap-4">
-              <PrimitiveText as="p" variant="overline" tone="muted">
-                {formLabel}
-              </PrimitiveText>
-              {formTopAction}
-            </div>
-          ) : (
-            <PrimitiveText as="p" variant="overline" tone="muted">
-              {formLabel}
-            </PrimitiveText>
-          )}
-
           {children}
           {footer}
         </UploadWorkspace>

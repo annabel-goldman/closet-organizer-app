@@ -1,11 +1,12 @@
+import { Check } from "lucide-react";
 import { OutfitDetection, preferredDetectionBox, titleize } from "../../lib/closet";
 import { DetectionPreviewImage } from "./DetectionPreview";
 
-const stripFrameClass = "flex h-14 items-center border border-border bg-card px-4 lg:-mt-20";
+const stripFrameClass = "flex h-14 min-h-14 max-h-14 items-center overflow-hidden border border-border bg-card px-4 lg:-mt-20";
 const stripShellClass = "grid h-full w-full grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3";
 const stripContentViewportClass = "min-w-0 overflow-x-auto";
 const stripContentClass = "flex h-full items-center gap-3";
-const stripItemClass = "relative size-9 shrink-0 overflow-hidden border box-border";
+const stripItemClass = "relative size-9 min-h-9 min-w-9 shrink-0 overflow-hidden border box-border appearance-none bg-transparent p-0 outline-none";
 
 interface DetectionThumbnailStripProps {
   detections: OutfitDetection[];
@@ -13,6 +14,7 @@ interface DetectionThumbnailStripProps {
   isDetecting: boolean;
   onSelectDetection: (detectionId: number) => void;
   onSelectSource: () => void;
+  selectedDetectionIds: number[];
   sourceImageUrl: string | null;
 }
 
@@ -22,6 +24,7 @@ export function DetectionThumbnailStrip({
   isDetecting,
   onSelectDetection,
   onSelectSource,
+  selectedDetectionIds,
   sourceImageUrl,
 }: DetectionThumbnailStripProps) {
   function itemClass(isActive: boolean) {
@@ -67,6 +70,8 @@ export function DetectionThumbnailStrip({
               detections.map((detection) => {
                 const previewBox = preferredDetectionBox(detection);
                 const label = detection.suggested_name?.trim() || titleize(detection.category);
+                const isSelected = selectedDetectionIds.includes(detection.id);
+                const hoverLabel = isSelected ? "Will add to closet" : label;
 
                 return (
                   <button
@@ -74,8 +79,8 @@ export function DetectionThumbnailStrip({
                     type="button"
                     onClick={() => onSelectDetection(detection.id)}
                     className={itemClass(focusedTarget === detection.id)}
-                    aria-label={`Show ${label}`}
-                    title={label}
+                    aria-label={isSelected ? `Show ${label}. Will add to closet` : `Show ${label}`}
+                    title={hoverLabel}
                   >
                     <DetectionPreviewImage
                       alt={`${label} thumbnail`}
@@ -84,6 +89,20 @@ export function DetectionThumbnailStrip({
                       sourceImageUrl={sourceImageUrl}
                       variant="thumbnail"
                     />
+                    {isSelected ? (
+                      <>
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute inset-0 bg-foreground/18"
+                        />
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute top-0.5 right-0.5 inline-flex size-4 items-center justify-center rounded-full bg-foreground text-background shadow-sm"
+                        >
+                          <Check className="size-2.5" strokeWidth={3} />
+                        </span>
+                      </>
+                    ) : null}
                   </button>
                 );
               })

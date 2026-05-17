@@ -1,22 +1,26 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Save, Trash2, Upload } from "lucide-react";
 import {
+  buildItemPreviewMetadata,
   createCleanPreviewFile,
   ClothingItem,
   ClothingItemFormValues,
   destroyClothingItem,
   fetchClothingItem,
-  formatDisplaySize,
-  formatTagLabel,
   generateClothingItemCleanImage,
+  generateClothingItemMetadataSuggestions,
+  mergeMetadataSuggestion,
   parseTagInput,
+  previewMetadataSuggestions,
   saveClothingItem,
   toClothingItemFormValues,
 } from "../lib/closet";
 import { usePageData } from "../lib/usePageData";
 import { AiCleanImageButton } from "./AiCleanImageButton";
+import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import { ItemEditorWorkspace } from "./ItemEditorWorkspace";
 import { ItemMetadataFields } from "./ItemMetadataFields";
+import { ItemMetadataPanel } from "./ItemMetadataPanel";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { useItemPhotoState } from "../lib/useItemPhotoState";
@@ -38,12 +42,14 @@ export function ItemDetailPage({
 }: ItemDetailPageProps) {
   const shouldUseInitialItem = Boolean(initialItem?.id === itemId);
   const photoState = useItemPhotoState(initialItem?.image_url);
+  const originalUploadedPhotoRef = useRef<File | null>(null);
   const [formValues, setFormValues] = useState<ClothingItemFormValues | null>(
     shouldUseInitialItem && initialItem ? toClothingItemFormValues(initialItem) : null,
   );
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCleaningImage, setIsCleaningImage] = useState(false);
+  const [isAutofillingMetadata, setIsAutofillingMetadata] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const {
     data: item,
@@ -63,11 +69,13 @@ export function ItemDetailPage({
   useEffect(() => {
     if (!item) {
       setFormValues(null);
+      originalUploadedPhotoRef.current = null;
       return;
     }
 
     setFormValues(toClothingItemFormValues(item));
     photoState.reset();
+    originalUploadedPhotoRef.current = null;
   }, [item]);
 
   const isDirty = useMemo(() => {
@@ -82,16 +90,20 @@ export function ItemDetailPage({
   }, [formValues, item, photoState.removeExisting, photoState.selectedFile]);
 
   const previewName = formValues?.name.trim() || item?.name?.trim() || "Untitled Item";
-  const previewTags = formValues ? parseTagInput(formValues.tags).slice(0, 2) : [];
+  const previewMetadata = formValues
+    ? buildItemPreviewMetadata(formValues.size, parseTagInput(formValues.tags))
+    : "";
 
   function handleEditImageFileChange(file: File | null) {
     if (file) {
+      originalUploadedPhotoRef.current = file;
       photoState.updateSelectedFile(file);
     }
   }
 
   function handlePreviewClear() {
     if (photoState.selectedFile) {
+      originalUploadedPhotoRef.current = null;
       photoState.clearSelectedFile();
       return;
     }
@@ -159,11 +171,14 @@ export function ItemDetailPage({
 
     try {
       if (photoState.selectedFile) {
-        const cleanedFile = await createCleanPreviewFile(photoState.selectedFile);
+        const cleanedFile = await createCleanPreviewFile(photoState.selectedFile, {
+          metadata: formValues,
+          originalSourcePhoto: originalUploadedPhotoRef.current,
+        });
         photoState.updateSelectedFile(cleanedFile);
         setSuccessMessage("AI-cleaned preview ready. Save changes to keep it.");
       } else {
-        const updatedItem = await generateClothingItemCleanImage(item.id);
+        const updatedItem = await generateClothingItemCleanImage(item.id, formValues);
         setItem(updatedItem);
         setSuccessMessage("AI-cleaned image saved to this item.");
         onItemSaved(updatedItem);
@@ -174,6 +189,33 @@ export function ItemDetailPage({
       );
     } finally {
       setIsCleaningImage(false);
+    }
+  }
+
+  async function handleAutofillMetadata() {
+    if (!item || !formValues) {
+      return;
+    }
+
+    setIsAutofillingMetadata(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const suggestion = photoState.selectedFile
+        ? await previewMetadataSuggestions(photoState.selectedFile, undefined, {
+            metadata: formValues,
+            originalSourcePhoto: originalUploadedPhotoRef.current,
+          })
+        : await generateClothingItemMetadataSuggestions(item.id, formValues);
+
+      setFormValues((current) => (current ? mergeMetadataSuggestion(current, suggestion) : current));
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Unable to autofill this item's metadata.",
+      );
+    } finally {
+      setIsAutofillingMetadata(false);
     }
   }
 
@@ -255,8 +297,7 @@ export function ItemDetailPage({
         />
       }
       previewLabel="Clothing Item"
-      previewPrimaryDetail={formatDisplaySize(formValues.size)}
-      previewSecondaryDetail={previewTags.length > 0 ? previewTags.map(formatTagLabel).join(" · ") : null}
+      previewPrimaryDetail={previewMetadata}
       previewTitle={previewName}
       footer={
         <div className="mt-auto pt-2 flex items-center justify-between gap-4">
@@ -295,11 +336,27 @@ export function ItemDetailPage({
         </div>
       )}
 
-      <div className="border border-border bg-card p-5">
+      <ItemMetadataPanel
+        action={
+          <AiMetadataAutofillButton
+            className="mt-0.5 h-9 w-9 shrink-0 self-start"
+            disabled={photoState.removeExisting || (!photoState.selectedFile && !item.image_url)}
+            isLoading={isAutofillingMetadata}
+            label="AI autofill type, name, brand, and tags"
+            onClick={() => void handleAutofillMetadata()}
+          />
+        }
+        category={formValues.category}
+        title={previewName}
+      >
         <div className="grid gap-5 sm:grid-cols-2">
-          <ItemMetadataFields values={formValues} onChange={setFormValues} />
+          <ItemMetadataFields
+            onChange={setFormValues}
+            showAutofillButton={false}
+            values={formValues}
+          />
         </div>
-      </div>
+      </ItemMetadataPanel>
     </ItemEditorWorkspace>
   );
 }

@@ -5,6 +5,7 @@ class ClothingItem < ApplicationRecord
   has_one_attached :photo
   has_one_attached :cleaned_photo
   before_validation :apply_defaults, on: :create
+  before_validation :normalize_category
   before_validation :normalize_tags
   before_validation :normalize_brand
 
@@ -62,5 +63,9 @@ class ClothingItem < ApplicationRecord
 
   def apply_defaults
     self.size = :na if size.blank?
+  end
+
+  def normalize_category
+    self.category = category.to_s.strip.downcase.presence
   end
 end

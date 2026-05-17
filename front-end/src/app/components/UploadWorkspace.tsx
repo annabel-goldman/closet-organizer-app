@@ -36,7 +36,7 @@ export function UploadWorkspace({
   previewTitle,
 }: UploadWorkspaceProps) {
   return (
-    <div className="grid gap-10 lg:h-[min(46rem,calc(100vh-8rem))] lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:items-stretch">
+    <div className="grid gap-10 lg:min-h-[min(46rem,calc(100vh-8rem))] lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:items-stretch">
       <div className="lg:h-full">
         <ItemHeroPreview
           expandedPreview={expandedPreview}

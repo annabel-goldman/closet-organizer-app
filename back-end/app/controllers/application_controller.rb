@@ -79,6 +79,49 @@ class ApplicationController < ActionController::API
     @payloads ||= ApiPayloads.new(url_helpers: self)
   end
 
+  def ai_metadata_context_from_params(raw_params)
+    values = raw_params.respond_to?(:to_unsafe_h) ? raw_params.to_unsafe_h : raw_params
+    values = values.to_h if values.respond_to?(:to_h)
+    values ||= {}
+
+    tags = TagListNormalizer.call(values["tags"] || values[:tags])
+
+    {
+      category: values["category"] || values[:category],
+      name: values["name"] || values[:name],
+      brand: values["brand"] || values[:brand],
+      size: values["size"] || values[:size],
+      date: values["date"] || values[:date],
+      tags: tags
+    }.compact_blank
+  end
+
+  def clothing_item_ai_metadata_context(clothing_item)
+    {
+      category: clothing_item.category,
+      name: clothing_item.name,
+      brand: clothing_item.brand,
+      size: clothing_item.size,
+      date: clothing_item.date&.to_date&.iso8601,
+      tags: TagListNormalizer.call(clothing_item.tags)
+    }.compact_blank
+  end
+
+  def outfit_detection_ai_metadata_context(outfit_detection)
+    details = outfit_detection.details || {}
+
+    {
+      category: outfit_detection.category,
+      name: outfit_detection.suggested_name.presence || outfit_detection.category.to_s.titleize,
+      tags: TagListNormalizer.call([
+        details["dominant_color"],
+        details["material_guess"],
+        details["style_guess"],
+        outfit_detection.category
+      ])
+    }.compact_blank
+  end
+
   def test_user_id
     return unless Rails.env.test?
 

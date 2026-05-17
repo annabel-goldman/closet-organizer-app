@@ -1,48 +1,45 @@
-import { RefObject, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Check, RotateCcw, Sparkles, Upload } from "lucide-react";
+import { RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, Check, LoaderCircle, RotateCcw, Sparkles, Upload } from "lucide-react";
 import {
+  buildItemPreviewMetadata,
   ClothingItemFormValues,
   formatTagLabel,
   OutfitDetection,
   OutfitUpload,
   preferredDetectionBox,
+  parseTagInput,
   titleize,
   User,
 } from "../../lib/closet";
 import { AiCleanImageButton } from "../AiCleanImageButton";
+import { AiMetadataAutofillButton } from "../AiMetadataAutofillButton";
 import { ItemMetadataFields } from "../ItemMetadataFields";
+import { ItemMetadataPanel } from "../ItemMetadataPanel";
 import { PrimitiveButton } from "../primitives/PrimitiveButton";
-import { PrimitiveText } from "../primitives/PrimitiveText";
+import { PrimitiveConfirmationDialog } from "../primitives/PrimitiveConfirmationDialog";
 import { UploadWorkspace } from "../UploadWorkspace";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "../ui/alert-dialog";
 import { DetectionPreviewImage } from "./DetectionPreview";
 import { DetectionThumbnailStrip } from "./DetectionThumbnailStrip";
 
 interface CreateItemImageModeProps {
+  autofillingDetectionId: number | null;
   cleaningDetectionIds: number[];
   detectionCleanErrors: Record<number, string>;
   detections: OutfitDetection[];
   errorMessage: string;
   getDetectionDraft: (detection: OutfitDetection) => ClothingItemFormValues;
+  hasDetectionDraft: (detectionId: number) => boolean;
+  isPreparingDetectedMetadata: boolean;
   isCreating: boolean;
   isDetecting: boolean;
   inputRef: RefObject<HTMLInputElement | null>;
   onBack: () => void;
   onClearImageSelection: () => void;
-  onCleanDetectionImage: (detectionId: number) => void;
+  onCleanDetectionImage: (detection: OutfitDetection) => void;
   onDetectItems: () => void;
   onDraftChange: (detectionId: number, nextValues: ClothingItemFormValues) => void;
   onFileChange: (file: File | null) => void;
+  onRequestDetectionAutofill: (detection: OutfitDetection) => void;
   onSaveSelectedItems: () => void;
   onToggleSelection: (detection: OutfitDetection) => void;
   outfitUpload: OutfitUpload | null;
@@ -54,11 +51,14 @@ interface CreateItemImageModeProps {
 }
 
 export function CreateItemImageMode({
+  autofillingDetectionId,
   cleaningDetectionIds,
   detectionCleanErrors,
   detections,
   errorMessage,
   getDetectionDraft,
+  hasDetectionDraft,
+  isPreparingDetectedMetadata,
   isCreating,
   isDetecting,
   inputRef,
@@ -68,6 +68,7 @@ export function CreateItemImageMode({
   onDetectItems,
   onDraftChange,
   onFileChange,
+  onRequestDetectionAutofill,
   onSaveSelectedItems,
   onToggleSelection,
   outfitUpload,
@@ -81,13 +82,23 @@ export function CreateItemImageMode({
   const [previewTarget, setPreviewTarget] = useState<"source" | number>("source");
   const [detailsDetectionId, setDetailsDetectionId] = useState<number | null>(null);
   const [isRedetectDialogOpen, setIsRedetectDialogOpen] = useState(false);
+  const [isSaveWarningDialogOpen, setIsSaveWarningDialogOpen] = useState(false);
+  const previousDetectionCountRef = useRef(0);
   const hasStartedDetectionFlow = Boolean(selectedFileName || isDetecting || outfitUpload);
-  const hasDetectedItems = detectionCount > 0;
 
   useEffect(() => {
+    const previousDetectionCount = previousDetectionCountRef.current;
+    previousDetectionCountRef.current = detections.length;
+
     if (detections.length === 0) {
       setPreviewTarget("source");
       setDetailsDetectionId(null);
+      return;
+    }
+
+    if (previousDetectionCount === 0) {
+      setPreviewTarget(detections[0].id);
+      setDetailsDetectionId(detections[0].id);
       return;
     }
 
@@ -109,15 +120,19 @@ export function CreateItemImageMode({
       : null;
   const detailsDetection =
     detailsDetectionId == null
-      ? null
-      : detections.find((detection) => detection.id === detailsDetectionId) ?? null;
+      ? previewDetection
+      : detections.find((detection) => detection.id === detailsDetectionId) ?? previewDetection ?? null;
   const isSourceFocused = previewTarget === "source";
   const previewDetectionBox = previewDetection ? preferredDetectionBox(previewDetection) : null;
   const detailsPreviewBox = detailsDetection ? preferredDetectionBox(detailsDetection) : null;
+  const detailsDraftReady = detailsDetection ? hasDetectionDraft(detailsDetection.id) : false;
   const focusedDraft = detailsDetection ? getDetectionDraft(detailsDetection) : null;
   const focusedSuggestedName = focusedDraft?.name.trim()
     || detailsDetection?.suggested_name?.trim()
     || (detailsDetection ? titleize(detailsDetection.category) : "");
+  const focusedPreviewMetadata = focusedDraft
+    ? buildItemPreviewMetadata(focusedDraft.size, parseTagInput(focusedDraft.tags))
+    : "";
   const focusedIsSelected = detailsDetection
     ? selectedDetectionIds.includes(detailsDetection.id)
     : false;
@@ -126,6 +141,9 @@ export function CreateItemImageMode({
     : undefined;
   const focusedIsCleaning = detailsDetection
     ? cleaningDetectionIds.includes(detailsDetection.id)
+    : false;
+  const focusedIsAutofilling = detailsDetection
+    ? autofillingDetectionId === detailsDetection.id
     : false;
   const previewMedia = useMemo(() => {
     if (!previewDetection || !sourceImageUrl || !previewDetectionBox || previewDetection.cleaned_image_url) {
@@ -165,11 +183,18 @@ export function CreateItemImageMode({
     ? `${selectedCount} selected to save`
     : `Saving to ${titleize(user.username)}`;
   const shouldShowUploadPrompt = !selectedFileName && !isDetecting && !outfitUpload;
-  const shouldShowInitialDetectPrompt = Boolean(selectedFileName) && !isDetecting && detectionCount === 0;
+  const shouldShowInitialDetectPrompt = Boolean(selectedFileName) && detectionCount === 0;
   const shouldShowRedetectPrompt = hasStartedDetectionFlow && detectionCount > 0 && isSourceFocused;
+  const isLoadingDetectedMetadata = isPreparingDetectedMetadata || autofillingDetectionId !== null;
+  const shouldShowMetadataLoadingState =
+    detectionCount > 0
+    && !isSourceFocused
+    && (!detailsDetection || !detailsDraftReady || isLoadingDetectedMetadata);
+  const hasUnsavedDetectedItems = selectedCount < detectionCount;
+  const detectPromptCopy = "Press the button below to detect your items.";
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-12 space-y-8">
+    <div className="max-w-7xl mx-auto px-6 pt-12 pb-24 space-y-8">
       <PrimitiveButton
         onClick={onBack}
         variant="outline"
@@ -203,19 +228,19 @@ export function CreateItemImageMode({
               iconOnly
               isLoading={focusedIsCleaning}
               label="AI clean PNG"
-              onClick={() => onCleanDetectionImage(previewDetection.id)}
+              onClick={() => onCleanDetectionImage(previewDetection)}
             />
           ) : undefined
         }
         previewLabel={previewDetection ? "Detected Item" : "Original Image"}
         previewPrimaryDetail={
           previewDetection
-            ? formatTagLabel(previewDetection.category)
+            ? focusedPreviewMetadata
             : sourcePreviewPrimaryDetail
         }
         previewSecondaryDetail={
           previewDetection
-            ? `${formatTagLabel(previewDetection.category)}${selectedDetectionIds.includes(previewDetection.id) ? " · selected for save" : ""}`
+            ? null
             : sourcePreviewSecondaryDetail
         }
         previewTitle={previewDetection ? titleize(previewDetection.suggested_name?.trim() || previewDetection.category) : sourcePreviewTitle}
@@ -237,6 +262,7 @@ export function CreateItemImageMode({
             setDetailsDetectionId(detectionId);
           }}
           onSelectSource={() => setPreviewTarget("source")}
+          selectedDetectionIds={selectedDetectionIds}
           sourceImageUrl={sourceImageUrl}
         />
 
@@ -248,75 +274,111 @@ export function CreateItemImageMode({
 
         {shouldShowUploadPrompt ? (
           <div className="border border-border bg-card p-5">
-            <PrimitiveText as="p" variant="title" font="serif" className="mb-3">
-              Upload an image to get started.
-            </PrimitiveText>
-            <PrimitiveText as="p" tone="muted">
-              Our AI will analyze your image and pull out different items of clothing you&apos;re wearing, so you can add them to your closet.
-            </PrimitiveText>
+            <p>Upload an image to get started.</p>
+            <p>
+              Our AI will analyze your image and pull out different items of clothing you&apos;re
+              wearing, so you can add them to your closet.
+            </p>
           </div>
         ) : null}
 
         {shouldShowInitialDetectPrompt ? (
           <div className="border border-border bg-card p-5 space-y-5">
-            <PrimitiveText as="p" tone="muted">
-              Press the button below to detect your items.
-            </PrimitiveText>
+            <p>{detectPromptCopy}</p>
             <PrimitiveButton
               type="button"
               onClick={onDetectItems}
               disabled={isDetecting || !selectedFileName}
-              className="h-auto self-start bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
+              className={`h-auto self-start bg-foreground px-5 py-3 text-background hover:bg-foreground/90 ${
+                isDetecting ? "min-w-40 justify-center" : ""
+              }`}
+              aria-busy={isDetecting}
             >
-              <Sparkles className="w-4 h-4" />
-              Detect Items
+              {isDetecting ? (
+                <>
+                  <LoaderCircle className="w-4 h-4 animate-spin" />
+                  <span>Detect Items</span>
+                  <span className="inline-flex items-center gap-1" aria-hidden="true">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:-0.3s]" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:-0.15s]" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+                  </span>
+                  <span className="sr-only">Detecting items</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  Detect Items
+                </>
+              )}
             </PrimitiveButton>
           </div>
         ) : null}
 
         {shouldShowRedetectPrompt ? (
           <div className="border border-border bg-card p-5 space-y-5">
-            <PrimitiveText as="p" tone="muted">
-              Press this button to re-detect your items. Warning: this will override your existing items.
-            </PrimitiveText>
-            <AlertDialog open={isRedetectDialogOpen} onOpenChange={setIsRedetectDialogOpen}>
-              <AlertDialogTrigger asChild>
-                <PrimitiveButton
-                  type="button"
-                  disabled={isDetecting || !selectedFileName}
-                  className="h-auto self-start bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <RotateCcw className="w-4 h-4" />
-                  Re-detect Items
-                </PrimitiveButton>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Proceed?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will discard all currently detected items. Proceed?
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={onDetectItems}>Proceed</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <p>
+              Press this button to re-detect your items. Warning: this will override your existing
+              items.
+            </p>
+            <PrimitiveConfirmationDialog
+              description="This will discard all currently detected items. Proceed?"
+              onConfirm={onDetectItems}
+              onOpenChange={setIsRedetectDialogOpen}
+              open={isRedetectDialogOpen}
+            >
+              <PrimitiveButton
+                type="button"
+                disabled={isDetecting || !selectedFileName}
+                className="h-auto self-start bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
+              >
+                <Sparkles className="w-4 h-4" />
+                <RotateCcw className="w-4 h-4" />
+                Re-detect Items
+              </PrimitiveButton>
+            </PrimitiveConfirmationDialog>
           </div>
         ) : null}
 
-        {!hasStartedDetectionFlow || isDetecting || !outfitUpload || detectionCount === 0 || !detailsDetection || !focusedDraft || isSourceFocused ? null : (
-          <div className="border border-border bg-card p-5 space-y-5">
-            <div>
-              <PrimitiveText as="p" variant="overline" tone="muted" className="mb-2">
-                {formatTagLabel(detailsDetection.category)}
-              </PrimitiveText>
-              <PrimitiveText as="h2" variant="title" font="serif" className="mb-1">
-                {focusedSuggestedName}
-              </PrimitiveText>
+        {shouldShowMetadataLoadingState && (!detailsDetection || !detailsDraftReady) ? (
+          <div className="border border-border bg-card p-5">
+            <div className="flex items-start gap-3">
+              <LoaderCircle className="mt-0.5 h-5 w-5 animate-spin text-muted-foreground" />
+              <div className="space-y-1">
+                <p className="font-medium">Preparing detected item details...</p>
+                <p className="text-sm text-muted-foreground">
+                  We&apos;re filling in the detected type, name, brand, and tags now.
+                </p>
+              </div>
             </div>
+          </div>
+        ) : null}
+
+        {!hasStartedDetectionFlow || isDetecting || !outfitUpload || detectionCount === 0 || !detailsDetection || !focusedDraft || !detailsDraftReady || isSourceFocused ? null : (
+          <ItemMetadataPanel
+            action={
+              <AiMetadataAutofillButton
+                className="mt-0.5 h-9 w-9 shrink-0 self-start"
+                disabled={!detailsPreviewBox && !detailsDetection.cleaned_image_url}
+                isLoading={focusedIsAutofilling}
+                label="AI autofill type, name, brand, and tags"
+                onClick={() => onRequestDetectionAutofill(detailsDetection)}
+              />
+            }
+            category={focusedDraft.category || detailsDetection.category}
+            title={focusedSuggestedName}
+          >
+            {shouldShowMetadataLoadingState ? (
+              <div className="flex items-start gap-3 border border-border/70 bg-muted/35 px-3 py-3 text-sm">
+                <LoaderCircle className="mt-0.5 h-4 w-4 animate-spin text-muted-foreground" />
+                <div className="space-y-0.5">
+                  <p className="font-medium">Preparing detected item details...</p>
+                  <p className="text-muted-foreground">
+                    Type, name, brand, and tags may update in a moment.
+                  </p>
+                </div>
+              </div>
+            ) : null}
 
             {focusedCleanError && (
               <div className="border border-destructive/20 bg-destructive/5 px-3 py-3 text-sm">
@@ -326,6 +388,9 @@ export function CreateItemImageMode({
 
             <div className="grid gap-5 sm:grid-cols-2">
               <ItemMetadataFields
+                autofillDisabled={!detailsPreviewBox && !detailsDetection.cleaned_image_url}
+                isAutofilling={focusedIsAutofilling}
+                showAutofillButton={false}
                 values={focusedDraft}
                 onChange={(nextValues) => onDraftChange(detailsDetection.id, nextValues)}
               />
@@ -347,21 +412,40 @@ export function CreateItemImageMode({
                 {focusedIsSelected ? "Will save to closet" : "Add to closet"}
               </PrimitiveButton>
             </div>
-          </div>
+          </ItemMetadataPanel>
         )}
 
         {hasStartedDetectionFlow && detectionCount > 0 && !isSourceFocused ? (
           <div className="mt-auto pt-2 flex items-center justify-between gap-4">
             <div />
-            <PrimitiveButton
-              type="button"
-              onClick={onSaveSelectedItems}
-              disabled={isCreating || selectedCount === 0}
-              className="h-auto bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
-            >
-              <Check className="w-4 h-4" />
-              {isCreating ? "Saving..." : "Save to closet"}
-            </PrimitiveButton>
+            {hasUnsavedDetectedItems ? (
+              <PrimitiveConfirmationDialog
+                confirmLabel={isCreating ? "Saving..." : "Save to closet"}
+                description="Warning, you've not saved all detected items. This will override those items if you don't save them."
+                onConfirm={onSaveSelectedItems}
+                onOpenChange={setIsSaveWarningDialogOpen}
+                open={isSaveWarningDialogOpen}
+              >
+                <PrimitiveButton
+                  type="button"
+                  disabled={isCreating || selectedCount === 0}
+                  className="h-auto bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
+                >
+                  <Check className="w-4 h-4" />
+                  {isCreating ? "Saving..." : "Save to closet"}
+                </PrimitiveButton>
+              </PrimitiveConfirmationDialog>
+            ) : (
+              <PrimitiveButton
+                type="button"
+                onClick={onSaveSelectedItems}
+                disabled={isCreating || selectedCount === 0}
+                className="h-auto bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
+              >
+                <Check className="w-4 h-4" />
+                {isCreating ? "Saving..." : "Save to closet"}
+              </PrimitiveButton>
+            )}
           </div>
         ) : null}
       </UploadWorkspace>

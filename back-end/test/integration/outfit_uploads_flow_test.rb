@@ -309,8 +309,16 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
       position: 0
     )
 
-    with_image_cleaner_stub do
-      post generate_clean_image_outfit_detection_url(detection), headers: auth_headers(@user), as: :json
+    captured = {}
+
+    with_image_cleaner_stub(capture: captured) do
+      post generate_clean_image_outfit_detection_url(detection), params: {
+        ai_context: {
+          name: "Blue Denim Jacket",
+          brand: "Acme Atelier",
+          tags: [ "blue", "denim", "jacket" ]
+        }
+      }, headers: auth_headers(@user)
     end
 
     assert_response :success
@@ -319,6 +327,64 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
     assert_predicate detection.cleaned_photo, :attached?
     assert_equal "succeeded", response_json["clean_image_status"]
     assert_match %r{/rails/active_storage/}, response_json["cleaned_image_url"]
+    assert_equal "Blue Denim Jacket", captured.dig(:metadata_context, :name)
+    assert_equal "Acme Atelier", captured.dig(:metadata_context, :brand)
+    assert_equal 1, captured[:reference_photos].size
+  end
+
+  test "can generate metadata suggestions for an outfit detection" do
+    upload = OutfitUpload.new(user: @user)
+    upload.source_photo.attach(item_photo_upload)
+    upload.status = :succeeded
+    upload.provider = "openrouter"
+    upload.vision_model = "openai/gpt-4.1-mini"
+    upload.save!
+    detection = upload.outfit_detections.create!(
+      category: "jacket",
+      confidence: 0.81,
+      suggested_name: "Blue Denim Jacket",
+      details: { dominant_color: "blue" },
+      coarse_bbox_x: 0.1,
+      coarse_bbox_y: 0.15,
+      coarse_bbox_width: 0.3,
+      coarse_bbox_height: 0.45,
+      refined_bbox_x: 0.11,
+      refined_bbox_y: 0.16,
+      refined_bbox_width: 0.28,
+      refined_bbox_height: 0.42,
+      final_bbox_x: 0.12,
+      final_bbox_y: 0.18,
+      final_bbox_width: 0.26,
+      final_bbox_height: 0.39,
+      crop_status: :verified,
+      crop_confidence: 0.84,
+      crop_quality_score: 0.9,
+      crop_attempts: 2,
+      position: 0
+    )
+
+    captured = {}
+
+    with_metadata_suggester_stub(capture: captured) do
+      post generate_metadata_suggestions_outfit_detection_url(detection), params: {
+        ai_context: {
+          category: "jacket",
+          name: "Blue Denim Jacket",
+          brand: "Acme Atelier",
+          tags: [ "blue", "denim", "jacket" ]
+        }
+      }, headers: auth_headers(@user)
+    end
+
+    assert_response :success
+    assert_equal "jacket", response_json["category"]
+    assert_equal "Blue Denim Jacket", response_json["name"]
+    assert_equal "Acme Atelier", response_json["brand"]
+    assert_equal [ "blue", "denim", "jacket" ], response_json["tags"]
+    assert_equal "jacket", captured[:category_hint]
+    assert_equal "jacket", captured.dig(:metadata_context, :category)
+    assert_equal "Blue Denim Jacket", captured.dig(:metadata_context, :name)
+    assert_equal 1, captured[:reference_photos].size
   end
 
   private
@@ -373,11 +439,17 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
     Rack::Test::UploadedFile.new(file_fixture("item-photo.png"), "image/png")
   end
 
-  def with_image_cleaner_stub
+  def with_image_cleaner_stub(capture: nil)
     original = OpenrouterImageCleaner.method(:call)
     fixture_path = file_fixture("item-photo.png")
 
-    OpenrouterImageCleaner.singleton_class.send(:define_method, :call) do |_source_photo, prompt_context: {}|
+    OpenrouterImageCleaner.singleton_class.send(:define_method, :call) do |_source_photo, prompt_context: {}, reference_photos: [], metadata_context: {}|
+      capture&.replace(
+        prompt_context: prompt_context,
+        reference_photos: reference_photos,
+        metadata_context: metadata_context
+      )
+
       tempfile = Tempfile.new([ "cleaned-photo", ".png" ])
       tempfile.binmode
       tempfile.write(File.binread(fixture_path))
@@ -396,6 +468,31 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
     yield
   ensure
     OpenrouterImageCleaner.singleton_class.send(:define_method, :call, original)
+  end
+
+  def with_metadata_suggester_stub(capture: nil)
+    original = OpenrouterMetadataSuggester.method(:call)
+
+    OpenrouterMetadataSuggester.singleton_class.send(:define_method, :call) do |_source_photo, category_hint: nil, reference_photos: [], metadata_context: {}|
+      capture&.replace(
+        category_hint: category_hint,
+        reference_photos: reference_photos,
+        metadata_context: metadata_context
+      )
+
+      {
+        category: category_hint.presence || metadata_context[:category] || "item",
+        name: category_hint == "jacket" ? "Blue Denim Jacket" : "Suggested Item",
+        brand: "Acme Atelier",
+        tags: [ "blue", "denim", category_hint.presence || "item" ],
+        provider: "openrouter",
+        vision_model: "openai/gpt-4.1-mini"
+      }
+    end
+
+    yield
+  ensure
+    OpenrouterMetadataSuggester.singleton_class.send(:define_method, :call, original)
   end
 
   def with_env(overrides)

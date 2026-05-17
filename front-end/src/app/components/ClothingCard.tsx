@@ -4,7 +4,7 @@ import { useState } from "react";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import {
-  formatDisplaySize,
+  buildItemPreviewMetadata,
   formatTagLabel,
 } from "../lib/closet";
 
@@ -30,9 +30,7 @@ export function ClothingCard({
   onAddToOutfit,
 }: ClothingCardProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const visibleTags = tags.slice(0, 3);
-  const detailParts = [formatDisplaySize(size), ...visibleTags.slice(1).map(formatTagLabel)];
-  const itemMetadata = detailParts.join(" · ");
+  const itemMetadata = buildItemPreviewMetadata(size, tags);
   const handleSelect = () => onSelect?.(id);
 
   return (

@@ -6,17 +6,29 @@ import {
   formatTagInput,
   parseTagInput,
 } from "../lib/closet";
+import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 
 interface ItemMetadataFieldsProps {
+  autofillDisabled?: boolean;
+  isAutofilling?: boolean;
   onChange: (nextValues: ClothingItemFormValues) => void;
+  onRequestAutofill?: () => void;
+  showAutofillButton?: boolean;
   values: ClothingItemFormValues;
 }
 
 const sizeOptions = ["na", "xs", "small", "medium", "large", "xl"];
 
-export function ItemMetadataFields({ onChange, values }: ItemMetadataFieldsProps) {
+export function ItemMetadataFields({
+  autofillDisabled = false,
+  isAutofilling = false,
+  onChange,
+  onRequestAutofill,
+  showAutofillButton = true,
+  values,
+}: ItemMetadataFieldsProps) {
   const [draftTag, setDraftTag] = useState("");
   const [editingTag, setEditingTag] = useState<string | null>(null);
   const [isAddingTag, setIsAddingTag] = useState(false);
@@ -78,6 +90,28 @@ export function ItemMetadataFields({ onChange, values }: ItemMetadataFieldsProps
 
   return (
     <>
+      {onRequestAutofill && showAutofillButton ? (
+        <div className="flex justify-end sm:col-span-2">
+          <AiMetadataAutofillButton
+            className="h-9 w-9"
+            disabled={autofillDisabled}
+            isLoading={isAutofilling}
+            label="AI autofill name, brand, and tags"
+            onClick={onRequestAutofill}
+          />
+        </div>
+      ) : null}
+
+      <label className="space-y-2 sm:col-span-2">
+        <PrimitiveText as="span" variant="label">Type</PrimitiveText>
+        <input
+          value={values.category}
+          onChange={(event) => updateField("category", event.target.value)}
+          className="w-full border border-border bg-card px-4 py-3"
+          placeholder="e.g. sweater, jacket, dress"
+        />
+      </label>
+
       <label className="space-y-2 sm:col-span-2">
         <PrimitiveText as="span" variant="label">Name</PrimitiveText>
         <input

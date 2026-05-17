@@ -1,8 +1,8 @@
 # Project Closet Organizer
 
-Project Closet Organizer is a monorepo with a Rails JSON API in `back-end/` and a React + Vite client in `front-end/`. The Milestone 1 app supports Google-authenticated closet management, item photo uploads, AI-assisted image cleanup, outfit building, and outfit-photo import that detects visible clothing pieces.
+Project Closet Organizer is a monorepo with a Rails JSON API in `back-end/` and a React + Vite client in `front-end/`. The current app supports Google-authenticated closet management, item creation and editing, AI-assisted metadata and image cleanup, outfit building, and outfit-photo import that detects visible clothing pieces.
 
-## Milestone 1 Scope
+## Current Scope
 
 - Google sign-in with session-backed authentication
 - Protected user-specific closet data
@@ -18,6 +18,7 @@ Project Closet Organizer is a monorepo with a Rails JSON API in `back-end/` and 
 - Sign in with Google and load the current user through `/me`
 - View and manage the signed-in user closet at `/closet`
 - Create, edit, delete, and photo-manage clothing items
+- Generate AI metadata suggestions for item type, name, brand, and tags
 - Generate cleaned catalog-style item images
 - Save outfits from owned closet items at `/outfits`
 - Upload an outfit photo, review detections, and convert detections into closet items
@@ -47,14 +48,15 @@ Heroku deployment link:
 - `package.json`: root deployment glue that builds `front-end/` into `back-end/public`
 - `start.sh`: root-level launcher that boots both apps together
 - `PROJECT_INDEX.md`: concise repository structure index
-- `wiki.md`: extended project background, scope notes, and roadmap
+- `wiki.md`: product purpose and problem statement
 
 ## Current Code Organization
 
 - Frontend route parsing, closet filtering, shared API helpers, page-loading hooks, and outfit-draft persistence are split into focused modules under `front-end/src/app/lib/`.
-- The image-based item flow is split between `CreateItemPage.tsx` and extracted review components under `front-end/src/app/components/create-item/`.
+- Shared frontend control patterns live under `front-end/src/app/components/primitives/` and should be reused before introducing custom button, dropdown, select-trigger, or typography markup.
+- The add/edit item workflow is centered on `ItemEditorWorkspace.tsx`, `CreateItemPage.tsx`, `ItemDetailPage.tsx`, and extracted review components under `front-end/src/app/components/create-item/`.
 - Backend JSON response shaping lives in `back-end/app/presenters/api_payloads.rb`.
-- Backend image-preparation and tempfile lifecycle helpers live in `back-end/app/services/managed_tempfiles.rb` and `back-end/app/services/prepared_image_source.rb`.
+- Backend image-preparation, metadata suggestion, and tempfile lifecycle helpers live under `back-end/app/services/`.
 
 ## Getting Started
 

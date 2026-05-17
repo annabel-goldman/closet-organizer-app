@@ -74,7 +74,6 @@ function DetectionCropCanvas({
       const sourceY = image.naturalHeight * cropBox.y;
       const sourceWidth = Math.max(1, image.naturalWidth * cropBox.width);
       const sourceHeight = Math.max(1, image.naturalHeight * cropBox.height);
-
       if (variant === "thumbnail") {
         const outputSize = 160;
         const scale = Math.max(outputSize / sourceWidth, outputSize / sourceHeight);
