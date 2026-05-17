@@ -40,7 +40,7 @@ function PrimitiveDropdownTriggerButton({
       type="button"
       className={cn(
         primitiveSelectTriggerVariants({ size: "default" }),
-        "relative h-14 rounded-none bg-stone-200 pr-10 hover:bg-stone-200",
+        "relative h-14 rounded-none bg-stone-200 pr-8 hover:bg-stone-200",
         className,
       )}
       style={{ fontFamily: "Outfit, sans-serif", ...style }}
@@ -50,7 +50,7 @@ function PrimitiveDropdownTriggerButton({
       <span className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
         {children}
       </span>
-      <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 opacity-50" />
+      <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 opacity-50" />
     </button>
   );
 }

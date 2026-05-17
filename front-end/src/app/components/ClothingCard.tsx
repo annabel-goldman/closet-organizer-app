@@ -51,7 +51,7 @@ export function ClothingCard({
       role="button"
       tabIndex={0}
     >
-      <div className="relative overflow-hidden bg-muted aspect-[3/4]">
+      <div className="relative overflow-hidden bg-muted aspect-[5/6] sm:aspect-[3/4]">
         {image_url ? (
           <img
             src={image_url}

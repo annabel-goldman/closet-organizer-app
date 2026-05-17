@@ -126,7 +126,7 @@ function ClosetFilterMenu({
         <PrimitiveDropdownMenuTrigger asChild>
           <PrimitiveDropdownTriggerButton
             disabled={options.length === 0}
-            className={hasSelections ? "pr-16" : undefined}
+            className={hasSelections ? "pr-14" : "pr-8"}
             aria-label={filterDescription}
           >
             {triggerLabel}
@@ -587,7 +587,7 @@ export default function App() {
               transition={{ duration: 0.6, delay: 0.3 }}
               className="mb-8 space-y-5"
             >
-              <div className="grid gap-3 min-[660px]:grid-cols-[minmax(0,3.2fr)_repeat(3,minmax(0,0.8fr))_minmax(0,1fr)] min-[660px]:items-start">
+              <div className="space-y-3 min-[660px]:grid min-[660px]:gap-3 min-[660px]:space-y-0 min-[660px]:grid-cols-[minmax(0,3.2fr)_repeat(3,minmax(0,0.8fr))_minmax(0,1fr)] min-[660px]:items-start">
                 <div className="relative min-w-0 self-start">
                   <label htmlFor="closet-search" className="sr-only">
                     Search closet items
@@ -602,54 +602,56 @@ export default function App() {
                   />
                 </div>
 
-                <div className="min-w-0">
-                  <ClosetFilterMenu
-                    label="Tags"
-                    options={groupedTagOptions.other}
-                    selectedValues={selectedOtherTags}
-                    onClear={() => clearSelectedValues(setSelectedOtherTags)}
-                    onToggleValue={(value) => toggleSelectedValue(value, setSelectedOtherTags)}
-                  />
-                </div>
+                <div className="flex gap-3 overflow-x-auto pb-1 min-[660px]:contents">
+                  <div className="min-w-[8.5rem] shrink-0 min-[660px]:min-w-0 min-[660px]:shrink">
+                    <ClosetFilterMenu
+                      label="Tags"
+                      options={groupedTagOptions.other}
+                      selectedValues={selectedOtherTags}
+                      onClear={() => clearSelectedValues(setSelectedOtherTags)}
+                      onToggleValue={(value) => toggleSelectedValue(value, setSelectedOtherTags)}
+                    />
+                  </div>
 
-                <div className="min-w-0">
-                  <ClosetFilterMenu
-                    label="Colors"
-                    options={groupedTagOptions.colors}
-                    selectedValues={selectedColors}
-                    onClear={() => clearSelectedValues(setSelectedColors)}
-                    onToggleValue={(value) => toggleSelectedValue(value, setSelectedColors)}
-                  />
-                </div>
+                  <div className="min-w-[8.5rem] shrink-0 min-[660px]:min-w-0 min-[660px]:shrink">
+                    <ClosetFilterMenu
+                      label="Colors"
+                      options={groupedTagOptions.colors}
+                      selectedValues={selectedColors}
+                      onClear={() => clearSelectedValues(setSelectedColors)}
+                      onToggleValue={(value) => toggleSelectedValue(value, setSelectedColors)}
+                    />
+                  </div>
 
-                <div className="min-w-0">
-                  <ClosetFilterMenu
-                    label="Brands"
-                    options={groupedTagOptions.brands}
-                    selectedValues={selectedBrands}
-                    onClear={() => clearSelectedValues(setSelectedBrands)}
-                    onToggleValue={(value) => toggleSelectedValue(value, setSelectedBrands)}
-                  />
-                </div>
+                  <div className="min-w-[8.5rem] shrink-0 min-[660px]:min-w-0 min-[660px]:shrink">
+                    <ClosetFilterMenu
+                      label="Brands"
+                      options={groupedTagOptions.brands}
+                      selectedValues={selectedBrands}
+                      onClear={() => clearSelectedValues(setSelectedBrands)}
+                      onToggleValue={(value) => toggleSelectedValue(value, setSelectedBrands)}
+                    />
+                  </div>
 
-                <div className="min-w-0">
-                  <label id="closet-sort-label" className="sr-only">
-                    Sort closet items
-                  </label>
-                  <PrimitiveSelect value={sortOption} onValueChange={(value) => setSortOption(value as ClosetSortOption)}>
-                    <PrimitiveSelectTrigger
-                      aria-labelledby="closet-sort-label"
-                      className="h-14 w-full bg-stone-200 hover:bg-stone-200"
-                    >
-                      <PrimitiveSelectValue placeholder="Sort items" />
-                    </PrimitiveSelectTrigger>
-                    <PrimitiveSelectContent>
-                      <PrimitiveSelectItem value="name-asc">Name A-Z</PrimitiveSelectItem>
-                      <PrimitiveSelectItem value="newest-added">Newest added</PrimitiveSelectItem>
-                      <PrimitiveSelectItem value="oldest-added">Oldest added</PrimitiveSelectItem>
-                      <PrimitiveSelectItem value="recent-purchase">Most recent purchase</PrimitiveSelectItem>
-                    </PrimitiveSelectContent>
-                  </PrimitiveSelect>
+                  <div className="min-w-[8.5rem] shrink-0 min-[660px]:min-w-0 min-[660px]:shrink">
+                    <label id="closet-sort-label" className="sr-only">
+                      Sort closet items
+                    </label>
+                    <PrimitiveSelect value={sortOption} onValueChange={(value) => setSortOption(value as ClosetSortOption)}>
+                      <PrimitiveSelectTrigger
+                        aria-labelledby="closet-sort-label"
+                        className="h-14 w-full gap-1.5 bg-stone-200 px-2.5 hover:bg-stone-200"
+                      >
+                        <PrimitiveSelectValue placeholder="Sort items" />
+                      </PrimitiveSelectTrigger>
+                      <PrimitiveSelectContent>
+                        <PrimitiveSelectItem value="name-asc">Name A-Z</PrimitiveSelectItem>
+                        <PrimitiveSelectItem value="newest-added">Newest added</PrimitiveSelectItem>
+                        <PrimitiveSelectItem value="oldest-added">Oldest added</PrimitiveSelectItem>
+                        <PrimitiveSelectItem value="recent-purchase">Most recent purchase</PrimitiveSelectItem>
+                      </PrimitiveSelectContent>
+                    </PrimitiveSelect>
+                  </div>
                 </div>
               </div>
 
@@ -677,7 +679,7 @@ export default function App() {
             </motion.div>
 
             {user && filteredClothingItems.length > 0 ? (
-              <div className="grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-12 lg:grid-cols-4">
                 {filteredClothingItems.map((item, index) => (
                   <ClothingCard
                     key={item.id}
