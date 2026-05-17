@@ -239,6 +239,12 @@ export default function App() {
     return () => window.clearTimeout(timeout);
   }, [outfitDraftNotice]);
 
+  useEffect(() => {
+    if (route.kind === "home" && user) {
+      navigateTo("/closet");
+    }
+  }, [route.kind, user]);
+
   const clothingItems = user?.clothing_items ?? [];
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const isLoggedOutProtectedRoute = isProtectedRoute(route) && !user;
@@ -328,13 +334,15 @@ export default function App() {
     </PrimitiveButton>
   );
 
+  const shouldRenderStandaloneAuthPage = !user && (route.kind === "home" || isLoggedOutProtectedRoute);
+
   let pageContent;
 
   if (isLoggedOutProtectedRoute && isLoading) {
     return <div className="min-h-screen bg-background" />;
   }
 
-  if (route.kind === "home" || (isLoggedOutProtectedRoute && !isLoading)) {
+  if ((!user && route.kind === "home") || (isLoggedOutProtectedRoute && !isLoading)) {
     pageContent = (
       <section className="flex flex-1 items-center justify-center px-6 py-16">
         <motion.div
@@ -343,6 +351,11 @@ export default function App() {
           transition={{ duration: 0.5 }}
           className="max-w-2xl text-center"
         >
+          <img
+            src="/brand-mark.png"
+            alt="Curated Closet logo"
+            className="mx-auto mb-8 h-32 w-auto object-contain sm:h-40"
+          />
           <PrimitiveText
             as="h1"
             variant="display"
@@ -353,7 +366,7 @@ export default function App() {
               lineHeight: "0.95",
             }}
           >
-            Closet Organizer
+            Curated Closet
           </PrimitiveText>
           <PrimitiveText
             as="p"
@@ -362,7 +375,7 @@ export default function App() {
             className="mb-10"
             style={{ lineHeight: "1.7" }}
           >
-            Organize clothing items, manage closet details.
+            Find your fit, faster.
           </PrimitiveText>
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
             <PrimitiveButton
@@ -710,7 +723,7 @@ export default function App() {
     );
   }
 
-  if (route.kind === "home" && !user) {
+  if (shouldRenderStandaloneAuthPage) {
     return <div className="flex min-h-screen flex-col bg-background">{pageContent}</div>;
   }
 
