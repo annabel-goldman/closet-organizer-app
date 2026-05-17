@@ -58,6 +58,7 @@ export function CreateItemPage({
   const [isCleaningUploadedPhoto, setIsCleaningUploadedPhoto] = useState(false);
   const [isAutofillingMetadata, setIsAutofillingMetadata] = useState(false);
   const [autofillingDetectionId, setAutofillingDetectionId] = useState<number | null>(null);
+  const [isPreparingDetectedMetadata, setIsPreparingDetectedMetadata] = useState(false);
   const [isReplaceImageWarningOpen, setIsReplaceImageWarningOpen] = useState(false);
   const [outfitUpload, setOutfitUpload] = useState<OutfitUpload | null>(null);
   const [pendingReplacementFile, setPendingReplacementFile] = useState<File | null>(null);
@@ -105,6 +106,7 @@ export function CreateItemPage({
     setDetectionCleanErrors({});
     setEditedDetections({});
     setAutofillingDetectionId(null);
+    setIsPreparingDetectedMetadata(false);
   }
 
   function applyImageFileSelection(file: File) {
@@ -246,6 +248,10 @@ export function CreateItemPage({
     return editedDetections[detection.id] ?? toClothingItemFormValuesFromDetection(detection);
   }
 
+  function hasDetectionDraft(detectionId: number) {
+    return Boolean(editedDetections[detectionId]);
+  }
+
   function updateDetectionDraft(detectionId: number, nextValues: ClothingItemFormValues) {
     setEditedDetections((current) => ({
       ...current,
@@ -333,35 +339,42 @@ export function CreateItemPage({
     }
 
     const runId = ++detectionMetadataRunRef.current;
+    setIsPreparingDetectedMetadata(true);
 
-    for (const detection of nextDetections) {
-      if (!detectionIdsToAutofill.includes(detection.id)) {
-        continue;
+    try {
+      for (const detection of nextDetections) {
+        if (!detectionIdsToAutofill.includes(detection.id)) {
+          continue;
+        }
+
+        setAutofillingDetectionId(detection.id);
+
+        try {
+          const suggestion = await generateOutfitDetectionMetadataSuggestions(detection.id);
+          if (detectionMetadataRunRef.current !== runId) {
+            return;
+          }
+
+          setEditedDetections((current) => ({
+            ...current,
+            [detection.id]: mergeMetadataSuggestion(
+              current[detection.id] ?? toClothingItemFormValuesFromDetection(detection),
+              suggestion,
+            ),
+          }));
+        } catch {
+          if (detectionMetadataRunRef.current !== runId) {
+            return;
+          }
+        } finally {
+          if (detectionMetadataRunRef.current === runId) {
+            setAutofillingDetectionId((current) => (current === detection.id ? null : current));
+          }
+        }
       }
-
-      setAutofillingDetectionId(detection.id);
-
-      try {
-        const suggestion = await generateOutfitDetectionMetadataSuggestions(detection.id);
-        if (detectionMetadataRunRef.current !== runId) {
-          return;
-        }
-
-        setEditedDetections((current) => ({
-          ...current,
-          [detection.id]: mergeMetadataSuggestion(
-            current[detection.id] ?? toClothingItemFormValuesFromDetection(detection),
-            suggestion,
-          ),
-        }));
-      } catch {
-        if (detectionMetadataRunRef.current !== runId) {
-          return;
-        }
-      } finally {
-        if (detectionMetadataRunRef.current === runId) {
-          setAutofillingDetectionId((current) => (current === detection.id ? null : current));
-        }
+    } finally {
+      if (detectionMetadataRunRef.current === runId) {
+        setIsPreparingDetectedMetadata(false);
       }
     }
   }
@@ -505,7 +518,9 @@ export function CreateItemPage({
           detections={detections}
           errorMessage={errorMessage}
           getDetectionDraft={getDetectionDraft}
+          hasDetectionDraft={hasDetectionDraft}
           inputRef={photoState.inputRef}
+          isPreparingDetectedMetadata={isPreparingDetectedMetadata}
           isCreating={isCreating}
           isDetecting={isDetecting}
           onBack={onBack}

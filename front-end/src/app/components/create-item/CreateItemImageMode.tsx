@@ -28,6 +28,8 @@ interface CreateItemImageModeProps {
   detections: OutfitDetection[];
   errorMessage: string;
   getDetectionDraft: (detection: OutfitDetection) => ClothingItemFormValues;
+  hasDetectionDraft: (detectionId: number) => boolean;
+  isPreparingDetectedMetadata: boolean;
   isCreating: boolean;
   isDetecting: boolean;
   inputRef: RefObject<HTMLInputElement | null>;
@@ -55,6 +57,8 @@ export function CreateItemImageMode({
   detections,
   errorMessage,
   getDetectionDraft,
+  hasDetectionDraft,
+  isPreparingDetectedMetadata,
   isCreating,
   isDetecting,
   inputRef,
@@ -116,11 +120,12 @@ export function CreateItemImageMode({
       : null;
   const detailsDetection =
     detailsDetectionId == null
-      ? null
-      : detections.find((detection) => detection.id === detailsDetectionId) ?? null;
+      ? previewDetection
+      : detections.find((detection) => detection.id === detailsDetectionId) ?? previewDetection ?? null;
   const isSourceFocused = previewTarget === "source";
   const previewDetectionBox = previewDetection ? preferredDetectionBox(previewDetection) : null;
   const detailsPreviewBox = detailsDetection ? preferredDetectionBox(detailsDetection) : null;
+  const detailsDraftReady = detailsDetection ? hasDetectionDraft(detailsDetection.id) : false;
   const focusedDraft = detailsDetection ? getDetectionDraft(detailsDetection) : null;
   const focusedSuggestedName = focusedDraft?.name.trim()
     || detailsDetection?.suggested_name?.trim()
@@ -180,6 +185,11 @@ export function CreateItemImageMode({
   const shouldShowUploadPrompt = !selectedFileName && !isDetecting && !outfitUpload;
   const shouldShowInitialDetectPrompt = Boolean(selectedFileName) && detectionCount === 0;
   const shouldShowRedetectPrompt = hasStartedDetectionFlow && detectionCount > 0 && isSourceFocused;
+  const isLoadingDetectedMetadata = isPreparingDetectedMetadata || autofillingDetectionId !== null;
+  const shouldShowMetadataLoadingState =
+    detectionCount > 0
+    && !isSourceFocused
+    && (!detailsDetection || !detailsDraftReady || isLoadingDetectedMetadata);
   const hasUnsavedDetectedItems = selectedCount < detectionCount;
   const detectPromptCopy = "Press the button below to detect your items.";
 
@@ -330,7 +340,21 @@ export function CreateItemImageMode({
           </div>
         ) : null}
 
-        {!hasStartedDetectionFlow || isDetecting || !outfitUpload || detectionCount === 0 || !detailsDetection || !focusedDraft || isSourceFocused ? null : (
+        {shouldShowMetadataLoadingState && (!detailsDetection || !detailsDraftReady) ? (
+          <div className="border border-border bg-card p-5">
+            <div className="flex items-start gap-3">
+              <LoaderCircle className="mt-0.5 h-5 w-5 animate-spin text-muted-foreground" />
+              <div className="space-y-1">
+                <p className="font-medium">Preparing detected item details...</p>
+                <p className="text-sm text-muted-foreground">
+                  We&apos;re filling in the detected type, name, brand, and tags now.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {!hasStartedDetectionFlow || isDetecting || !outfitUpload || detectionCount === 0 || !detailsDetection || !focusedDraft || !detailsDraftReady || isSourceFocused ? null : (
           <ItemMetadataPanel
             action={
               <AiMetadataAutofillButton
@@ -344,6 +368,18 @@ export function CreateItemImageMode({
             category={focusedDraft.category || detailsDetection.category}
             title={focusedSuggestedName}
           >
+            {shouldShowMetadataLoadingState ? (
+              <div className="flex items-start gap-3 border border-border/70 bg-muted/35 px-3 py-3 text-sm">
+                <LoaderCircle className="mt-0.5 h-4 w-4 animate-spin text-muted-foreground" />
+                <div className="space-y-0.5">
+                  <p className="font-medium">Preparing detected item details...</p>
+                  <p className="text-muted-foreground">
+                    Type, name, brand, and tags may update in a moment.
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
             {focusedCleanError && (
               <div className="border border-destructive/20 bg-destructive/5 px-3 py-3 text-sm">
                 {focusedCleanError}
