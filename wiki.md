@@ -1,8 +1,8 @@
-# Project Closet Organizer Wiki
+# Curated Closet Wiki
 
 ## Project Purpose
 
-Project Closet Organizer helps users keep track of wardrobe items in one place and turn that data into reusable outfit decisions. The app focuses on capturing clothing items, organizing them with lightweight metadata, and turning uploaded outfit photos into reusable closet records.
+Curated Closet helps users keep track of wardrobe items in one place and turn that data into reusable outfit decisions. The app focuses on capturing clothing items, organizing them with lightweight metadata, and turning uploaded outfit photos into reusable closet records.
 
 ## Problem Statement
 

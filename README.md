@@ -1,6 +1,6 @@
-# Project Closet Organizer
+# Curated Closet
 
-Project Closet Organizer is a monorepo with a Rails JSON API in `back-end/` and a React + Vite client in `front-end/`. The current app supports Google-authenticated closet management, item creation and editing, AI-assisted metadata and image cleanup, outfit building, and outfit-photo import that detects visible clothing pieces.
+Curated Closet is a monorepo with a Rails JSON API in `back-end/` and a React + Vite client in `front-end/`. The current app supports Google-authenticated closet management, item creation and editing, AI-assisted metadata and image cleanup, outfit building, and outfit-photo import that detects visible clothing pieces.
 
 ## Current Scope
 

@@ -1,6 +1,6 @@
 # Project Structure Index
 
-Last updated: 2026-05-15
+Last updated: 2026-05-17
 
 This file is intentionally concise and focused on repository structure.
 For the product purpose and problem statement, see `wiki.md`.
