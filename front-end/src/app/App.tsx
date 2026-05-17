@@ -187,7 +187,9 @@ export default function App() {
   }, [route.kind]);
 
   useEffect(() => {
-    if (!isProtectedRoute(route)) {
+    const shouldLoadSession = route.kind === "home" || isProtectedRoute(route);
+
+    if (!shouldLoadSession) {
       setIsLoading(false);
       return;
     }
@@ -203,8 +205,10 @@ export default function App() {
         const nextUser = await fetchCurrentUser(controller.signal);
         if (!nextUser) {
           setUser(null);
-          setHomeMessage({ kind: "error", text: unauthorizedMessage });
-          navigateTo("/");
+          if (isProtectedRoute(route)) {
+            setHomeMessage({ kind: "error", text: unauthorizedMessage });
+            navigateTo("/");
+          }
           return;
         }
 
@@ -338,7 +342,7 @@ export default function App() {
 
   let pageContent;
 
-  if (isLoggedOutProtectedRoute && isLoading) {
+  if ((route.kind === "home" || isLoggedOutProtectedRoute) && isLoading) {
     return <div className="min-h-screen bg-background" />;
   }
 
