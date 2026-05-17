@@ -1,6 +1,6 @@
-# Closet Organizer Frontend
+# Curated Closet Frontend
 
-React + Vite client for Closet Organizer.
+React + Vite client for Curated Closet.
 
 The current frontend supports authenticated closet management, item creation and editing, AI-assisted metadata and image cleanup flows, saved outfits, admin-only user pages, and outfit-photo import that can be reviewed and converted into closet items.
 

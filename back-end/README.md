@@ -1,6 +1,6 @@
-# Digital Closet Organizer API
+# Curated Closet API
 
-Rails 8 JSON backend for Closet Organizer.
+Rails 8 JSON backend for Curated Closet.
 
 ## Stack
 
