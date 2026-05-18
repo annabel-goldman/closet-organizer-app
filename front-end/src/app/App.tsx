@@ -28,6 +28,10 @@ import {
   PrimitiveSelectValue,
 } from "./components/primitives/PrimitiveSelect";
 import { PrimitiveText } from "./components/primitives/PrimitiveText";
+import { AboutPage } from "./components/info/AboutPage";
+import { HomeFooterLinks } from "./components/info/HomeFooterLinks";
+import { PrivacyPage } from "./components/info/PrivacyPage";
+import { TermsPage } from "./components/info/TermsPage";
 import { AccessRestrictedState } from "./components/shared/AccessRestrictedState";
 import { Input } from "./components/ui/input";
 import {
@@ -408,9 +412,16 @@ export default function App() {
               <PrimitiveText as="p" variant="bodySm">{homeMessage.text}</PrimitiveText>
             </div>
           ) : null}
+          <HomeFooterLinks className="mt-12" />
         </motion.div>
       </section>
     );
+  } else if (route.kind === "about") {
+    pageContent = <AboutPage />;
+  } else if (route.kind === "privacy") {
+    pageContent = <PrivacyPage />;
+  } else if (route.kind === "terms") {
+    pageContent = <TermsPage />;
   } else if (route.kind === "not-found") {
     pageContent = (
       <div className="max-w-3xl mx-auto px-6 py-16">
@@ -814,11 +825,11 @@ export default function App() {
       ) : null}
 
       <footer className="mt-12 border-t border-border">
-        <div className="mx-auto flex max-w-7xl flex-col gap-2 px-6 py-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <PrimitiveText as="p" variant="bodySm">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <PrimitiveText as="p" variant="bodySm" tone="muted">
             Curating closets and serving looks, one hanger at a time.
           </PrimitiveText>
-          <PrimitiveText as="p" variant="bodySm">Pressed, polished, and ready for the runway.</PrimitiveText>
+          <HomeFooterLinks />
         </div>
       </footer>
     </div>

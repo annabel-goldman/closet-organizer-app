@@ -36,6 +36,18 @@ interface NotFoundRouteState {
   kind: "not-found";
 }
 
+interface AboutRouteState {
+  kind: "about";
+}
+
+interface PrivacyRouteState {
+  kind: "privacy";
+}
+
+interface TermsRouteState {
+  kind: "terms";
+}
+
 export type AppRoute =
   | HomeRouteState
   | ClosetRouteState
@@ -44,7 +56,14 @@ export type AppRoute =
   | UserRouteState
   | NewItemRouteState
   | OutfitsRouteState
+  | AboutRouteState
+  | PrivacyRouteState
+  | TermsRouteState
   | NotFoundRouteState;
+
+export function isPublicInfoRoute(route: AppRoute) {
+  return route.kind === "about" || route.kind === "privacy" || route.kind === "terms";
+}
 
 export function isClosetRoute(route: AppRoute) {
   return route.kind === "closet" || route.kind === "item" || route.kind === "new-item";
@@ -59,7 +78,7 @@ export function isUsersRoute(route: AppRoute) {
 }
 
 export function isProtectedRoute(route: AppRoute) {
-  return route.kind !== "home" && route.kind !== "not-found";
+  return route.kind !== "home" && route.kind !== "not-found" && !isPublicInfoRoute(route);
 }
 
 export function authErrorMessage(code: string | null) {
@@ -116,6 +135,18 @@ export function getRouteFromLocation(
 
   if (itemMatch) {
     return { kind: "item", itemId: Number(itemMatch[1]) };
+  }
+
+  if (normalizedPath === "/about") {
+    return { kind: "about" };
+  }
+
+  if (normalizedPath === "/privacy") {
+    return { kind: "privacy" };
+  }
+
+  if (normalizedPath === "/terms") {
+    return { kind: "terms" };
   }
 
   if (normalizedPath === "/") {
