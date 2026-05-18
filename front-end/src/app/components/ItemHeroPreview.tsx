@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { motion } from "motion/react";
-import { Trash2, Upload } from "lucide-react";
+import { LoaderCircle, Trash2, Upload } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,7 @@ interface ItemHeroPreviewProps {
   previewAriaLabel?: string;
   previewBackgroundDecoration?: ReactNode;
   previewMedia?: ReactNode;
+  isPreviewProcessing?: boolean;
   previewTopAction?: ReactNode;
   secondaryDetail?: string | null;
   title: string;
@@ -39,6 +40,7 @@ export function ItemHeroPreview({
   previewAriaLabel,
   previewBackgroundDecoration,
   previewMedia,
+  isPreviewProcessing = false,
   previewTopAction,
   secondaryDetail,
   title,
@@ -100,6 +102,18 @@ export function ItemHeroPreview({
             onKeyDown={(event) => event.stopPropagation()}
           >
             {previewTopAction}
+          </div>
+        ) : null}
+
+        {isPreviewProcessing ? (
+          <div
+            className="absolute inset-0 z-40 flex items-center justify-center bg-neutral-950/55 backdrop-blur-[2px]"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            aria-label="Cleaning image"
+          >
+            <LoaderCircle className="h-8 w-8 animate-spin text-white" />
           </div>
         ) : null}
 

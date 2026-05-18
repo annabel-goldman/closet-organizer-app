@@ -12,6 +12,7 @@ interface UploadWorkspaceProps {
   previewAriaLabel?: string;
   previewBackgroundDecoration?: ReactNode;
   previewMedia?: ReactNode;
+  isPreviewProcessing?: boolean;
   previewTopAction?: ReactNode;
   previewLabel: string;
   previewPrimaryDetail: string;
@@ -29,6 +30,7 @@ export function UploadWorkspace({
   previewAriaLabel,
   previewBackgroundDecoration,
   previewMedia,
+  isPreviewProcessing,
   previewTopAction,
   previewLabel,
   previewPrimaryDetail,
@@ -48,6 +50,7 @@ export function UploadWorkspace({
           previewAriaLabel={previewAriaLabel}
           previewBackgroundDecoration={previewBackgroundDecoration}
           previewMedia={previewMedia}
+          isPreviewProcessing={isPreviewProcessing}
           previewTopAction={previewTopAction}
           primaryDetail={previewPrimaryDetail}
           secondaryDetail={previewSecondaryDetail}

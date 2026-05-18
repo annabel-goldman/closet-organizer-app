@@ -19,6 +19,7 @@ interface ItemEditorWorkspaceProps {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   previewAriaLabel?: string;
   previewBackgroundDecoration?: ReactNode;
+  isPreviewProcessing?: boolean;
   previewLabel: string;
   previewPrimaryDetail: string;
   previewSecondaryDetail?: string | null;
@@ -40,6 +41,7 @@ export function ItemEditorWorkspace({
   onSubmit,
   previewAriaLabel,
   previewBackgroundDecoration,
+  isPreviewProcessing,
   previewLabel,
   previewPrimaryDetail,
   previewSecondaryDetail,
@@ -86,6 +88,7 @@ export function ItemEditorWorkspace({
           onPreviewEdit={onPreviewEdit}
           previewAriaLabel={previewAriaLabel}
           previewBackgroundDecoration={previewBackgroundDecoration}
+          isPreviewProcessing={isPreviewProcessing}
           previewTopAction={previewTopAction}
           previewLabel={previewLabel}
           previewPrimaryDetail={previewPrimaryDetail}
