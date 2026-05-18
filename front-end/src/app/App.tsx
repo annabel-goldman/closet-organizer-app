@@ -312,6 +312,14 @@ export default function App() {
     });
   }
 
+  function removeItemFromOutfitDraft(itemId: number) {
+    setOutfitDraftNotice("Removed from outfit draft.");
+    setOutfitDraft((current) => ({
+      ...current,
+      itemIds: current.itemIds.filter((id) => id !== itemId),
+    }));
+  }
+
   async function handleLogout() {
     try {
       await logoutSession();
@@ -701,23 +709,6 @@ export default function App() {
 
             </motion.div>
 
-            {outfitDraft.itemIds.length > 0 ? (
-              <div className="mb-6 flex items-center justify-between gap-4 border border-border bg-card px-4 py-3">
-                <PrimitiveText as="p" variant="bodySm" tone="muted">
-                  {outfitDraft.itemIds.length}{" "}
-                  {outfitDraft.itemIds.length === 1 ? "item" : "items"} in your outfit draft
-                </PrimitiveText>
-                <PrimitiveButton
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigateTo("/outfits")}
-                >
-                  Save Outfit
-                  <ArrowRight className="w-3 h-3" />
-                </PrimitiveButton>
-              </div>
-            ) : null}
-
             {user && filteredClothingItems.length > 0 ? (
               <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-12 lg:grid-cols-4">
                 {filteredClothingItems.map((item, index) => (
@@ -728,6 +719,7 @@ export default function App() {
                     isInOutfit={outfitDraft.itemIds.includes(item.id)}
                     onSelect={(itemId) => navigateTo(`/items/${itemId}`)}
                     onAddToOutfit={addItemToOutfitDraft}
+                    onRemoveFromOutfit={removeItemFromOutfitDraft}
                   />
                 ))}
               </div>

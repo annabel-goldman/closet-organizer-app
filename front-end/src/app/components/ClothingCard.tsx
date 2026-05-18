@@ -18,6 +18,7 @@ interface ClothingCardProps {
   isInOutfit?: boolean;
   onSelect?: (id: number) => void;
   onAddToOutfit?: (id: number) => void;
+  onRemoveFromOutfit?: (id: number) => void;
 }
 
 export function ClothingCard({
@@ -30,6 +31,7 @@ export function ClothingCard({
   isInOutfit,
   onSelect,
   onAddToOutfit,
+  onRemoveFromOutfit,
 }: ClothingCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const itemMetadata = buildItemPreviewMetadata(size, tags);
@@ -120,13 +122,17 @@ export function ClothingCard({
           <PrimitiveButton
             onClick={(event) => {
               event.stopPropagation();
-              onAddToOutfit?.(id);
+              if (isInOutfit) {
+                onRemoveFromOutfit?.(id);
+              } else {
+                onAddToOutfit?.(id);
+              }
             }}
             className="h-auto w-full bg-white/90 px-4 py-2 backdrop-blur-sm hover:bg-white"
           >
-            {isInOutfit ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+            {isInOutfit ? <X className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
             <PrimitiveText as="span" variant="bodySm">
-              {isInOutfit ? "Already added to outfit" : "Add to Outfit"}
+              {isInOutfit ? "Remove from outfit" : "Add to Outfit"}
             </PrimitiveText>
           </PrimitiveButton>
         </motion.div>
