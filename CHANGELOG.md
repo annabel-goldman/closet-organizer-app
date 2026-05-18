@@ -11,9 +11,6 @@
 - Added explicit loading feedback while detected-item metadata is still being prepared so the detect workflow no longer leaves the details pane blank during AI autofill.
 - Tuned the closet page for narrow mobile/PWA installs by keeping filter controls in a horizontal row, tightening trigger spacing, and using a denser two-column mobile item grid with slightly squarer cards.
 - Hardened local startup checks so `start.sh` can surface missing Ruby/Node toolchains earlier and fall back to common local Ruby install paths more gracefully.
-- Added a persistent draft bar above the closet grid showing how many items are in the current outfit draft, with a "Save Outfit" link to My Outfits.
-- Clothing cards now show a checkmark and "Already added to outfit" on the hover button when the item is already in the draft, making it clear what's been selected.
-- Suppressed the "already in draft" toast — the card state communicates this visually instead.
 
 ## v2.0.2 - 2026-05-14
 
