@@ -15,6 +15,13 @@ import {
   saveClothingItem,
   toClothingItemFormValues,
 } from "../lib/closet";
+import {
+  ClothingItemFormErrors,
+  clothingItemFieldElementId,
+  firstInvalidClothingItemField,
+  hasClothingItemFormErrors,
+  validateClothingItemForm,
+} from "../lib/itemFormValidation";
 import { usePageData } from "../lib/usePageData";
 import { AiCleanImageButton } from "./AiCleanImageButton";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
@@ -23,22 +30,36 @@ import { ItemMetadataFields } from "./ItemMetadataFields";
 import { ItemMetadataPanel } from "./ItemMetadataPanel";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
 import { useItemPhotoState } from "../lib/useItemPhotoState";
 
 interface ItemDetailPageProps {
+  brandSuggestions?: string[];
   itemId: number;
   initialItem?: ClothingItem | null;
   onBack: () => void;
-  onItemSaved: (item: ClothingItem) => void;
   onItemDeleted: (itemId: number) => void;
+  onItemSaved: (item: ClothingItem) => void;
+  tagSuggestions?: string[];
 }
 
 export function ItemDetailPage({
+  brandSuggestions = [],
   itemId,
   initialItem,
   onBack,
-  onItemSaved,
   onItemDeleted,
+  onItemSaved,
+  tagSuggestions = [],
 }: ItemDetailPageProps) {
   const shouldUseInitialItem = Boolean(initialItem?.id === itemId);
   const photoState = useItemPhotoState(initialItem?.image_url);
@@ -46,10 +67,12 @@ export function ItemDetailPage({
   const [formValues, setFormValues] = useState<ClothingItemFormValues | null>(
     shouldUseInitialItem && initialItem ? toClothingItemFormValues(initialItem) : null,
   );
+  const [fieldErrors, setFieldErrors] = useState<ClothingItemFormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCleaningImage, setIsCleaningImage] = useState(false);
   const [isAutofillingMetadata, setIsAutofillingMetadata] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const {
     data: item,
@@ -108,14 +131,38 @@ export function ItemDetailPage({
       return;
     }
 
-    if (item.image_url && !photoState.removeExisting) {
+    if (item?.image_url && !photoState.removeExisting) {
       photoState.markExistingForRemoval();
+    }
+  }
+
+  function focusFirstInvalidField(errors: ClothingItemFormErrors) {
+    const firstField = firstInvalidClothingItemField(errors);
+    if (!firstField) {
+      return;
+    }
+
+    document.getElementById(clothingItemFieldElementId(firstField))?.focus();
+  }
+
+  function handleFormValuesChange(nextValues: ClothingItemFormValues) {
+    setFormValues(nextValues);
+    if (Object.keys(fieldErrors).length > 0) {
+      setFieldErrors(validateClothingItemForm(nextValues));
     }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!item || !formValues) {
+      return;
+    }
+
+    const validationErrors = validateClothingItemForm(formValues);
+    setFieldErrors(validationErrors);
+
+    if (hasClothingItemFormErrors(validationErrors)) {
+      focusFirstInvalidField(validationErrors);
       return;
     }
 
@@ -143,16 +190,12 @@ export function ItemDetailPage({
       return;
     }
 
-    const confirmed = window.confirm(`Delete ${item.name}? This cannot be undone.`);
-    if (!confirmed) {
-      return;
-    }
-
     setIsDeleting(true);
     setErrorMessage("");
 
     try {
       await destroyClothingItem(item.id);
+      setIsDeleteDialogOpen(false);
       onItemDeleted(item.id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to delete this clothing item.");
@@ -161,7 +204,7 @@ export function ItemDetailPage({
   }
 
   async function handleCleanImage() {
-    if (!item) {
+    if (!item || !formValues) {
       return;
     }
 
@@ -262,16 +305,39 @@ export function ItemDetailPage({
       backLabel="Back to closet"
       formLabel="Edit Item"
       formTopAction={
-        <PrimitiveButton
-          type="button"
-          onClick={() => void handleDelete()}
-          disabled={isDeleting}
-          variant="outline"
-          className="border-destructive/30 text-destructive hover:bg-destructive/5"
-        >
-          <Trash2 className="w-4 h-4" />
-          {isDeleting ? "Deleting..." : "Delete"}
-        </PrimitiveButton>
+        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <PrimitiveButton
+            type="button"
+            onClick={() => setIsDeleteDialogOpen(true)}
+            disabled={isDeleting}
+            variant="outline"
+            className="border-destructive/30 text-destructive hover:bg-destructive/5"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete
+          </PrimitiveButton>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete {item.name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This removes the item from your closet and cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={isDeleting}
+                className="bg-destructive text-white hover:bg-destructive/90"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void handleDelete();
+                }}
+              >
+                {isDeleting ? "Deleting..." : "Delete item"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       }
       imageUrl={photoState.imageUrl}
       onBack={onBack}
@@ -351,8 +417,11 @@ export function ItemDetailPage({
       >
         <div className="grid gap-5 sm:grid-cols-2">
           <ItemMetadataFields
-            onChange={setFormValues}
+            brandSuggestions={brandSuggestions}
+            errors={fieldErrors}
+            onChange={handleFormValuesChange}
             showAutofillButton={false}
+            tagSuggestions={tagSuggestions}
             values={formValues}
           />
         </div>

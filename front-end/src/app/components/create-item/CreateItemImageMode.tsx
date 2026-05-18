@@ -23,6 +23,7 @@ import { DetectionThumbnailStrip } from "./DetectionThumbnailStrip";
 
 interface CreateItemImageModeProps {
   autofillingDetectionId: number | null;
+  brandSuggestions?: string[];
   cleaningDetectionIds: number[];
   detectionCleanErrors: Record<number, string>;
   detections: OutfitDetection[];
@@ -47,11 +48,13 @@ interface CreateItemImageModeProps {
   selectedDetectionIds: number[];
   selectedFileName?: string;
   sourceImageUrl: string | null;
+  tagSuggestions?: string[];
   user: User;
 }
 
 export function CreateItemImageMode({
   autofillingDetectionId,
+  brandSuggestions = [],
   cleaningDetectionIds,
   detectionCleanErrors,
   detections,
@@ -76,6 +79,7 @@ export function CreateItemImageMode({
   selectedDetectionIds,
   selectedFileName,
   sourceImageUrl,
+  tagSuggestions = [],
   user,
 }: CreateItemImageModeProps) {
   const detectionCount = detections.length;
@@ -389,8 +393,11 @@ export function CreateItemImageMode({
             <div className="grid gap-5 sm:grid-cols-2">
               <ItemMetadataFields
                 autofillDisabled={!detailsPreviewBox && !detailsDetection.cleaned_image_url}
+                brandSuggestions={brandSuggestions}
+                fieldIdPrefix={`detection-${detailsDetection.id}-`}
                 isAutofilling={focusedIsAutofilling}
                 showAutofillButton={false}
+                tagSuggestions={tagSuggestions}
                 values={focusedDraft}
                 onChange={(nextValues) => onDraftChange(detailsDetection.id, nextValues)}
               />
