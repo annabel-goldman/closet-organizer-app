@@ -173,40 +173,51 @@ export function UsersDirectoryPage({ onBack, onSelectUser }: UsersDirectoryPageP
                     transition={{ duration: 0.45, delay: index * 0.02 }}
                     onClick={() => onSelectUser(user.id)}
                     variant="outline"
-                    className="h-auto justify-start bg-card p-6 text-left hover:border-foreground"
+                    className="h-auto w-full whitespace-normal items-stretch justify-start gap-0 bg-card p-6 text-left hover:border-foreground"
                   >
-                    <PrimitiveText as="p" variant="overline" tone="muted" className="mb-4">
-                      Closet Owner
-                    </PrimitiveText>
-                    <PrimitiveText as="h2" variant="title" font="serif" className="mb-2">
-                      {titleize(user.username)}
-                    </PrimitiveText>
-                    <PrimitiveText as="p" tone="muted" className="mb-6">
-                      {formatPossessive(titleize(user.username))}
-                    </PrimitiveText>
-                    <div className="grid grid-cols-2 gap-4 text-sm mb-6">
-                      <div className="border border-border p-4">
-                        <PrimitiveText as="p" variant="bodySm" tone="muted" className="mb-1">
-                          Items
-                        </PrimitiveText>
-                        <PrimitiveText as="p" variant="stat" font="serif">
-                          {user.clothing_items_count.toLocaleString()}
-                        </PrimitiveText>
-                      </div>
-                      <div className="border border-border p-4">
-                        <PrimitiveText as="p" variant="bodySm" tone="muted" className="mb-1">
-                          Style
-                        </PrimitiveText>
-                        <PrimitiveText as="p" variant="stat" font="serif">
-                          {preferredStyle ?? "N/A"}
-                        </PrimitiveText>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <PrimitiveText as="span" variant="bodySm">
-                        Open details
+                    <div className="flex w-full flex-col items-start text-left">
+                      <PrimitiveText as="p" variant="overline" tone="muted" className="mb-4">
+                        Closet Owner
                       </PrimitiveText>
-                      <ChevronRight className="w-4 h-4" />
+                      <PrimitiveText
+                        as="h2"
+                        variant="title"
+                        font="serif"
+                        className="mb-2 w-full break-words"
+                      >
+                        {titleize(user.username)}
+                      </PrimitiveText>
+                      <PrimitiveText
+                        as="p"
+                        tone="muted"
+                        className="mb-6 w-full break-words"
+                      >
+                        {formatPossessive(titleize(user.username))}
+                      </PrimitiveText>
+                      <div className="mb-6 grid w-full grid-cols-2 gap-4 text-sm">
+                        <div className="border border-border p-4">
+                          <PrimitiveText as="p" variant="bodySm" tone="muted" className="mb-1">
+                            Items
+                          </PrimitiveText>
+                          <PrimitiveText as="p" variant="stat" font="serif">
+                            {user.clothing_items_count.toLocaleString()}
+                          </PrimitiveText>
+                        </div>
+                        <div className="border border-border p-4">
+                          <PrimitiveText as="p" variant="bodySm" tone="muted" className="mb-1">
+                            Style
+                          </PrimitiveText>
+                          <PrimitiveText as="p" variant="stat" font="serif">
+                            {preferredStyle ?? "N/A"}
+                          </PrimitiveText>
+                        </div>
+                      </div>
+                      <div className="flex w-full items-center justify-between text-sm">
+                        <PrimitiveText as="span" variant="bodySm">
+                          Open details
+                        </PrimitiveText>
+                        <ChevronRight className="h-4 w-4" />
+                      </div>
                     </div>
                   </MotionPrimitiveButton>
                 );
