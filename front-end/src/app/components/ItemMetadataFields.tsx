@@ -9,6 +9,12 @@ import {
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import {
+  MAX_CLOTHING_ITEM_BRAND,
+  MAX_CLOTHING_ITEM_CATEGORY,
+  MAX_CLOTHING_ITEM_NAME,
+  MAX_TAG_LENGTH,
+} from "../lib/inputLengthPolicy";
 
 interface ItemMetadataFieldsProps {
   autofillDisabled?: boolean;
@@ -109,6 +115,7 @@ export function ItemMetadataFields({
           onChange={(event) => updateField("category", event.target.value)}
           className="w-full border border-border bg-card px-4 py-3"
           placeholder="e.g. sweater, jacket, dress"
+          maxLength={MAX_CLOTHING_ITEM_CATEGORY}
         />
       </label>
 
@@ -119,6 +126,7 @@ export function ItemMetadataFields({
           onChange={(event) => updateField("name", event.target.value)}
           className="w-full border border-border bg-card px-4 py-3"
           required
+          maxLength={MAX_CLOTHING_ITEM_NAME}
         />
       </label>
 
@@ -154,6 +162,7 @@ export function ItemMetadataFields({
           onChange={(event) => updateField("brand", event.target.value)}
           className="w-full border border-border bg-card px-4 py-3"
           placeholder="Optional, e.g. COS, Nike"
+          maxLength={MAX_CLOTHING_ITEM_BRAND}
         />
       </label>
 
@@ -191,6 +200,7 @@ export function ItemMetadataFields({
                 placeholder="Add tag"
                 className="h-9 w-32 border border-border bg-background px-3 py-1"
                 autoFocus
+                maxLength={MAX_TAG_LENGTH}
               />
               <PrimitiveButton
                 type="button"
