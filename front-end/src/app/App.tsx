@@ -304,18 +304,15 @@ export default function App() {
   }
 
   function addItemToOutfitDraft(itemId: number) {
-    setOutfitDraft((current) => {
-      if (current.itemIds.includes(itemId)) {
-        setOutfitDraftNotice("Already in your outfit draft.");
-        return current;
-      }
+    if (outfitDraft.itemIds.includes(itemId)) {
+      return;
+    }
 
-      setOutfitDraftNotice("Added to outfit draft.");
-      return {
-        ...current,
-        itemIds: [itemId, ...current.itemIds],
-      };
-    });
+    setOutfitDraftNotice("Added to outfit draft.");
+    setOutfitDraft((current) => ({
+      ...current,
+      itemIds: [itemId, ...current.itemIds],
+    }));
   }
 
   async function handleLogout() {
