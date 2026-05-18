@@ -7,6 +7,7 @@ import {
   parseTagInput,
 } from "../lib/closet";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
+import { AiActionLoadingNotice } from "./shared/AiActionLoadingNotice";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 
@@ -100,6 +101,13 @@ export function ItemMetadataFields({
             onClick={onRequestAutofill}
           />
         </div>
+      ) : null}
+
+      {isAutofilling ? (
+        <AiActionLoadingNotice
+          className="sm:col-span-2"
+          message="Autofilling type, name, brand, and tags..."
+        />
       ) : null}
 
       <label className="space-y-2 sm:col-span-2">

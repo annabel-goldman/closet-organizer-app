@@ -286,6 +286,7 @@ export function ItemDetailPage({
           strokeWidth={1.1}
         />
       }
+      isPreviewProcessing={isCleaningImage}
       previewTopAction={
         <AiCleanImageButton
           className="size-11 border border-white/75 shadow-sm bg-white/70 p-0 backdrop-blur-sm hover:bg-white/85"
@@ -351,6 +352,7 @@ export function ItemDetailPage({
       >
         <div className="grid gap-5 sm:grid-cols-2">
           <ItemMetadataFields
+            isAutofilling={isAutofillingMetadata}
             onChange={setFormValues}
             showAutofillButton={false}
             values={formValues}

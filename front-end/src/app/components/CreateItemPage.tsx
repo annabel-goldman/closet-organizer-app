@@ -570,6 +570,7 @@ export function CreateItemPage({
           strokeWidth={1.1}
         />
       }
+      isPreviewProcessing={isCleaningUploadedPhoto}
       previewTopAction={
         <AiCleanImageButton
           className="size-11 border border-white/75 shadow-sm bg-white/70 p-0 backdrop-blur-sm hover:bg-white/85"
@@ -625,6 +626,7 @@ export function CreateItemPage({
       >
         <div className="grid gap-5 sm:grid-cols-2">
           <ItemMetadataFields
+            isAutofilling={isAutofillingMetadata}
             onChange={setFormValues}
             showAutofillButton={false}
             values={formValues}
