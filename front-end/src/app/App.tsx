@@ -28,6 +28,10 @@ import {
   PrimitiveSelectValue,
 } from "./components/primitives/PrimitiveSelect";
 import { PrimitiveText } from "./components/primitives/PrimitiveText";
+import { AboutPage } from "./components/info/AboutPage";
+import { HomeFooterLinks } from "./components/info/HomeFooterLinks";
+import { PrivacyPage } from "./components/info/PrivacyPage";
+import { TermsPage } from "./components/info/TermsPage";
 import { AccessRestrictedState } from "./components/shared/AccessRestrictedState";
 import { ClosetEmptyState } from "./components/shared/ClosetEmptyState";
 import { HomeLanding } from "./components/shared/HomeLanding";
@@ -340,6 +344,12 @@ export default function App() {
 
   if ((!user && route.kind === "home") || (isLoggedOutProtectedRoute && !isLoading)) {
     pageContent = <HomeLanding homeMessage={homeMessage} />;
+  } else if (route.kind === "about") {
+    pageContent = <AboutPage />;
+  } else if (route.kind === "privacy") {
+    pageContent = <PrivacyPage />;
+  } else if (route.kind === "terms") {
+    pageContent = <TermsPage />;
   } else if (route.kind === "not-found") {
     pageContent = <NotFoundPage signedIn={Boolean(user)} />;
   } else if (isUnauthorizedAdminRoute) {
