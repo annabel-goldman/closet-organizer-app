@@ -304,18 +304,23 @@ export default function App() {
   }
 
   function addItemToOutfitDraft(itemId: number) {
-    setOutfitDraft((current) => {
-      if (current.itemIds.includes(itemId)) {
-        setOutfitDraftNotice("Already in your outfit draft.");
-        return current;
-      }
+    if (outfitDraft.itemIds.includes(itemId)) {
+      return;
+    }
 
-      setOutfitDraftNotice("Added to outfit draft.");
-      return {
-        ...current,
-        itemIds: [itemId, ...current.itemIds],
-      };
-    });
+    setOutfitDraftNotice("Added to outfit draft.");
+    setOutfitDraft((current) => ({
+      ...current,
+      itemIds: [itemId, ...current.itemIds],
+    }));
+  }
+
+  function removeItemFromOutfitDraft(itemId: number) {
+    setOutfitDraftNotice("Removed from outfit draft.");
+    setOutfitDraft((current) => ({
+      ...current,
+      itemIds: current.itemIds.filter((id) => id !== itemId),
+    }));
   }
 
   async function handleLogout() {
@@ -726,7 +731,9 @@ export default function App() {
                     {...item}
                     index={index}
                     onSelect={(itemId) => navigateTo(`/items/${itemId}`)}
+                    isInOutfit={outfitDraft.itemIds.includes(item.id)}
                     onAddToOutfit={addItemToOutfitDraft}
+                    onRemoveFromOutfit={removeItemFromOutfitDraft}
                   />
                 ))}
               </div>
