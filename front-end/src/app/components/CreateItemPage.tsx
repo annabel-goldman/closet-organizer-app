@@ -22,6 +22,14 @@ import {
   toClothingItemFormValuesFromDetection,
   User,
 } from "../lib/closet";
+import {
+  ClothingItemFormErrors,
+  clothingItemFieldElementId,
+  collectClosetSuggestions,
+  firstInvalidClothingItemField,
+  hasClothingItemFormErrors,
+  validateClothingItemForm,
+} from "../lib/itemFormValidation";
 import { usePageData } from "../lib/usePageData";
 import { AiCleanImageButton } from "./AiCleanImageButton";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
@@ -53,6 +61,7 @@ export function CreateItemPage({
   const detectionMetadataRunRef = useRef(0);
   const originalUploadedPhotoRef = useRef<File | null>(null);
   const [formValues, setFormValues] = useState(emptyClothingItemFormValues);
+  const [fieldErrors, setFieldErrors] = useState<ClothingItemFormErrors>({});
   const [isCreating, setIsCreating] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [isCleaningUploadedPhoto, setIsCleaningUploadedPhoto] = useState(false);
@@ -87,6 +96,7 @@ export function CreateItemPage({
   });
 
   const isImageMode = initialMode === "image";
+  const closetSuggestions = collectClosetSuggestions(user?.clothing_items ?? []);
   const sourceImageUrl = photoState.imageUrl ?? outfitUpload?.source_photo_url ?? null;
   const detections = outfitUpload?.detections ?? [];
   const selectedDetections = detections.filter((detection) => selectedDetectionIds.includes(detection.id));
@@ -416,11 +426,28 @@ export function CreateItemPage({
     }
   }
 
+  function focusFirstInvalidField(errors: ClothingItemFormErrors) {
+    const firstField = firstInvalidClothingItemField(errors);
+    if (!firstField) {
+      return;
+    }
+
+    document.getElementById(clothingItemFieldElementId(firstField))?.focus();
+  }
+
   async function handleManualSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!userId) {
       setErrorMessage("A user is required before you can create an item.");
+      return;
+    }
+
+    const validationErrors = validateClothingItemForm(formValues);
+    setFieldErrors(validationErrors);
+
+    if (hasClothingItemFormErrors(validationErrors)) {
+      focusFirstInvalidField(validationErrors);
       return;
     }
 
@@ -447,6 +474,18 @@ export function CreateItemPage({
     if (selectedDetections.length === 0) {
       setErrorMessage("Choose at least one verified detected item to add to the closet.");
       return;
+    }
+
+    for (const detection of selectedDetections) {
+      const draft = getDetectionDraft(detection);
+      const validationErrors = validateClothingItemForm(draft);
+
+      if (hasClothingItemFormErrors(validationErrors)) {
+        setErrorMessage(
+          `Fix the details for "${draft.name.trim() || detection.suggested_name || "detected item"}" before saving.`,
+        );
+        return;
+      }
     }
 
     setIsCreating(true);
@@ -513,6 +552,8 @@ export function CreateItemPage({
     return (
       <>
         <CreateItemImageMode
+          autofillingDetectionId={autofillingDetectionId}
+          brandSuggestions={closetSuggestions.brandSuggestions}
           cleaningDetectionIds={cleaningDetectionIds}
           detectionCleanErrors={detectionCleanErrors}
           detections={detections}
@@ -530,7 +571,6 @@ export function CreateItemPage({
           onDraftChange={updateDetectionDraft}
           onRequestDetectionAutofill={(detection) => void handleAutofillDetectionMetadata(detection)}
           onFileChange={handleImageFileChange}
-          autofillingDetectionId={autofillingDetectionId}
           onSaveSelectedItems={() => void handleSaveSelectedItems()}
           onToggleSelection={toggleDetectionSelection}
           outfitUpload={outfitUpload}
@@ -538,6 +578,7 @@ export function CreateItemPage({
           selectedDetectionIds={selectedDetectionIds}
           selectedFileName={photoState.selectedFile?.name}
           sourceImageUrl={sourceImageUrl}
+          tagSuggestions={closetSuggestions.tagSuggestions}
           user={user}
         />
         <PrimitiveConfirmationDialog
@@ -626,9 +667,17 @@ export function CreateItemPage({
       >
         <div className="grid gap-5 sm:grid-cols-2">
           <ItemMetadataFields
+            brandSuggestions={closetSuggestions.brandSuggestions}
+            errors={fieldErrors}
             isAutofilling={isAutofillingMetadata}
-            onChange={setFormValues}
+            onChange={(nextValues) => {
+              setFormValues(nextValues);
+              if (Object.keys(fieldErrors).length > 0) {
+                setFieldErrors(validateClothingItemForm(nextValues));
+              }
+            }}
             showAutofillButton={false}
+            tagSuggestions={closetSuggestions.tagSuggestions}
             values={formValues}
           />
         </div>

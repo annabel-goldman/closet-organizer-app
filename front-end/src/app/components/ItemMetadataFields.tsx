@@ -1,33 +1,95 @@
 import { KeyboardEvent, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { CircleHelp, Plus, X } from "lucide-react";
 import {
   ClothingItemFormValues,
   formatDisplaySize,
   formatTagInput,
   parseTagInput,
 } from "../lib/closet";
+import { ClothingItemFormErrors, clothingItemFieldElementId } from "../lib/itemFormValidation";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import { AiActionLoadingNotice } from "./shared/AiActionLoadingNotice";
+import {
+  PrimitiveSelect,
+  PrimitiveSelectContent,
+  PrimitiveSelectItem,
+  PrimitiveSelectTrigger,
+  PrimitiveSelectValue,
+} from "./primitives/PrimitiveSelect";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import { Input } from "./ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 interface ItemMetadataFieldsProps {
   autofillDisabled?: boolean;
+  brandSuggestions?: string[];
+  errors?: ClothingItemFormErrors;
+  fieldIdPrefix?: string;
   isAutofilling?: boolean;
   onChange: (nextValues: ClothingItemFormValues) => void;
   onRequestAutofill?: () => void;
   showAutofillButton?: boolean;
+  tagSuggestions?: string[];
   values: ClothingItemFormValues;
 }
 
 const sizeOptions = ["na", "xs", "small", "medium", "large", "xl"];
 
+function FieldError({ message }: { message?: string }) {
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <PrimitiveText as="p" variant="bodySm" tone="destructiveSoft" role="alert">
+      {message}
+    </PrimitiveText>
+  );
+}
+
+function LabelWithTooltip({
+  htmlFor,
+  label,
+  tooltip,
+}: {
+  htmlFor: string;
+  label: string;
+  tooltip: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <PrimitiveText as="span" variant="label">
+        <label htmlFor={htmlFor}>{label}</label>
+      </PrimitiveText>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground"
+            aria-label={`More about ${label.toLowerCase()}`}
+          >
+            <CircleHelp className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs">
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+
 export function ItemMetadataFields({
   autofillDisabled = false,
+  brandSuggestions = [],
+  errors = {},
+  fieldIdPrefix = "",
   isAutofilling = false,
   onChange,
   onRequestAutofill,
   showAutofillButton = true,
+  tagSuggestions = [],
   values,
 }: ItemMetadataFieldsProps) {
   const [draftTag, setDraftTag] = useState("");
@@ -35,6 +97,13 @@ export function ItemMetadataFields({
   const [isAddingTag, setIsAddingTag] = useState(false);
   const tags = parseTagInput(values.tags);
   const visibleTags = editingTag ? tags.filter((tag) => tag !== editingTag) : tags;
+
+  const brandListId = `${fieldIdPrefix}item-brand-suggestions`;
+  const tagListId = `${fieldIdPrefix}item-tag-suggestions`;
+
+  function fieldId(field: keyof ClothingItemFormValues) {
+    return `${fieldIdPrefix}${clothingItemFieldElementId(field)}`;
+  }
 
   function updateField<K extends keyof ClothingItemFormValues>(
     fieldName: K,
@@ -89,6 +158,14 @@ export function ItemMetadataFields({
     setIsAddingTag(true);
   }
 
+  function addTagFromSuggestion(tag: string) {
+    if (!tag.trim() || tags.includes(tag.trim())) {
+      return;
+    }
+
+    updateTags([...tags, tag.trim()]);
+  }
+
   return (
     <>
       {onRequestAutofill && showAutofillButton ? (
@@ -97,7 +174,7 @@ export function ItemMetadataFields({
             className="h-9 w-9"
             disabled={autofillDisabled}
             isLoading={isAutofilling}
-            label="AI autofill name, brand, and tags"
+            label="AI autofill type, name, brand, and tags"
             onClick={onRequestAutofill}
           />
         </div>
@@ -110,64 +187,115 @@ export function ItemMetadataFields({
         />
       ) : null}
 
-      <label className="space-y-2 sm:col-span-2">
-        <PrimitiveText as="span" variant="label">Type</PrimitiveText>
-        <input
+      <label className="space-y-2 sm:col-span-2" htmlFor={fieldId("category")}>
+        <PrimitiveText as="span" variant="label">
+          Type
+        </PrimitiveText>
+        <Input
+          id={fieldId("category")}
           value={values.category}
           onChange={(event) => updateField("category", event.target.value)}
-          className="w-full border border-border bg-card px-4 py-3"
           placeholder="e.g. sweater, jacket, dress"
+          className="h-auto px-4 py-3"
         />
       </label>
 
-      <label className="space-y-2 sm:col-span-2">
-        <PrimitiveText as="span" variant="label">Name</PrimitiveText>
-        <input
+      <label className="space-y-2 sm:col-span-2" htmlFor={fieldId("name")}>
+        <PrimitiveText as="span" variant="label">
+          Name
+        </PrimitiveText>
+        <Input
+          id={fieldId("name")}
           value={values.name}
           onChange={(event) => updateField("name", event.target.value)}
-          className="w-full border border-border bg-card px-4 py-3"
-          required
+          aria-invalid={Boolean(errors.name)}
+          aria-describedby={errors.name ? `${fieldId("name")}-error` : undefined}
+          className="h-auto px-4 py-3"
         />
+        <FieldError message={errors.name} />
+        {errors.name ? (
+          <span id={`${fieldId("name")}-error`} className="sr-only">
+            {errors.name}
+          </span>
+        ) : null}
       </label>
 
-      <label className="space-y-2">
-        <PrimitiveText as="span" variant="label">Size</PrimitiveText>
-        <select
-          value={values.size}
-          onChange={(event) => updateField("size", event.target.value)}
-          className="w-full border border-border bg-card px-4 py-3"
-        >
-          {sizeOptions.map((size) => (
-            <option key={size} value={size}>
-              {formatDisplaySize(size)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="space-y-2">
+        <PrimitiveText as="span" variant="label" id={`${fieldId("size")}-label`}>
+          Size
+        </PrimitiveText>
+        <PrimitiveSelect value={values.size} onValueChange={(value) => updateField("size", value)}>
+          <PrimitiveSelectTrigger
+            id={fieldId("size")}
+            aria-labelledby={`${fieldId("size")}-label`}
+            className="h-auto px-4 py-3"
+          >
+            <PrimitiveSelectValue placeholder="Select size" />
+          </PrimitiveSelectTrigger>
+          <PrimitiveSelectContent>
+            {sizeOptions.map((size) => (
+              <PrimitiveSelectItem key={size} value={size}>
+                {formatDisplaySize(size)}
+              </PrimitiveSelectItem>
+            ))}
+          </PrimitiveSelectContent>
+        </PrimitiveSelect>
+      </div>
 
-      <label className="space-y-2">
-        <PrimitiveText as="span" variant="label">Purchase Date</PrimitiveText>
-        <input
+      <label className="space-y-2" htmlFor={fieldId("date")}>
+        <PrimitiveText as="span" variant="label">
+          Purchase Date
+        </PrimitiveText>
+        <Input
+          id={fieldId("date")}
           type="date"
           value={values.date}
           onChange={(event) => updateField("date", event.target.value)}
-          className="w-full border border-border bg-card px-4 py-3"
+          aria-invalid={Boolean(errors.date)}
+          aria-describedby={errors.date ? `${fieldId("date")}-error` : undefined}
+          className="h-auto px-4 py-3"
         />
+        <FieldError message={errors.date} />
+        {errors.date ? (
+          <span id={`${fieldId("date")}-error`} className="sr-only">
+            {errors.date}
+          </span>
+        ) : null}
       </label>
 
-      <label className="space-y-2 sm:col-span-2">
-        <PrimitiveText as="span" variant="label">Brand</PrimitiveText>
-        <input
+      <label className="space-y-2 sm:col-span-2" htmlFor={fieldId("brand")}>
+        <LabelWithTooltip
+          htmlFor={fieldId("brand")}
+          label="Brand"
+          tooltip="Brands power the Brands filter on your closet. Start typing to reuse a brand you have already saved."
+        />
+        <Input
+          id={fieldId("brand")}
+          list={brandSuggestions.length > 0 ? brandListId : undefined}
           value={values.brand}
           onChange={(event) => updateField("brand", event.target.value)}
-          className="w-full border border-border bg-card px-4 py-3"
           placeholder="Optional, e.g. COS, Nike"
+          className="h-auto px-4 py-3"
         />
+        {brandSuggestions.length > 0 ? (
+          <datalist id={brandListId}>
+            {brandSuggestions.map((brand) => (
+              <option key={brand} value={brand} />
+            ))}
+          </datalist>
+        ) : null}
       </label>
 
       <div className="space-y-2 sm:col-span-2">
-        <PrimitiveText as="span" variant="label">Tags</PrimitiveText>
-        <div className="flex min-h-14 flex-wrap items-center gap-2 border border-border bg-card px-3 py-3">
+        <LabelWithTooltip
+          htmlFor={fieldId("tags")}
+          label="Tags"
+          tooltip="Add tags to improve search and filters. Double-click a tag to edit it, or pick from your closet suggestions."
+        />
+        <div
+          className="flex min-h-14 flex-wrap items-center gap-2 border border-border bg-card px-3 py-3"
+          id={fieldId("tags")}
+        >
           {visibleTags.map((tag) => (
             <div
               key={tag}
@@ -196,6 +324,7 @@ export function ItemMetadataFields({
                 value={draftTag}
                 onChange={(event) => setDraftTag(event.target.value)}
                 onKeyDown={handleTagInputKeyDown}
+                list={tagSuggestions.length > 0 ? tagListId : undefined}
                 placeholder="Add tag"
                 className="h-9 w-32 border border-border bg-background px-3 py-1"
                 autoFocus
@@ -238,6 +367,30 @@ export function ItemMetadataFields({
             </PrimitiveButton>
           )}
         </div>
+        {tagSuggestions.length > 0 ? (
+          <>
+            <datalist id={tagListId}>
+              {tagSuggestions.map((tag) => (
+                <option key={tag} value={tag} />
+              ))}
+            </datalist>
+            <div className="flex flex-wrap gap-2">
+              {tagSuggestions.slice(0, 8).map((tag) => (
+                <PrimitiveButton
+                  key={tag}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => addTagFromSuggestion(tag)}
+                  disabled={tags.includes(tag)}
+                >
+                  {tag}
+                </PrimitiveButton>
+              ))}
+            </div>
+          </>
+        ) : null}
       </div>
     </>
   );
