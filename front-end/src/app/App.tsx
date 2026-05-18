@@ -90,9 +90,15 @@ function removeUserItem(user: User | null, itemId: number) {
     return user;
   }
 
+  const nextItems = user.clothing_items.filter((item) => item.id !== itemId);
+  const removed = nextItems.length !== user.clothing_items.length;
+
   return {
     ...user,
-    clothing_items: user.clothing_items.filter((item) => item.id !== itemId),
+    clothing_items: nextItems,
+    clothing_items_count: removed
+      ? Math.max(0, user.clothing_items_count - 1)
+      : user.clothing_items_count,
   };
 }
 
@@ -475,6 +481,7 @@ export default function App() {
               clothing_items: [...current.clothing_items, ...nextItems].sort((left, right) =>
                 left.name.localeCompare(right.name),
               ),
+              clothing_items_count: current.clothing_items_count + nextItems.length,
             };
           });
 

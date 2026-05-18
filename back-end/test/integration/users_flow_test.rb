@@ -10,7 +10,19 @@ class UsersFlowTest < ActionDispatch::IntegrationTest
     get users_url, headers: auth_headers(@admin), as: :json
 
     assert_response :success
-    assert_equal [ @user.username, @admin.username ].sort, response_json.map { |user| user["username"] }
+    usernames = response_json["users"].map { |user| user["username"] }.sort
+    assert_equal [ @user.username, @admin.username ].sort, usernames
+    assert_equal 2, response_json.dig("meta", "total_count")
+    assert_equal 1, response_json.dig("meta", "page")
+  end
+
+  test "users index paginates with page and per_page" do
+    get users_url(page: 1, per_page: 1), headers: auth_headers(@admin), as: :json
+
+    assert_response :success
+    assert_equal 1, response_json["users"].size
+    assert_equal 2, response_json.dig("meta", "total_count")
+    assert_equal 2, response_json.dig("meta", "total_pages")
   end
 
   test "browser html request for users index falls back to the frontend app" do
