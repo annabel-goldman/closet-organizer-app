@@ -5,7 +5,11 @@ class User < ApplicationRecord
   has_many :outfits, dependent: :destroy
   has_many :outfit_uploads, dependent: :destroy
 
-  validates :username, presence: true, uniqueness: true
+  validates :username, presence: true, uniqueness: true,
+                       length: { maximum: InputLengthPolicy::MAX_USERNAME }
+  validates :email, length: { maximum: InputLengthPolicy::MAX_EMAIL }, allow_blank: true
+  validates :preferred_style, length: { maximum: InputLengthPolicy::MAX_PREFERRED_STYLE },
+                              allow_blank: true
   validates :provider, presence: true
   validates :uid, presence: true, uniqueness: { scope: :provider }
 
