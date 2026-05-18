@@ -29,7 +29,7 @@ project-closet-organizer/
 - `app/presenters`: API payload shaping for users, clothing items, outfits, uploads, and detections
 - `app/services/`: OpenRouter detection, metadata suggestion, crop refinement, crop verification, image-cleaning logic, and shared tempfile/image-source helpers
 - `config/routes.rb`: API routes plus HTML fallback routes
-- `db/seeds.rb`: demo admin user and closet seed generation
+- `db/seeds.rb`: demo admin user plus large-scale dev seed (~1k users, ~5k items, ~2k outfits) for pagination/perf testing
 - `test/`: model, integration, and service tests
 
 ## Frontend (`front-end`)

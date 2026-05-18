@@ -58,6 +58,19 @@ export interface ClothingItem {
 
 export interface User extends UserSummary {
   clothing_items: ClothingItem[];
+  clothing_items_count: number;
+}
+
+export interface PaginationMeta {
+  page: number;
+  per_page: number;
+  total_pages: number;
+  total_count: number;
+}
+
+export interface UsersPage {
+  users: User[];
+  meta: PaginationMeta;
 }
 
 export interface OutfitDetection {
@@ -400,9 +413,31 @@ export async function logoutSession() {
   });
 }
 
-export async function fetchUsers(signal?: AbortSignal) {
-  const users = await requestJson<User[]>(`${API_BASE_URL}/users`, { signal });
-  return users.map(normalizeUserPayload);
+export interface FetchUsersParams {
+  page?: number;
+  perPage?: number;
+}
+
+export async function fetchUsers(
+  params: FetchUsersParams = {},
+  signal?: AbortSignal,
+): Promise<UsersPage> {
+  const query = new URLSearchParams();
+  if (params.page) {
+    query.set("page", String(params.page));
+  }
+  if (params.perPage) {
+    query.set("per_page", String(params.perPage));
+  }
+
+  const querystring = query.toString();
+  const url = `${API_BASE_URL}/users${querystring ? `?${querystring}` : ""}`;
+  const response = await requestJson<UsersPage>(url, { signal });
+
+  return {
+    users: response.users.map(normalizeUserPayload),
+    meta: response.meta,
+  };
 }
 
 export async function fetchUser(id: number, signal?: AbortSignal) {
@@ -675,9 +710,17 @@ function normalizeMetadataSuggestionPayload(
 }
 
 function normalizeUserPayload(user: User): User {
+  const clothing_items = (user.clothing_items ?? []).map(normalizeClothingItemPayload);
+  const rawCount = (user as User & { clothing_items_count?: unknown }).clothing_items_count;
+  const clothing_items_count =
+    typeof rawCount === "number" && Number.isFinite(rawCount)
+      ? rawCount
+      : clothing_items.length;
+
   return {
     ...user,
-    clothing_items: (user.clothing_items ?? []).map(normalizeClothingItemPayload),
+    clothing_items,
+    clothing_items_count,
   };
 }
 
