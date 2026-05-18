@@ -15,6 +15,8 @@
 - Clothing cards now show a checkmark and "Already added to outfit" on the hover button when the item is already in the draft, making it clear what's been selected.
 - Suppressed the "already in draft" toast — the card state communicates this visually instead.
 
+## v2.0.2 - 2026-05-14
+
 - Reworked the add, edit, and detect-item flows into a more structured item editing workspace with clearer separation between metadata, photo management, and detection review.
 - Added richer detection review UI, including larger preview treatment, thumbnail strip navigation, and stronger crop inspection for image-based item creation.
 - Extended shared primitive controls and item form components to support the refreshed item workflow without falling back to new ad hoc button, dropdown, or typography styles.
