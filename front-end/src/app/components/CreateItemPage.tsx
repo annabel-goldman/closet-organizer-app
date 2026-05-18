@@ -20,6 +20,14 @@ import {
   toClothingItemFormValuesFromDetection,
   User,
 } from "../lib/closet";
+import {
+  ClothingItemFormErrors,
+  clothingItemFieldElementId,
+  collectClosetSuggestions,
+  firstInvalidClothingItemField,
+  hasClothingItemFormErrors,
+  validateClothingItemForm,
+} from "../lib/itemFormValidation";
 import { usePageData } from "../lib/usePageData";
 import { AiCleanImageButton } from "./AiCleanImageButton";
 import { CreateItemImageMode } from "./create-item/CreateItemImageMode";
@@ -47,6 +55,7 @@ export function CreateItemPage({
 }: CreateItemPageProps) {
   const detectionPollControllerRef = useRef<AbortController | null>(null);
   const [formValues, setFormValues] = useState(emptyClothingItemFormValues);
+  const [fieldErrors, setFieldErrors] = useState<ClothingItemFormErrors>({});
   const [isCreating, setIsCreating] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [isCleaningUploadedPhoto, setIsCleaningUploadedPhoto] = useState(false);
@@ -77,6 +86,7 @@ export function CreateItemPage({
   });
 
   const isImageMode = initialMode === "image";
+  const closetSuggestions = collectClosetSuggestions(user?.clothing_items ?? []);
   const sourceImageUrl = photoState.imageUrl ?? outfitUpload?.source_photo_url ?? null;
   const detections = outfitUpload?.detections ?? [];
   const selectedDetections = detections.filter((detection) => selectedDetectionIds.includes(detection.id));
@@ -274,11 +284,28 @@ export function CreateItemPage({
     }
   }
 
+  function focusFirstInvalidField(errors: ClothingItemFormErrors) {
+    const firstField = firstInvalidClothingItemField(errors);
+    if (!firstField) {
+      return;
+    }
+
+    document.getElementById(clothingItemFieldElementId(firstField))?.focus();
+  }
+
   async function handleManualSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!userId) {
       setErrorMessage("A user is required before you can create an item.");
+      return;
+    }
+
+    const validationErrors = validateClothingItemForm(formValues);
+    setFieldErrors(validationErrors);
+
+    if (hasClothingItemFormErrors(validationErrors)) {
+      focusFirstInvalidField(validationErrors);
       return;
     }
 
@@ -305,6 +332,19 @@ export function CreateItemPage({
     if (selectedDetections.length === 0) {
       setErrorMessage("Choose at least one verified detected item to add to the closet.");
       return;
+    }
+
+    for (const detection of selectedDetections) {
+      const draft = getDetectionDraft(detection);
+      const validationErrors = validateClothingItemForm(draft);
+
+      if (hasClothingItemFormErrors(validationErrors)) {
+        setErrorMessage(`Fix the details for "${draft.name.trim() || detection.suggested_name || "detected item"}" before saving.`);
+        if (!editingDetectionIds.includes(detection.id)) {
+          setEditingDetectionIds((current) => [...current, detection.id]);
+        }
+        return;
+      }
     }
 
     setIsCreating(true);
@@ -393,6 +433,8 @@ export function CreateItemPage({
         selectedDetectionIds={selectedDetectionIds}
         selectedFileName={photoState.selectedFile?.name}
         sourceImageUrl={sourceImageUrl}
+        brandSuggestions={closetSuggestions.brandSuggestions}
+        tagSuggestions={closetSuggestions.tagSuggestions}
         user={user}
       />
     );
@@ -476,7 +518,18 @@ export function CreateItemPage({
               </PrimitiveText>
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
-              <ItemMetadataFields values={formValues} onChange={setFormValues} />
+              <ItemMetadataFields
+                brandSuggestions={closetSuggestions.brandSuggestions}
+                errors={fieldErrors}
+                onChange={(nextValues) => {
+                  setFormValues(nextValues);
+                  if (Object.keys(fieldErrors).length > 0) {
+                    setFieldErrors(validateClothingItemForm(nextValues));
+                  }
+                }}
+                tagSuggestions={closetSuggestions.tagSuggestions}
+                values={formValues}
+              />
             </div>
           </div>
 

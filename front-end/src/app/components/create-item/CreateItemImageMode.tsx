@@ -15,6 +15,7 @@ import { PrimitiveText } from "../primitives/PrimitiveText";
 import { UploadWorkspace } from "../UploadWorkspace";
 
 interface CreateItemImageModeProps {
+  brandSuggestions?: string[];
   cleaningDetectionIds: number[];
   detectionCleanErrors: Record<number, string>;
   detections: OutfitDetection[];
@@ -38,10 +39,12 @@ interface CreateItemImageModeProps {
   selectedDetectionIds: number[];
   selectedFileName?: string;
   sourceImageUrl: string | null;
+  tagSuggestions?: string[];
   user: User;
 }
 
 export function CreateItemImageMode({
+  brandSuggestions = [],
   cleaningDetectionIds,
   detectionCleanErrors,
   detections,
@@ -65,6 +68,7 @@ export function CreateItemImageMode({
   selectedDetectionIds,
   selectedFileName,
   sourceImageUrl,
+  tagSuggestions = [],
   user,
 }: CreateItemImageModeProps) {
   const detectionCount = detections.length;
@@ -217,10 +221,18 @@ export function CreateItemImageMode({
             </PrimitiveText>
           </div>
         ) : (
-          <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+          <>
+            <div className="border border-border bg-card px-4 py-3">
+              <PrimitiveText as="p" variant="bodySm" tone="muted">
+                Select the pieces you want to import, edit names or tags if needed, then save them to your
+                closet.
+              </PrimitiveText>
+            </div>
+            <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
             {detections.map((detection, index) => (
               <DetectionReviewCard
                 key={detection.id}
+                brandSuggestions={brandSuggestions}
                 cleanImageError={detectionCleanErrors[detection.id]}
                 cleanedImageUrl={detection.cleaned_image_url ?? null}
                 detection={detection}
@@ -234,9 +246,11 @@ export function CreateItemImageMode({
                 onToggle={() => onToggleSelection(detection)}
                 onToggleEdit={() => onToggleEdit(detection)}
                 sourceImageUrl={sourceImageUrl}
+                tagSuggestions={tagSuggestions}
               />
             ))}
-          </div>
+            </div>
+          </>
         )}
       </div>
 

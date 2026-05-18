@@ -14,6 +14,13 @@ import {
   saveClothingItem,
   toClothingItemFormValues,
 } from "../lib/closet";
+import {
+  ClothingItemFormErrors,
+  clothingItemFieldElementId,
+  firstInvalidClothingItemField,
+  hasClothingItemFormErrors,
+  validateClothingItemForm,
+} from "../lib/itemFormValidation";
 import { usePageData } from "../lib/usePageData";
 import { AiCleanImageButton } from "./AiCleanImageButton";
 import { ItemHeroPreview } from "./ItemHeroPreview";
@@ -21,31 +28,48 @@ import { ItemMetadataFields } from "./ItemMetadataFields";
 import { ItemPhotoField } from "./ItemPhotoField";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { useItemPhotoState } from "../lib/useItemPhotoState";
 
 interface ItemDetailPageProps {
+  brandSuggestions?: string[];
   itemId: number;
   initialItem?: ClothingItem | null;
   onBack: () => void;
-  onItemSaved: (item: ClothingItem) => void;
   onItemDeleted: (itemId: number) => void;
+  onItemSaved: (item: ClothingItem) => void;
+  tagSuggestions?: string[];
 }
 
 export function ItemDetailPage({
+  brandSuggestions = [],
   itemId,
   initialItem,
   onBack,
-  onItemSaved,
   onItemDeleted,
+  onItemSaved,
+  tagSuggestions = [],
 }: ItemDetailPageProps) {
   const shouldUseInitialItem = Boolean(initialItem?.id === itemId);
   const photoState = useItemPhotoState(initialItem?.image_url);
   const [formValues, setFormValues] = useState<ClothingItemFormValues | null>(
     shouldUseInitialItem && initialItem ? toClothingItemFormValues(initialItem) : null,
   );
+  const [fieldErrors, setFieldErrors] = useState<ClothingItemFormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCleaningImage, setIsCleaningImage] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const {
     data: item,
@@ -86,9 +110,26 @@ export function ItemDetailPage({
   const previewName = formValues?.name.trim() || item?.name?.trim() || "Untitled Item";
   const previewTags = formValues ? parseTagInput(formValues.tags).slice(0, 2) : [];
 
+  function focusFirstInvalidField(errors: ClothingItemFormErrors) {
+    const firstField = firstInvalidClothingItemField(errors);
+    if (!firstField) {
+      return;
+    }
+
+    document.getElementById(clothingItemFieldElementId(firstField))?.focus();
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!item || !formValues) {
+      return;
+    }
+
+    const validationErrors = validateClothingItemForm(formValues);
+    setFieldErrors(validationErrors);
+
+    if (hasClothingItemFormErrors(validationErrors)) {
+      focusFirstInvalidField(validationErrors);
       return;
     }
 
@@ -116,16 +157,12 @@ export function ItemDetailPage({
       return;
     }
 
-    const confirmed = window.confirm(`Delete ${item.name}? This cannot be undone.`);
-    if (!confirmed) {
-      return;
-    }
-
     setIsDeleting(true);
     setErrorMessage("");
 
     try {
       await destroyClothingItem(item.id);
+      setIsDeleteDialogOpen(false);
       onItemDeleted(item.id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to delete this clothing item.");
@@ -241,16 +278,39 @@ export function ItemDetailPage({
               </PrimitiveText>
             </div>
 
-            <PrimitiveButton
-              type="button"
-              onClick={() => void handleDelete()}
-              disabled={isDeleting}
-              variant="outline"
-              className="border-destructive/30 text-destructive hover:bg-destructive/5"
-            >
-              <Trash2 className="w-4 h-4" />
-              {isDeleting ? "Deleting..." : "Delete"}
-            </PrimitiveButton>
+            <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+              <PrimitiveButton
+                type="button"
+                onClick={() => setIsDeleteDialogOpen(true)}
+                disabled={isDeleting}
+                variant="outline"
+                className="border-destructive/30 text-destructive hover:bg-destructive/5"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </PrimitiveButton>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete {item.name}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This removes the item from your closet and cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={isDeleting}
+                    className="bg-destructive text-white hover:bg-destructive/90"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void handleDelete();
+                    }}
+                  >
+                    {isDeleting ? "Deleting..." : "Delete item"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
 
           {errorMessage && (
@@ -287,14 +347,34 @@ export function ItemDetailPage({
                       ? "Generate a cleaner catalog-style PNG from the current saved image."
                       : "Upload a photo first to use the AI cleaner."}
                 </PrimitiveText>
-                <AiCleanImageButton
-                  disabled={photoState.removeExisting || (!photoState.selectedFile && !item.image_url)}
-                  isLoading={isCleaningImage}
-                  onClick={() => void handleCleanImage()}
-                />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex">
+                      <AiCleanImageButton
+                        disabled={photoState.removeExisting || (!photoState.selectedFile && !item.image_url)}
+                        isLoading={isCleaningImage}
+                        onClick={() => void handleCleanImage()}
+                      />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs">
+                    Generates a cleaner catalog-style PNG. Save after cleaning to keep the new image.
+                  </TooltipContent>
+                </Tooltip>
               </div>
             </div>
-            <ItemMetadataFields values={formValues} onChange={setFormValues} />
+            <ItemMetadataFields
+              brandSuggestions={brandSuggestions}
+              errors={fieldErrors}
+              onChange={(nextValues) => {
+                setFormValues(nextValues);
+                if (Object.keys(fieldErrors).length > 0) {
+                  setFieldErrors(validateClothingItemForm(nextValues));
+                }
+              }}
+              tagSuggestions={tagSuggestions}
+              values={formValues}
+            />
           </div>
 
           <div className="border-t border-border pt-5 flex items-center justify-between gap-4">

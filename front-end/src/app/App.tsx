@@ -57,6 +57,7 @@ import {
   isUsersRoute,
   navigateTo,
 } from "./lib/routes";
+import { collectClosetSuggestions } from "./lib/itemFormValidation";
 import { useOutfitDraftState } from "./lib/useOutfitDraftState";
 
 interface HomeMessageState {
@@ -487,11 +488,15 @@ export default function App() {
       />
     );
   } else if (route.kind === "item") {
+    const closetSuggestions = collectClosetSuggestions(user?.clothing_items ?? []);
+
     pageContent = (
       <ItemDetailPage
+        brandSuggestions={closetSuggestions.brandSuggestions}
         itemId={route.itemId}
         initialItem={selectedItem}
         onBack={() => navigateTo("/closet")}
+        tagSuggestions={closetSuggestions.tagSuggestions}
         onItemSaved={(nextItem) => setUser((current) => updateUserItem(current, nextItem))}
         onItemDeleted={(itemId) => {
           setUser((current) => removeUserItem(current, itemId));
