@@ -301,7 +301,6 @@ export default function App() {
   function addItemToOutfitDraft(itemId: number) {
     setOutfitDraft((current) => {
       if (current.itemIds.includes(itemId)) {
-        setOutfitDraftNotice("Already in your outfit draft.");
         return current;
       }
 
@@ -311,6 +310,14 @@ export default function App() {
         itemIds: [itemId, ...current.itemIds],
       };
     });
+  }
+
+  function removeItemFromOutfitDraft(itemId: number) {
+    setOutfitDraftNotice("Removed from outfit draft.");
+    setOutfitDraft((current) => ({
+      ...current,
+      itemIds: current.itemIds.filter((id) => id !== itemId),
+    }));
   }
 
   async function handleLogout() {
@@ -709,8 +716,10 @@ export default function App() {
                     key={item.id}
                     {...item}
                     index={index}
+                    isInOutfit={outfitDraft.itemIds.includes(item.id)}
                     onSelect={(itemId) => navigateTo(`/items/${itemId}`)}
                     onAddToOutfit={addItemToOutfitDraft}
+                    onRemoveFromOutfit={removeItemFromOutfitDraft}
                   />
                 ))}
               </div>
@@ -808,8 +817,10 @@ export default function App() {
           aria-live="polite"
           aria-atomic="true"
         >
-          {outfitDraftNotice} Draft has {outfitDraft.itemIds.length}{" "}
-          {outfitDraft.itemIds.length === 1 ? "item" : "items"}.
+          <PrimitiveText as="span" variant="bodySm">
+            {outfitDraftNotice} Draft has {outfitDraft.itemIds.length}{" "}
+            {outfitDraft.itemIds.length === 1 ? "item" : "items"}.
+          </PrimitiveText>
         </motion.div>
       ) : null}
 
