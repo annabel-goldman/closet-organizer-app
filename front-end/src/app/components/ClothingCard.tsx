@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { Plus } from "lucide-react";
+import { Check, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
@@ -15,6 +15,7 @@ interface ClothingCardProps {
   tags: string[];
   image_url?: string | null;
   index: number;
+  isInOutfit?: boolean;
   onSelect?: (id: number) => void;
   onAddToOutfit?: (id: number) => void;
 }
@@ -26,6 +27,7 @@ export function ClothingCard({
   tags,
   image_url,
   index,
+  isInOutfit,
   onSelect,
   onAddToOutfit,
 }: ClothingCardProps) {
@@ -52,6 +54,11 @@ export function ClothingCard({
       tabIndex={0}
     >
       <div className="relative overflow-hidden bg-muted aspect-[5/6] sm:aspect-[3/4]">
+        {isInOutfit ? (
+          <div className="absolute top-3 right-3 z-10 rounded-full bg-foreground p-1 text-background">
+            <Check className="w-3 h-3" />
+          </div>
+        ) : null}
         {image_url ? (
           <img
             src={image_url}
@@ -117,9 +124,9 @@ export function ClothingCard({
             }}
             className="h-auto w-full bg-white/90 px-4 py-2 backdrop-blur-sm hover:bg-white"
           >
-            <Plus className="w-5 h-5" />
+            {isInOutfit ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
             <PrimitiveText as="span" variant="bodySm">
-              Add to Outfit
+              {isInOutfit ? "Already added to outfit" : "Add to Outfit"}
             </PrimitiveText>
           </PrimitiveButton>
         </motion.div>

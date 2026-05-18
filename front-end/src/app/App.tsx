@@ -301,7 +301,6 @@ export default function App() {
   function addItemToOutfitDraft(itemId: number) {
     setOutfitDraft((current) => {
       if (current.itemIds.includes(itemId)) {
-        setOutfitDraftNotice("Already in your outfit draft.");
         return current;
       }
 
@@ -702,6 +701,23 @@ export default function App() {
 
             </motion.div>
 
+            {outfitDraft.itemIds.length > 0 ? (
+              <div className="mb-6 flex items-center justify-between gap-4 border border-border bg-card px-4 py-3">
+                <PrimitiveText as="p" variant="bodySm" tone="muted">
+                  {outfitDraft.itemIds.length}{" "}
+                  {outfitDraft.itemIds.length === 1 ? "item" : "items"} in your outfit draft
+                </PrimitiveText>
+                <PrimitiveButton
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigateTo("/outfits")}
+                >
+                  Save Outfit
+                  <ArrowRight className="w-3 h-3" />
+                </PrimitiveButton>
+              </div>
+            ) : null}
+
             {user && filteredClothingItems.length > 0 ? (
               <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-12 lg:grid-cols-4">
                 {filteredClothingItems.map((item, index) => (
@@ -709,6 +725,7 @@ export default function App() {
                     key={item.id}
                     {...item}
                     index={index}
+                    isInOutfit={outfitDraft.itemIds.includes(item.id)}
                     onSelect={(itemId) => navigateTo(`/items/${itemId}`)}
                     onAddToOutfit={addItemToOutfitDraft}
                   />
@@ -808,8 +825,10 @@ export default function App() {
           aria-live="polite"
           aria-atomic="true"
         >
-          {outfitDraftNotice} Draft has {outfitDraft.itemIds.length}{" "}
-          {outfitDraft.itemIds.length === 1 ? "item" : "items"}.
+          <PrimitiveText as="span" variant="bodySm">
+            {outfitDraftNotice} Draft has {outfitDraft.itemIds.length}{" "}
+            {outfitDraft.itemIds.length === 1 ? "item" : "items"}.
+          </PrimitiveText>
         </motion.div>
       ) : null}
 
