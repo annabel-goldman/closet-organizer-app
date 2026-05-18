@@ -1,6 +1,6 @@
 import { Dispatch, SetStateAction, useDeferredValue, useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Search, Users } from "lucide-react";
+import { Search } from "lucide-react";
 import { AddItemMenu } from "./components/AddItemMenu";
 import { ClothingCard } from "./components/ClothingCard";
 import { CreateItemPage } from "./components/CreateItemPage";
@@ -33,9 +33,13 @@ import { HomeFooterLinks } from "./components/info/HomeFooterLinks";
 import { PrivacyPage } from "./components/info/PrivacyPage";
 import { TermsPage } from "./components/info/TermsPage";
 import { AccessRestrictedState } from "./components/shared/AccessRestrictedState";
+import { ClosetEmptyState } from "./components/shared/ClosetEmptyState";
+import { HomeLanding } from "./components/shared/HomeLanding";
+import { NotFoundPage } from "./components/shared/NotFoundPage";
+import { SiteFooter } from "./components/shared/SiteFooter";
+import { SiteHeader } from "./components/shared/SiteHeader";
 import { Input } from "./components/ui/input";
 import {
-  beginGoogleSignIn,
   ClothingItem,
   fetchCurrentUser,
   formatPossessive,
@@ -336,24 +340,6 @@ export default function App() {
     navigateTo("/");
   }
 
-  const globalAction = user ? (
-    <PrimitiveButton
-      onClick={() => void handleLogout()}
-      variant="outline"
-    >
-      <Users className="h-4 w-4" />
-      Sign Out
-    </PrimitiveButton>
-  ) : (
-    <PrimitiveButton
-      onClick={() => beginGoogleSignIn()}
-      variant="outline"
-    >
-      Sign In
-      <ArrowRight className="h-4 w-4" />
-    </PrimitiveButton>
-  );
-
   const shouldRenderStandaloneAuthPage = !user && (route.kind === "home" || isLoggedOutProtectedRoute);
 
   let pageContent;
@@ -363,65 +349,7 @@ export default function App() {
   }
 
   if ((!user && route.kind === "home") || (isLoggedOutProtectedRoute && !isLoading)) {
-    pageContent = (
-      <section className="flex flex-1 items-center justify-center px-6 py-16">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="max-w-2xl text-center"
-        >
-          <img
-            src="/brand-mark.png"
-            alt="Curated Closet logo"
-            className="mx-auto mb-8 h-32 w-auto object-contain sm:h-40"
-          />
-          <PrimitiveText
-            as="h1"
-            variant="display"
-            font="serif"
-            className="mb-6"
-            style={{
-              fontSize: "clamp(3rem, 8vw, 5.5rem)",
-              lineHeight: "0.95",
-            }}
-          >
-            Curated Closet
-          </PrimitiveText>
-          <PrimitiveText
-            as="p"
-            variant="title"
-            tone="muted"
-            className="mb-10"
-            style={{ lineHeight: "1.7" }}
-          >
-            Find your fit, faster.
-          </PrimitiveText>
-          <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <PrimitiveButton
-              onClick={() => beginGoogleSignIn()}
-              variant="outline"
-              className="h-auto px-6 py-3"
-            >
-              Sign in with Google
-              <ArrowRight className="h-4 w-4" />
-            </PrimitiveButton>
-          </div>
-          {homeMessage ? (
-            <div
-              className={`mt-6 px-4 py-3 text-sm ${
-                homeMessage.kind === "success"
-                  ? "border border-emerald-300/40 bg-emerald-50 text-emerald-900"
-                  : "border border-destructive/30 bg-destructive/10 text-destructive"
-              }`}
-            >
-              <PrimitiveText as="p" variant="bodySm">{homeMessage.text}</PrimitiveText>
-            </div>
-          ) : null}
-          <HomeFooterLinks className="mt-12" />
-        </motion.div>
-      </section>
-    );
+    pageContent = <HomeLanding homeMessage={homeMessage} />;
   } else if (route.kind === "about") {
     pageContent = <AboutPage />;
   } else if (route.kind === "privacy") {
@@ -429,27 +357,7 @@ export default function App() {
   } else if (route.kind === "terms") {
     pageContent = <TermsPage />;
   } else if (route.kind === "not-found") {
-    pageContent = (
-      <div className="max-w-3xl mx-auto px-6 py-16">
-        <div className="border border-border bg-card p-8">
-          <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
-            Page Not Found
-          </PrimitiveText>
-          <PrimitiveText as="h1" variant="display" font="serif" className="mb-3">
-            We couldn&apos;t find that page.
-          </PrimitiveText>
-          <PrimitiveText as="p" tone="muted" className="mb-6">
-            The link may be out of date, or the page may have been moved.
-          </PrimitiveText>
-          <PrimitiveButton
-            onClick={() => navigateTo(user ? "/closet" : "/")}
-            variant="outline"
-          >
-            {user ? "Back to closet" : "Back home"}
-          </PrimitiveButton>
-        </div>
-      </div>
-    );
+    pageContent = <NotFoundPage signedIn={Boolean(user)} />;
   } else if (isUnauthorizedAdminRoute) {
     pageContent = (
       <AccessRestrictedState
@@ -737,19 +645,22 @@ export default function App() {
                   />
                 ))}
               </div>
+            ) : user ? (
+              <ClosetEmptyState
+                hasActiveFilters={hasActiveFilters}
+                onSelectImage={
+                  hasActiveFilters
+                    ? undefined
+                    : () => navigateTo(`/items/new?userId=${user.id}&mode=image`)
+                }
+                onSelectManual={
+                  hasActiveFilters
+                    ? undefined
+                    : () => navigateTo(`/items/new?userId=${user.id}&mode=manual`)
+                }
+              />
             ) : (
-              <div className="border border-dashed border-border p-10 text-center">
-                <PrimitiveText as="p" variant="display" font="serif" className="mb-3">
-                  {user ? "No matching items found" : "No closet data found"}
-                </PrimitiveText>
-                <PrimitiveText as="p" tone="muted">
-                  {user
-                    ? hasActiveFilters
-                      ? "Try a different tag, search phrase, or sort."
-                      : "Add a new item to start building out this closet."
-                    : "Sign in with Google to load your closet."}
-                </PrimitiveText>
-              </div>
+              <ClosetEmptyState hasActiveFilters={false} />
             )}
           </>
         )}
@@ -758,7 +669,20 @@ export default function App() {
   }
 
   if (shouldRenderStandaloneAuthPage) {
-    return <div className="flex min-h-screen flex-col bg-background">{pageContent}</div>;
+    return (
+      <div className="flex min-h-screen flex-col bg-background">
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:border focus:border-foreground focus:bg-background focus:px-4 focus:py-2"
+        >
+          Skip to main content
+        </a>
+        <main id="main-content" className="flex flex-1 flex-col">
+          {pageContent}
+        </main>
+        <SiteFooter />
+      </div>
+    );
   }
 
   return (
@@ -770,53 +694,7 @@ export default function App() {
         Skip to main content
       </a>
 
-      <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-5">
-          <PrimitiveButton
-            onClick={() => navigateTo(user ? "/closet" : "/")}
-            variant="outline"
-            className={`${
-              user && isClosetRoute(route)
-                ? "border-foreground bg-foreground text-background"
-                : "border-border hover:border-foreground"
-            }`}
-          >
-            {user ? "Closet" : "Home"}
-          </PrimitiveButton>
-
-          <div className="flex items-center gap-3">
-            {user ? (
-              <nav className="flex items-center gap-2">
-                <PrimitiveButton
-                  onClick={() => navigateTo("/outfits")}
-                  variant="outline"
-                  className={`${
-                    isOutfitRoute(route)
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-border text-foreground hover:border-foreground"
-                  }`}
-                >
-                  My Outfits
-                </PrimitiveButton>
-                {user.admin ? (
-                  <PrimitiveButton
-                    onClick={() => navigateTo("/users")}
-                    variant="outline"
-                    className={`${
-                      isUsersRoute(route)
-                        ? "border-foreground bg-foreground text-background"
-                        : "border-border text-foreground hover:border-foreground"
-                    }`}
-                  >
-                    Users
-                  </PrimitiveButton>
-                ) : null}
-              </nav>
-            ) : null}
-            {globalAction}
-          </div>
-        </div>
-      </header>
+      <SiteHeader route={route} user={user} onSignOut={() => void handleLogout()} />
 
       <main id="main-content" className={`flex-1 ${route.kind === "home" ? "flex" : ""}`}>
         {pageContent}
@@ -836,14 +714,7 @@ export default function App() {
         </motion.div>
       ) : null}
 
-      <footer className="mt-12 border-t border-border">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-          <PrimitiveText as="p" variant="bodySm" tone="muted">
-            Curating closets and serving looks, one hanger at a time.
-          </PrimitiveText>
-          <HomeFooterLinks />
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

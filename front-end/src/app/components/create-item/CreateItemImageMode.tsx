@@ -17,6 +17,7 @@ import { ItemMetadataFields } from "../ItemMetadataFields";
 import { ItemMetadataPanel } from "../ItemMetadataPanel";
 import { PrimitiveButton } from "../primitives/PrimitiveButton";
 import { PrimitiveConfirmationDialog } from "../primitives/PrimitiveConfirmationDialog";
+import { AiActionLoadingNotice } from "../shared/AiActionLoadingNotice";
 import { UploadWorkspace } from "../UploadWorkspace";
 import { DetectionPreviewImage } from "./DetectionPreview";
 import { DetectionThumbnailStrip } from "./DetectionThumbnailStrip";
@@ -211,6 +212,7 @@ export function CreateItemImageMode({
       <UploadWorkspace
         expandedPreview={expandedPreview}
         imageUrl={previewDetection?.cleaned_image_url ?? (isSourceFocused ? sourceImageUrl : null)}
+        isPreviewProcessing={focusedIsCleaning}
         onPreviewClick={() => inputRef.current?.click()}
         onPreviewClear={selectedFileName ? onClearImageSelection : undefined}
         onPreviewEdit={selectedFileName ? () => inputRef.current?.click() : undefined}
@@ -346,15 +348,7 @@ export function CreateItemImageMode({
 
         {shouldShowMetadataLoadingState && (!detailsDetection || !detailsDraftReady) ? (
           <div className="border border-border bg-card p-5">
-            <div className="flex items-start gap-3">
-              <LoaderCircle className="mt-0.5 h-5 w-5 animate-spin text-muted-foreground" />
-              <div className="space-y-1">
-                <p className="font-medium">Preparing detected item details...</p>
-                <p className="text-sm text-muted-foreground">
-                  We&apos;re filling in the detected type, name, brand, and tags now.
-                </p>
-              </div>
-            </div>
+            <AiActionLoadingNotice message="Preparing detected item details. Type, name, brand, and tags may update in a moment." />
           </div>
         ) : null}
 
@@ -372,16 +366,8 @@ export function CreateItemImageMode({
             category={focusedDraft.category || detailsDetection.category}
             title={focusedSuggestedName}
           >
-            {shouldShowMetadataLoadingState ? (
-              <div className="flex items-start gap-3 border border-border/70 bg-muted/35 px-3 py-3 text-sm">
-                <LoaderCircle className="mt-0.5 h-4 w-4 animate-spin text-muted-foreground" />
-                <div className="space-y-0.5">
-                  <p className="font-medium">Preparing detected item details...</p>
-                  <p className="text-muted-foreground">
-                    Type, name, brand, and tags may update in a moment.
-                  </p>
-                </div>
-              </div>
+            {isPreparingDetectedMetadata ? (
+              <AiActionLoadingNotice message="Preparing detected item details. Type, name, brand, and tags may update in a moment." />
             ) : null}
 
             {focusedCleanError && (

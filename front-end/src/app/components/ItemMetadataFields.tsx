@@ -8,6 +8,7 @@ import {
 } from "../lib/closet";
 import { ClothingItemFormErrors, clothingItemFieldElementId } from "../lib/itemFormValidation";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
+import { AiActionLoadingNotice } from "./shared/AiActionLoadingNotice";
 import {
   PrimitiveSelect,
   PrimitiveSelectContent,
@@ -177,6 +178,13 @@ export function ItemMetadataFields({
             onClick={onRequestAutofill}
           />
         </div>
+      ) : null}
+
+      {isAutofilling ? (
+        <AiActionLoadingNotice
+          className="sm:col-span-2"
+          message="Autofilling type, name, brand, and tags..."
+        />
       ) : null}
 
       <label className="space-y-2 sm:col-span-2" htmlFor={fieldId("category")}>

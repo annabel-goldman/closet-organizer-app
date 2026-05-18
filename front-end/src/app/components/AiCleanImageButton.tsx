@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { LoaderCircle, Sparkles } from "lucide-react";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
@@ -19,24 +19,31 @@ export function AiCleanImageButton({
   label = "AI clean PNG",
   onClick,
 }: AiCleanImageButtonProps) {
-  const buttonLabel = isLoading ? "Cleaning..." : label;
+  const buttonLabel = label;
   const isDisabled = disabled || isLoading;
+  const Icon = isLoading ? LoaderCircle : Sparkles;
+
+  const button = (
+    <PrimitiveButton
+      type="button"
+      onClick={onClick}
+      disabled={isDisabled}
+      variant="outline"
+      className={className}
+      aria-busy={isLoading}
+      aria-label={buttonLabel}
+    >
+      <Icon className={`h-4 w-4 shrink-0 ${isLoading ? "animate-spin" : ""}`} />
+      {!iconOnly ? buttonLabel : null}
+    </PrimitiveButton>
+  );
 
   if (iconOnly) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
           <span className={`inline-flex ${isDisabled ? "cursor-default" : "cursor-pointer"}`}>
-            <PrimitiveButton
-              type="button"
-              onClick={onClick}
-              disabled={isDisabled}
-              variant="outline"
-              className={className}
-              aria-label={buttonLabel}
-            >
-              <Sparkles className="w-4 h-4" />
-            </PrimitiveButton>
+            {button}
           </span>
         </TooltipTrigger>
         <TooltipContent sideOffset={8}>{buttonLabel}</TooltipContent>
@@ -44,16 +51,5 @@ export function AiCleanImageButton({
     );
   }
 
-  return (
-    <PrimitiveButton
-      type="button"
-      onClick={onClick}
-      disabled={isDisabled}
-      variant="outline"
-      className={className}
-    >
-      <Sparkles className="w-4 h-4" />
-      {buttonLabel}
-    </PrimitiveButton>
-  );
+  return button;
 }
