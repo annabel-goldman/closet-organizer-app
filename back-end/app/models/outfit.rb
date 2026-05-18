@@ -3,8 +3,10 @@ class Outfit < ApplicationRecord
   has_many :outfit_items, dependent: :destroy
   has_many :clothing_items, through: :outfit_items
 
-  validates :name, presence: true
+  validates :name, presence: true, length: { maximum: InputLengthPolicy::MAX_OUTFIT_NAME }
+  validates :notes, length: { maximum: InputLengthPolicy::MAX_OUTFIT_NOTES }, allow_blank: true
   validate :tags_must_be_an_array
+  validate :tags_meet_length_policy
 
   private
 
@@ -12,5 +14,9 @@ class Outfit < ApplicationRecord
     return if tags.nil? || tags.is_a?(Array)
 
     errors.add(:tags, "must be an array")
+  end
+
+  def tags_meet_length_policy
+    InputLengthPolicy.validate_tag_list(self, :tags, tags)
   end
 end

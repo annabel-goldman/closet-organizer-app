@@ -17,6 +17,7 @@ import {
 } from "../lib/closet";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import { MAX_OUTFIT_NAME, MAX_OUTFIT_NOTES } from "../lib/inputLengthPolicy";
 
 interface MyOutfitsPageProps {
   user: User;
@@ -262,6 +263,7 @@ export function MyOutfitsPage({
                 onChange={(event) => setFormField("name", event.target.value)}
                 placeholder="Weekend Brunch"
                 className="w-full border border-border bg-background px-3 py-2"
+                maxLength={MAX_OUTFIT_NAME}
               />
             </label>
 
@@ -285,6 +287,7 @@ export function MyOutfitsPage({
               onChange={(event) => setFormField("notes", event.target.value)}
               placeholder="When and where to wear this look"
               className="w-full border border-border bg-background px-3 py-2 min-h-24"
+              maxLength={MAX_OUTFIT_NOTES}
             />
           </label>
 

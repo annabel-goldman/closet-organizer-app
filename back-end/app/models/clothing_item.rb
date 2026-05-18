@@ -24,8 +24,11 @@ class ClothingItem < ApplicationRecord
     failed: 3
   }, prefix: true
 
-  validates :name, presence: true
+  validates :name, presence: true, length: { maximum: InputLengthPolicy::MAX_CLOTHING_ITEM_NAME }
+  validates :brand, length: { maximum: InputLengthPolicy::MAX_CLOTHING_ITEM_BRAND }, allow_blank: true
+  validates :category, length: { maximum: InputLengthPolicy::MAX_CLOTHING_ITEM_CATEGORY }, allow_blank: true
   validates :size, presence: true
+  validate :tags_meet_length_policy
   validate :photo_must_be_an_image
   validate :photo_size_within_limit
 
@@ -55,6 +58,10 @@ class ClothingItem < ApplicationRecord
 
   def normalize_tags
     self.tags = TagListNormalizer.call(tags)
+  end
+
+  def tags_meet_length_policy
+    InputLengthPolicy.validate_tag_list(self, :tags, tags)
   end
 
   def normalize_brand

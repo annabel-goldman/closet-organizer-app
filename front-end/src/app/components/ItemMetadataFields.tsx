@@ -18,6 +18,12 @@ import {
 } from "./primitives/PrimitiveSelect";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import {
+  MAX_CLOTHING_ITEM_BRAND,
+  MAX_CLOTHING_ITEM_CATEGORY,
+  MAX_CLOTHING_ITEM_NAME,
+  MAX_TAG_LENGTH,
+} from "../lib/inputLengthPolicy";
 import { Input } from "./ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
@@ -197,6 +203,7 @@ export function ItemMetadataFields({
           onChange={(event) => updateField("category", event.target.value)}
           placeholder="e.g. sweater, jacket, dress"
           className="h-auto px-4 py-3"
+          maxLength={MAX_CLOTHING_ITEM_CATEGORY}
         />
       </label>
 
@@ -211,6 +218,8 @@ export function ItemMetadataFields({
           aria-invalid={Boolean(errors.name)}
           aria-describedby={errors.name ? `${fieldId("name")}-error` : undefined}
           className="h-auto px-4 py-3"
+          required
+          maxLength={MAX_CLOTHING_ITEM_NAME}
         />
         <FieldError message={errors.name} />
         {errors.name ? (
@@ -276,6 +285,7 @@ export function ItemMetadataFields({
           onChange={(event) => updateField("brand", event.target.value)}
           placeholder="Optional, e.g. COS, Nike"
           className="h-auto px-4 py-3"
+          maxLength={MAX_CLOTHING_ITEM_BRAND}
         />
         {brandSuggestions.length > 0 ? (
           <datalist id={brandListId}>
@@ -328,6 +338,7 @@ export function ItemMetadataFields({
                 placeholder="Add tag"
                 className="h-9 w-32 border border-border bg-background px-3 py-1"
                 autoFocus
+                maxLength={MAX_TAG_LENGTH}
               />
               <PrimitiveButton
                 type="button"

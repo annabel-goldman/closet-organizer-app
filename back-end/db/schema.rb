@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_15_130000) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_17_220000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -40,8 +40,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_15_130000) do
   end
 
   create_table "clothing_items", force: :cascade do |t|
-    t.string "brand"
-    t.string "category"
+    t.string "brand", limit: 80
+    t.string "category", limit: 60
     t.text "clean_image_error_message"
     t.datetime "clean_image_generated_at"
     t.string "clean_image_model"
@@ -49,7 +49,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_15_130000) do
     t.integer "clean_image_status", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "date"
-    t.string "name"
+    t.string "name", limit: 120, null: false
     t.integer "size"
     t.integer "source_outfit_detection_id"
     t.integer "source_outfit_upload_id"
@@ -124,7 +124,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_15_130000) do
 
   create_table "outfits", force: :cascade do |t|
     t.datetime "created_at", null: false
-    t.string "name", null: false
+    t.string "name", limit: 120, null: false
     t.text "notes"
     t.json "tags"
     t.datetime "updated_at", null: false
@@ -136,13 +136,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_15_130000) do
     t.boolean "admin", default: false, null: false
     t.string "avatar_url"
     t.datetime "created_at", null: false
-    t.string "email"
+    t.string "email", limit: 254
     t.string "password_digest"
-    t.string "preferred_style"
-    t.string "provider"
-    t.string "uid"
+    t.string "preferred_style", limit: 40
+    t.string "provider", limit: 60, null: false
+    t.string "uid", limit: 255, null: false
     t.datetime "updated_at", null: false
-    t.string "username"
+    t.string "username", limit: 60, null: false
     t.index ["email"], name: "index_users_on_email"
     t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
   end

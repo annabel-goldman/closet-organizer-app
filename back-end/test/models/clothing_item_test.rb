@@ -65,4 +65,39 @@ class ClothingItemTest < ActiveSupport::TestCase
     assert_equal "na", item.size
     assert_nil item.date
   end
+
+  test "rejects names longer than the configured maximum" do
+    item = ClothingItem.new(
+      user: users(:one),
+      size: :small,
+      name: "x" * (InputLengthPolicy::MAX_CLOTHING_ITEM_NAME + 1)
+    )
+
+    assert_not item.valid?
+    assert_includes item.errors[:name].first, "too long"
+  end
+
+  test "rejects individual tags longer than the configured maximum" do
+    item = ClothingItem.new(
+      user: users(:one),
+      name: "Long Tag Tee",
+      size: :small,
+      tags: [ "ok", "x" * (InputLengthPolicy::MAX_TAG_LENGTH + 1) ]
+    )
+
+    assert_not item.valid?
+    assert_includes item.errors[:tags].first, "#{InputLengthPolicy::MAX_TAG_LENGTH} characters"
+  end
+
+  test "rejects more than the maximum number of tags" do
+    item = ClothingItem.new(
+      user: users(:one),
+      name: "Way Too Tagged",
+      size: :small,
+      tags: Array.new(InputLengthPolicy::MAX_TAGS_PER_RECORD + 1) { |i| "tag#{i}" }
+    )
+
+    assert_not item.valid?
+    assert_includes item.errors[:tags].first, "fewer entries"
+  end
 end
