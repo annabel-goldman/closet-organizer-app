@@ -1,9 +1,13 @@
-import { CircleHelp } from "lucide-react";
+import { KeyboardEvent, useState } from "react";
+import { CircleHelp, Plus, X } from "lucide-react";
 import {
   ClothingItemFormValues,
   formatDisplaySize,
+  formatTagInput,
+  parseTagInput,
 } from "../lib/closet";
 import { ClothingItemFormErrors, clothingItemFieldElementId } from "../lib/itemFormValidation";
+import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import {
   PrimitiveSelect,
   PrimitiveSelectContent,
@@ -11,21 +15,25 @@ import {
   PrimitiveSelectTrigger,
   PrimitiveSelectValue,
 } from "./primitives/PrimitiveSelect";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { Input } from "./ui/input";
-import { Textarea } from "./ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 interface ItemMetadataFieldsProps {
+  autofillDisabled?: boolean;
   brandSuggestions?: string[];
   errors?: ClothingItemFormErrors;
   fieldIdPrefix?: string;
+  isAutofilling?: boolean;
   onChange: (nextValues: ClothingItemFormValues) => void;
+  onRequestAutofill?: () => void;
+  showAutofillButton?: boolean;
   tagSuggestions?: string[];
   values: ClothingItemFormValues;
 }
 
-const sizeOptions = ["xs", "small", "medium", "large", "xl"];
+const sizeOptions = ["na", "xs", "small", "medium", "large", "xl"];
 
 function FieldError({ message }: { message?: string }) {
   if (!message) {
@@ -72,13 +80,30 @@ function LabelWithTooltip({
 }
 
 export function ItemMetadataFields({
+  autofillDisabled = false,
   brandSuggestions = [],
   errors = {},
   fieldIdPrefix = "",
+  isAutofilling = false,
   onChange,
+  onRequestAutofill,
+  showAutofillButton = true,
   tagSuggestions = [],
   values,
 }: ItemMetadataFieldsProps) {
+  const [draftTag, setDraftTag] = useState("");
+  const [editingTag, setEditingTag] = useState<string | null>(null);
+  const [isAddingTag, setIsAddingTag] = useState(false);
+  const tags = parseTagInput(values.tags);
+  const visibleTags = editingTag ? tags.filter((tag) => tag !== editingTag) : tags;
+
+  const brandListId = `${fieldIdPrefix}item-brand-suggestions`;
+  const tagListId = `${fieldIdPrefix}item-tag-suggestions`;
+
+  function fieldId(field: keyof ClothingItemFormValues) {
+    return `${fieldIdPrefix}${clothingItemFieldElementId(field)}`;
+  }
+
   function updateField<K extends keyof ClothingItemFormValues>(
     fieldName: K,
     value: ClothingItemFormValues[K],
@@ -89,15 +114,84 @@ export function ItemMetadataFields({
     });
   }
 
-  const brandListId = `${fieldIdPrefix}item-brand-suggestions`;
-  const tagListId = `${fieldIdPrefix}item-tag-suggestions`;
+  function updateTags(nextTags: string[]) {
+    updateField("tags", formatTagInput(nextTags));
+  }
 
-  function fieldId(field: keyof ClothingItemFormValues) {
-    return `${fieldIdPrefix}${clothingItemFieldElementId(field)}`;
+  function handleAddTag() {
+    const baseTags = editingTag ? tags.filter((tag) => tag !== editingTag) : tags;
+    const nextTags = parseTagInput([...baseTags, draftTag].filter(Boolean).join(","));
+
+    updateTags(nextTags);
+    setDraftTag("");
+    setEditingTag(null);
+    setIsAddingTag(false);
+  }
+
+  function closeTagEditor() {
+    setDraftTag("");
+    setEditingTag(null);
+    setIsAddingTag(false);
+  }
+
+  function handleTagInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleAddTag();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeTagEditor();
+    }
+  }
+
+  function removeTag(tagToRemove: string) {
+    updateTags(tags.filter((tag) => tag !== tagToRemove));
+  }
+
+  function beginTagEdit(tag: string) {
+    setDraftTag(tag);
+    setEditingTag(tag);
+    setIsAddingTag(true);
+  }
+
+  function addTagFromSuggestion(tag: string) {
+    if (!tag.trim() || tags.includes(tag.trim())) {
+      return;
+    }
+
+    updateTags([...tags, tag.trim()]);
   }
 
   return (
     <>
+      {onRequestAutofill && showAutofillButton ? (
+        <div className="flex justify-end sm:col-span-2">
+          <AiMetadataAutofillButton
+            className="h-9 w-9"
+            disabled={autofillDisabled}
+            isLoading={isAutofilling}
+            label="AI autofill type, name, brand, and tags"
+            onClick={onRequestAutofill}
+          />
+        </div>
+      ) : null}
+
+      <label className="space-y-2 sm:col-span-2" htmlFor={fieldId("category")}>
+        <PrimitiveText as="span" variant="label">
+          Type
+        </PrimitiveText>
+        <Input
+          id={fieldId("category")}
+          value={values.category}
+          onChange={(event) => updateField("category", event.target.value)}
+          placeholder="e.g. sweater, jacket, dress"
+          className="h-auto px-4 py-3"
+        />
+      </label>
+
       <label className="space-y-2 sm:col-span-2" htmlFor={fieldId("name")}>
         <PrimitiveText as="span" variant="label">
           Name
@@ -182,36 +276,114 @@ export function ItemMetadataFields({
             ))}
           </datalist>
         ) : null}
-        <PrimitiveText as="p" variant="bodySm" tone="muted">
-          Used for the Brands filter on your closet. Tags stay separate.
-        </PrimitiveText>
       </label>
 
-      <label className="space-y-2 sm:col-span-2" htmlFor={fieldId("tags")}>
+      <div className="space-y-2 sm:col-span-2">
         <LabelWithTooltip
           htmlFor={fieldId("tags")}
           label="Tags"
-          tooltip="Comma-separated tags help search and filters. Reuse existing tags from your closet when you can."
+          tooltip="Add tags to improve search and filters. Double-click a tag to edit it, or pick from your closet suggestions."
         />
-        <Textarea
+        <div
+          className="flex min-h-14 flex-wrap items-center gap-2 border border-border bg-card px-3 py-3"
           id={fieldId("tags")}
-          list={tagSuggestions.length > 0 ? tagListId : undefined}
-          value={values.tags}
-          onChange={(event) => updateField("tags", event.target.value)}
-          placeholder="Try tags like cotton, blue, weekend, office"
-          className="min-h-28 px-4 py-3"
-        />
+        >
+          {visibleTags.map((tag) => (
+            <div
+              key={tag}
+              className="inline-flex h-9 items-center gap-1 border border-border bg-background px-3 py-1"
+              onDoubleClick={() => beginTagEdit(tag)}
+            >
+              <PrimitiveText as="span" variant="bodySm">
+                {tag}
+              </PrimitiveText>
+              <PrimitiveButton
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-5 p-0 text-muted-foreground hover:text-foreground"
+                onClick={() => removeTag(tag)}
+                aria-label={`Remove ${tag} tag`}
+              >
+                <X className="w-3 h-3" />
+              </PrimitiveButton>
+            </div>
+          ))}
+
+          {isAddingTag ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={draftTag}
+                onChange={(event) => setDraftTag(event.target.value)}
+                onKeyDown={handleTagInputKeyDown}
+                list={tagSuggestions.length > 0 ? tagListId : undefined}
+                placeholder="Add tag"
+                className="h-9 w-32 border border-border bg-background px-3 py-1"
+                autoFocus
+              />
+              <PrimitiveButton
+                type="button"
+                size="icon"
+                variant="outline"
+                className="h-9 w-9"
+                onClick={handleAddTag}
+                disabled={!draftTag.trim()}
+                aria-label="Save tag"
+              >
+                <Plus className="w-4 h-4" />
+              </PrimitiveButton>
+              <PrimitiveButton
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                onClick={closeTagEditor}
+                aria-label="Cancel adding tag"
+              >
+                <X className="w-4 h-4" />
+              </PrimitiveButton>
+            </div>
+          ) : (
+            <PrimitiveButton
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              onClick={() => {
+                setEditingTag(null);
+                setIsAddingTag(true);
+              }}
+              aria-label="Add a tag"
+            >
+              <Plus className="w-4 h-4" />
+            </PrimitiveButton>
+          )}
+        </div>
         {tagSuggestions.length > 0 ? (
-          <datalist id={tagListId}>
-            {tagSuggestions.map((tag) => (
-              <option key={tag} value={tag} />
-            ))}
-          </datalist>
+          <>
+            <datalist id={tagListId}>
+              {tagSuggestions.map((tag) => (
+                <option key={tag} value={tag} />
+              ))}
+            </datalist>
+            <div className="flex flex-wrap gap-2">
+              {tagSuggestions.slice(0, 8).map((tag) => (
+                <PrimitiveButton
+                  key={tag}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => addTagFromSuggestion(tag)}
+                  disabled={tags.includes(tag)}
+                >
+                  {tag}
+                </PrimitiveButton>
+              ))}
+            </div>
+          </>
         ) : null}
-        <PrimitiveText as="p" variant="bodySm" tone="muted">
-          Add comma-separated tags so people can search and filter this item naturally.
-        </PrimitiveText>
-      </label>
+      </div>
     </>
   );
 }

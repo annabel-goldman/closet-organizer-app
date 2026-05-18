@@ -1,0 +1,18 @@
+---
+EnableDefaultLinters: true
+
+linters:
+  ErbSafety:
+    enabled: true
+  Rubocop:
+    # Disabled: RuboCop already runs separately on .rb files via bin/rubocop.
+    # Enabling it here causes false positives on inline ERB snippets.
+    enabled: false
+  ClosingErbTagIndent:
+    enabled: true
+  FinalNewline:
+    enabled: true
+  TrailingWhitespace:
+    enabled: true
+  NoUnusedCaptures:
+    enabled: true

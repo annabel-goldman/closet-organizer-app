@@ -8,6 +8,8 @@ class ApiPayloads
       only: %i[id username preferred_style email avatar_url admin created_at updated_at]
     )
 
+    payload["clothing_items_count"] = user.clothing_items.size
+
     if include_items
       payload["clothing_items"] = user.clothing_items.order(:name).map do |item|
         clothing_item(item, include_user: false)
@@ -22,6 +24,7 @@ class ApiPayloads
       only: %i[
         id
         name
+        category
         brand
         date
         user_id

@@ -1,11 +1,9 @@
-import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { Check, PencilLine, Sparkles } from "lucide-react";
 import {
   ClothingItemFormValues,
   formatTagLabel,
   OutfitDetection,
-  OutfitDetectionBoundingBox,
   preferredDetectionBox,
   titleize,
 } from "../../lib/closet";
@@ -15,6 +13,7 @@ import { ClothingItemFormErrors } from "../../lib/itemFormValidation";
 import { PrimitiveButton } from "../primitives/PrimitiveButton";
 import { PrimitiveText } from "../primitives/PrimitiveText";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { DetectionPreviewImage } from "./DetectionPreview";
 
 interface DetectionReviewCardProps {
   brandSuggestions?: string[];
@@ -128,15 +127,20 @@ export function DetectionReviewCard({
 
       {cleanedImageUrl ? (
         <div className="overflow-hidden border border-border bg-muted">
-          <img
-            src={cleanedImageUrl}
+          <DetectionPreviewImage
             alt={`${suggestedName} AI cleaned preview`}
-            className="block w-full h-auto object-contain"
+            cleanedImageUrl={cleanedImageUrl}
           />
         </div>
       ) : sourceImageUrl && previewBox ? (
         <div className="space-y-3">
-          <DetectionCropPreview sourceImageUrl={sourceImageUrl} cropBox={previewBox} />
+          <div className="overflow-hidden border border-border bg-muted">
+            <DetectionPreviewImage
+              alt={`${suggestedName} automated crop preview`}
+              cropBox={previewBox}
+              sourceImageUrl={sourceImageUrl}
+            />
+          </div>
         </div>
       ) : (
         <div className="border border-dashed border-border p-4 text-sm text-muted-foreground">
@@ -197,61 +201,6 @@ export function DetectionReviewCard({
         </PrimitiveButton>
       </div>
     </motion.div>
-  );
-}
-
-function DetectionCropPreview({
-  cropBox,
-  sourceImageUrl,
-}: {
-  cropBox: OutfitDetectionBoundingBox;
-  sourceImageUrl: string;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return;
-    }
-
-    const image = new Image();
-    image.onload = () => {
-      const context = canvas.getContext("2d");
-      if (!context) {
-        return;
-      }
-
-      const sourceX = image.naturalWidth * cropBox.x;
-      const sourceY = image.naturalHeight * cropBox.y;
-      const sourceWidth = Math.max(1, image.naturalWidth * cropBox.width);
-      const sourceHeight = Math.max(1, image.naturalHeight * cropBox.height);
-      const outputWidth = 320;
-      const outputHeight = Math.max(1, Math.round(outputWidth * (sourceHeight / sourceWidth)));
-
-      canvas.width = outputWidth;
-      canvas.height = outputHeight;
-
-      context.clearRect(0, 0, outputWidth, outputHeight);
-      context.drawImage(
-        image,
-        sourceX,
-        sourceY,
-        sourceWidth,
-        sourceHeight,
-        0,
-        0,
-        outputWidth,
-        outputHeight,
-      );
-    };
-    image.src = sourceImageUrl;
-  }, [cropBox, sourceImageUrl]);
-
-  return (
-    <div className="overflow-hidden border border-border bg-muted">
-      <canvas ref={canvasRef} className="block w-full h-auto" />
-    </div>
   );
 }
 

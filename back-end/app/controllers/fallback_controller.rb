@@ -21,7 +21,9 @@ class FallbackController < ActionController::Base
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width,initial-scale=1">
-          <title>Closet Organizer</title>
+          <title>Curated Closet</title>
+          <link rel="icon" href="/favicon.png" type="image/png">
+          <link rel="apple-touch-icon" href="/brand-mark.png">
         </head>
         <body>
           <div id="root"></div>

@@ -1,6 +1,6 @@
 class ClothingItemsController < ApplicationController
   before_action :require_login
-  before_action :set_clothing_item, only: %i[show update destroy generate_clean_image]
+  before_action :set_clothing_item, only: %i[show update destroy generate_clean_image generate_metadata_suggestions]
 
   def index
     @clothing_items = current_user.clothing_items.includes(:user).order(:name)
@@ -32,13 +32,36 @@ class ClothingItemsController < ApplicationController
       return
     end
 
+    metadata_context = clothing_item_ai_metadata_context(@clothing_item).merge(
+      ai_metadata_context_from_params(params[:ai_context])
+    )
+
     CleanImageAttachmentGenerator.call(
       record: @clothing_item,
       source_photo: @clothing_item.source_photo_for_cleaning,
-      prompt_context: ImageCleanPromptBuilder.for_clothing_item(@clothing_item)
+      prompt_context: ImageCleanPromptBuilder.for_clothing_item(@clothing_item),
+      reference_photos: clothing_item_reference_photos,
+      metadata_context: metadata_context
     )
 
     render json: payloads.clothing_item(@clothing_item.reload)
+  rescue StandardError => error
+    render json: { error: error.message }, status: :unprocessable_content
+  end
+
+  def generate_metadata_suggestions
+    unless @clothing_item.source_photo_for_cleaning.attached?
+      render json: { error: "This item does not have a photo to analyze." }, status: :unprocessable_content
+      return
+    end
+
+    render json: OpenrouterMetadataSuggester.call(
+      @clothing_item.source_photo_for_cleaning,
+      reference_photos: clothing_item_reference_photos,
+      metadata_context: clothing_item_ai_metadata_context(@clothing_item).merge(
+        ai_metadata_context_from_params(params[:ai_context])
+      )
+    )
   rescue StandardError => error
     render json: { error: error.message }, status: :unprocessable_content
   end
@@ -50,7 +73,7 @@ class ClothingItemsController < ApplicationController
   end
 
   def clothing_item_attributes
-    base_params = params.require(:clothing_item).permit(:name, :size, :date, :user_id, :brand)
+    base_params = params.require(:clothing_item).permit(:name, :category, :size, :date, :user_id, :brand)
     tag_params = params.require(:clothing_item).permit(tags: [])[:tags]
 
     base_params.merge(
@@ -78,6 +101,9 @@ class ClothingItemsController < ApplicationController
       return if clothing_item.errors.any?
 
       if source_outfit_detection.present?
+        clothing_item.source_outfit_upload_id = source_outfit_detection.outfit_upload_id
+        clothing_item.source_outfit_detection_id = source_outfit_detection.id
+        clothing_item.category = source_outfit_detection.category if clothing_item.category.blank?
         reset_clean_image_state(clothing_item)
         attach_photo_from_detection(clothing_item, temporary_files)
       end
@@ -91,6 +117,7 @@ class ClothingItemsController < ApplicationController
     bounding_box = normalized_crop_box
     return if clothing_item.errors.any?
 
+    clear_detection_source!(clothing_item)
     reset_clean_image_state(clothing_item)
 
     if bounding_box
@@ -183,5 +210,29 @@ class ClothingItemsController < ApplicationController
 
   def remove_photo_requested?
     ActiveModel::Type::Boolean.new.cast(params.dig(:clothing_item, :remove_photo))
+  end
+
+  def clothing_item_reference_photos
+    source_upload = clothing_item_source_outfit_upload
+    if source_upload&.source_photo&.attached?
+      return [ source_upload.source_photo ]
+    end
+
+    return [] unless @clothing_item.photo.attached?
+    return [] unless @clothing_item.source_photo_for_cleaning.attached?
+    return [] if @clothing_item.source_photo_for_cleaning.blob == @clothing_item.photo.blob
+
+    [ @clothing_item.photo ]
+  end
+
+  def clothing_item_source_outfit_upload
+    return unless @clothing_item.source_outfit_upload_id.present?
+
+    current_user.outfit_uploads.find_by(id: @clothing_item.source_outfit_upload_id)
+  end
+
+  def clear_detection_source!(clothing_item)
+    clothing_item.source_outfit_upload_id = nil
+    clothing_item.source_outfit_detection_id = nil
   end
 end

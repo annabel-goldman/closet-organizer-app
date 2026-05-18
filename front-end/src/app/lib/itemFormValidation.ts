@@ -34,7 +34,7 @@ export function hasClothingItemFormErrors(errors: ClothingItemFormErrors) {
 }
 
 export function firstInvalidClothingItemField(errors: ClothingItemFormErrors) {
-  const order: (keyof ClothingItemFormValues)[] = ["name", "size", "date", "brand", "tags"];
+  const order: (keyof ClothingItemFormValues)[] = ["category", "name", "size", "date", "brand", "tags"];
   return order.find((field) => errors[field]) ?? null;
 }
 

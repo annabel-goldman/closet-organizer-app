@@ -20,6 +20,7 @@ gem "jbuilder"
 
 gem "bcrypt", "~> 3.1.7"
 gem "aws-sdk-s3", require: false
+gem "kaminari"
 gem "omniauth"
 gem "omniauth-google-oauth2"
 gem "omniauth-rails_csrf_protection"
@@ -27,8 +28,9 @@ gem "omniauth-rails_csrf_protection"
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"
 
-# Windows does not include zoneinfo files, so bundle the tzinfo-data gem
-gem "tzinfo-data", platforms: %i[ windows jruby ]
+# Older Bundler releases do not understand the newer `windows` alias, so keep
+# the explicit Windows platform names for compatibility across local setups.
+gem "tzinfo-data", platforms: %i[ mingw mswin x64_mingw jruby ]
 
 # Use the database-backed adapters for Rails.cache, Active Job, and Action Cable
 gem "solid_cache"
@@ -51,7 +53,7 @@ group :development, :test do
   gem "sqlite3"
 
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
-  gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
+  gem "debug", platforms: %i[ mri mingw mswin x64_mingw ], require: "debug/prelude"
 
   # Audits gems for known security defects (use config/bundler-audit.yml to ignore issues)
   gem "bundler-audit", require: false
@@ -61,6 +63,9 @@ group :development, :test do
 
   # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]
   gem "rubocop-rails-omakase", require: false
+
+  # ERB template linting [https://github.com/Shopify/erb-lint]
+  gem "erb_lint", require: false
 end
 
 group :development do

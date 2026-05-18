@@ -1,6 +1,6 @@
 import { Dispatch, SetStateAction, useDeferredValue, useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Search, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Search, Users } from "lucide-react";
 import { AddItemMenu } from "./components/AddItemMenu";
 import { ClothingCard } from "./components/ClothingCard";
 import { CreateItemPage } from "./components/CreateItemPage";
@@ -91,9 +91,15 @@ function removeUserItem(user: User | null, itemId: number) {
     return user;
   }
 
+  const nextItems = user.clothing_items.filter((item) => item.id !== itemId);
+  const removed = nextItems.length !== user.clothing_items.length;
+
   return {
     ...user,
-    clothing_items: user.clothing_items.filter((item) => item.id !== itemId),
+    clothing_items: nextItems,
+    clothing_items_count: removed
+      ? Math.max(0, user.clothing_items_count - 1)
+      : user.clothing_items_count,
   };
 }
 
@@ -127,7 +133,7 @@ function ClosetFilterMenu({
         <PrimitiveDropdownMenuTrigger asChild>
           <PrimitiveDropdownTriggerButton
             disabled={options.length === 0}
-            className={hasSelections ? "pr-16" : undefined}
+            className={hasSelections ? "pr-14" : "pr-8"}
             aria-label={filterDescription}
           >
             {triggerLabel}
@@ -148,22 +154,6 @@ function ClosetFilterMenu({
           ))}
         </PrimitiveDropdownMenuContent>
       </PrimitiveDropdownMenu>
-      {hasSelections ? (
-        <PrimitiveButton
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="absolute top-1/2 right-7 z-10 size-7 -translate-y-1/2 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={(event) => {
-            event.stopPropagation();
-            onClear();
-          }}
-          aria-label={`Clear ${label.toLowerCase()} filters`}
-          title={`Clear ${label.toLowerCase()} filters`}
-        >
-          <X className="size-4" />
-        </PrimitiveButton>
-      ) : null}
     </div>
   );
 }
@@ -204,7 +194,9 @@ export default function App() {
   }, [route.kind]);
 
   useEffect(() => {
-    if (!isProtectedRoute(route)) {
+    const shouldLoadSession = route.kind === "home" || isProtectedRoute(route);
+
+    if (!shouldLoadSession) {
       setIsLoading(false);
       return;
     }
@@ -220,8 +212,10 @@ export default function App() {
         const nextUser = await fetchCurrentUser(controller.signal);
         if (!nextUser) {
           setUser(null);
-          setHomeMessage({ kind: "error", text: unauthorizedMessage });
-          navigateTo("/");
+          if (isProtectedRoute(route)) {
+            setHomeMessage({ kind: "error", text: unauthorizedMessage });
+            navigateTo("/");
+          }
           return;
         }
 
@@ -255,6 +249,12 @@ export default function App() {
 
     return () => window.clearTimeout(timeout);
   }, [outfitDraftNotice]);
+
+  useEffect(() => {
+    if (route.kind === "home" && user) {
+      navigateTo("/closet");
+    }
+  }, [route.kind, user]);
 
   const clothingItems = user?.clothing_items ?? [];
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -345,13 +345,15 @@ export default function App() {
     </PrimitiveButton>
   );
 
+  const shouldRenderStandaloneAuthPage = !user && (route.kind === "home" || isLoggedOutProtectedRoute);
+
   let pageContent;
 
-  if (isLoggedOutProtectedRoute && isLoading) {
+  if ((route.kind === "home" || isLoggedOutProtectedRoute) && isLoading) {
     return <div className="min-h-screen bg-background" />;
   }
 
-  if (route.kind === "home" || (isLoggedOutProtectedRoute && !isLoading)) {
+  if ((!user && route.kind === "home") || (isLoggedOutProtectedRoute && !isLoading)) {
     pageContent = (
       <section className="flex flex-1 items-center justify-center px-6 py-16">
         <motion.div
@@ -360,6 +362,11 @@ export default function App() {
           transition={{ duration: 0.5 }}
           className="max-w-2xl text-center"
         >
+          <img
+            src="/brand-mark.png"
+            alt="Curated Closet logo"
+            className="mx-auto mb-8 h-32 w-auto object-contain sm:h-40"
+          />
           <PrimitiveText
             as="h1"
             variant="display"
@@ -370,7 +377,7 @@ export default function App() {
               lineHeight: "0.95",
             }}
           >
-            Closet Organizer
+            Curated Closet
           </PrimitiveText>
           <PrimitiveText
             as="p"
@@ -379,7 +386,7 @@ export default function App() {
             className="mb-10"
             style={{ lineHeight: "1.7" }}
           >
-            Organize clothing items, manage closet details.
+            Find your fit, faster.
           </PrimitiveText>
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
             <PrimitiveButton
@@ -475,6 +482,7 @@ export default function App() {
               clothing_items: [...current.clothing_items, ...nextItems].sort((left, right) =>
                 left.name.localeCompare(right.name),
               ),
+              clothing_items_count: current.clothing_items_count + nextItems.length,
             };
           });
 
@@ -608,7 +616,7 @@ export default function App() {
               transition={{ duration: 0.6, delay: 0.3 }}
               className="mb-8 space-y-5"
             >
-              <div className="grid gap-3 min-[660px]:grid-cols-[minmax(0,3.2fr)_repeat(3,minmax(0,0.8fr))_minmax(0,1fr)] min-[660px]:items-start">
+              <div className="space-y-3 min-[660px]:grid min-[660px]:gap-3 min-[660px]:space-y-0 min-[660px]:grid-cols-[minmax(0,3.2fr)_repeat(3,minmax(0,0.8fr))_minmax(0,1fr)] min-[660px]:items-start">
                 <div className="relative min-w-0 self-start">
                   <label htmlFor="closet-search" className="sr-only">
                     Search closet items
@@ -623,54 +631,56 @@ export default function App() {
                   />
                 </div>
 
-                <div className="min-w-0">
-                  <ClosetFilterMenu
-                    label="Tags"
-                    options={groupedTagOptions.other}
-                    selectedValues={selectedOtherTags}
-                    onClear={() => clearSelectedValues(setSelectedOtherTags)}
-                    onToggleValue={(value) => toggleSelectedValue(value, setSelectedOtherTags)}
-                  />
-                </div>
+                <div className="flex gap-3 overflow-x-auto pb-1 min-[660px]:contents">
+                  <div className="min-w-[8.5rem] shrink-0 min-[660px]:min-w-0 min-[660px]:shrink">
+                    <ClosetFilterMenu
+                      label="Tags"
+                      options={groupedTagOptions.other}
+                      selectedValues={selectedOtherTags}
+                      onClear={() => clearSelectedValues(setSelectedOtherTags)}
+                      onToggleValue={(value) => toggleSelectedValue(value, setSelectedOtherTags)}
+                    />
+                  </div>
 
-                <div className="min-w-0">
-                  <ClosetFilterMenu
-                    label="Colors"
-                    options={groupedTagOptions.colors}
-                    selectedValues={selectedColors}
-                    onClear={() => clearSelectedValues(setSelectedColors)}
-                    onToggleValue={(value) => toggleSelectedValue(value, setSelectedColors)}
-                  />
-                </div>
+                  <div className="min-w-[8.5rem] shrink-0 min-[660px]:min-w-0 min-[660px]:shrink">
+                    <ClosetFilterMenu
+                      label="Colors"
+                      options={groupedTagOptions.colors}
+                      selectedValues={selectedColors}
+                      onClear={() => clearSelectedValues(setSelectedColors)}
+                      onToggleValue={(value) => toggleSelectedValue(value, setSelectedColors)}
+                    />
+                  </div>
 
-                <div className="min-w-0">
-                  <ClosetFilterMenu
-                    label="Brands"
-                    options={groupedTagOptions.brands}
-                    selectedValues={selectedBrands}
-                    onClear={() => clearSelectedValues(setSelectedBrands)}
-                    onToggleValue={(value) => toggleSelectedValue(value, setSelectedBrands)}
-                  />
-                </div>
+                  <div className="min-w-[8.5rem] shrink-0 min-[660px]:min-w-0 min-[660px]:shrink">
+                    <ClosetFilterMenu
+                      label="Brands"
+                      options={groupedTagOptions.brands}
+                      selectedValues={selectedBrands}
+                      onClear={() => clearSelectedValues(setSelectedBrands)}
+                      onToggleValue={(value) => toggleSelectedValue(value, setSelectedBrands)}
+                    />
+                  </div>
 
-                <div className="min-w-0">
-                  <label id="closet-sort-label" className="sr-only">
-                    Sort closet items
-                  </label>
-                  <PrimitiveSelect value={sortOption} onValueChange={(value) => setSortOption(value as ClosetSortOption)}>
-                    <PrimitiveSelectTrigger
-                      aria-labelledby="closet-sort-label"
-                      className="h-14 w-full bg-stone-200 hover:bg-stone-200"
-                    >
-                      <PrimitiveSelectValue placeholder="Sort items" />
-                    </PrimitiveSelectTrigger>
-                    <PrimitiveSelectContent>
-                      <PrimitiveSelectItem value="name-asc">Name A-Z</PrimitiveSelectItem>
-                      <PrimitiveSelectItem value="newest-added">Newest added</PrimitiveSelectItem>
-                      <PrimitiveSelectItem value="oldest-added">Oldest added</PrimitiveSelectItem>
-                      <PrimitiveSelectItem value="recent-purchase">Most recent purchase</PrimitiveSelectItem>
-                    </PrimitiveSelectContent>
-                  </PrimitiveSelect>
+                  <div className="min-w-[8.5rem] shrink-0 min-[660px]:min-w-0 min-[660px]:shrink">
+                    <label id="closet-sort-label" className="sr-only">
+                      Sort closet items
+                    </label>
+                    <PrimitiveSelect value={sortOption} onValueChange={(value) => setSortOption(value as ClosetSortOption)}>
+                      <PrimitiveSelectTrigger
+                        aria-labelledby="closet-sort-label"
+                        className="h-14 w-full gap-1.5 bg-stone-200 px-2.5 hover:bg-stone-200"
+                      >
+                        <PrimitiveSelectValue placeholder="Sort items" />
+                      </PrimitiveSelectTrigger>
+                      <PrimitiveSelectContent>
+                        <PrimitiveSelectItem value="name-asc">Name A-Z</PrimitiveSelectItem>
+                        <PrimitiveSelectItem value="newest-added">Newest added</PrimitiveSelectItem>
+                        <PrimitiveSelectItem value="oldest-added">Oldest added</PrimitiveSelectItem>
+                        <PrimitiveSelectItem value="recent-purchase">Most recent purchase</PrimitiveSelectItem>
+                      </PrimitiveSelectContent>
+                    </PrimitiveSelect>
+                  </div>
                 </div>
               </div>
 
@@ -698,7 +708,7 @@ export default function App() {
             </motion.div>
 
             {user && filteredClothingItems.length > 0 ? (
-              <div className="grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-12 lg:grid-cols-4">
                 {filteredClothingItems.map((item, index) => (
                   <ClothingCard
                     key={item.id}
@@ -729,7 +739,7 @@ export default function App() {
     );
   }
 
-  if (route.kind === "home" && !user) {
+  if (shouldRenderStandaloneAuthPage) {
     return <div className="flex min-h-screen flex-col bg-background">{pageContent}</div>;
   }
 
@@ -808,7 +818,7 @@ export default function App() {
         </motion.div>
       ) : null}
 
-      <footer className="border-t border-border">
+      <footer className="mt-12 border-t border-border">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-6 py-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <PrimitiveText as="p" variant="bodySm">
             Curating closets and serving looks, one hanger at a time.
