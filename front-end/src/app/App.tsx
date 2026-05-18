@@ -315,6 +315,14 @@ export default function App() {
     }));
   }
 
+  function removeItemFromOutfitDraft(itemId: number) {
+    setOutfitDraftNotice("Removed from outfit draft.");
+    setOutfitDraft((current) => ({
+      ...current,
+      itemIds: current.itemIds.filter((id) => id !== itemId),
+    }));
+  }
+
   async function handleLogout() {
     try {
       await logoutSession();
@@ -723,7 +731,9 @@ export default function App() {
                     {...item}
                     index={index}
                     onSelect={(itemId) => navigateTo(`/items/${itemId}`)}
+                    isInOutfit={outfitDraft.itemIds.includes(item.id)}
                     onAddToOutfit={addItemToOutfitDraft}
+                    onRemoveFromOutfit={removeItemFromOutfitDraft}
                   />
                 ))}
               </div>
