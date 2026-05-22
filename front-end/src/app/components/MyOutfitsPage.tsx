@@ -1,30 +1,38 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Pencil, Plus, Shirt, Trash2, X } from "lucide-react";
+import { Pencil, Shirt, Trash2 } from "lucide-react";
 import {
-  buildPlaceholderLabel,
   ClothingItem,
-  createOutfit,
   destroyOutfit,
-  emptyOutfitDraft,
   fetchOutfits,
-  formatTagLabel,
   OutfitDraft,
   Outfit,
   parseTagInput,
   updateOutfit,
   User,
 } from "../lib/closet";
+import { OutfitCollageCanvas, OutfitCollageLayersPanel } from "./OutfitCollageCanvas";
+import {
+  OutfitCollageLayout,
+  reorderCollageLayers,
+  resolveOutfitCollageLayouts,
+} from "../lib/outfitCollage";
+import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { MAX_OUTFIT_NAME, MAX_OUTFIT_NOTES } from "../lib/inputLengthPolicy";
 
 interface MyOutfitsPageProps {
   user: User;
-  draft: OutfitDraft;
-  onDraftChange: (draft: OutfitDraft) => void;
-  onBrowseCloset: () => void;
-  onOpenItem: (itemId: number) => void;
 }
 
 interface FlashState {
@@ -43,16 +51,19 @@ function outfitToFormState(outfit: Outfit): OutfitDraft {
 
 export function MyOutfitsPage({
   user,
-  draft,
-  onDraftChange,
-  onBrowseCloset,
-  onOpenItem,
 }: MyOutfitsPageProps) {
   const [outfits, setOutfits] = useState<Outfit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [flash, setFlash] = useState<FlashState | null>(null);
   const [editingOutfitId, setEditingOutfitId] = useState<number | null>(null);
-  const [formState, setFormState] = useState<OutfitDraft>(draft);
+  const [formState, setFormState] = useState<OutfitDraft>({
+    name: "",
+    notes: "",
+    tagInput: "",
+    itemIds: [],
+  });
+  const [editorLayouts, setEditorLayouts] = useState<Record<number, OutfitCollageLayout>>({});
+  const [selectedCollageItemId, setSelectedCollageItemId] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const formSectionRef = useRef<HTMLElement | null>(null);
 
@@ -66,50 +77,20 @@ export function MyOutfitsPage({
       .map((id) => itemById.get(id))
       .filter((item): item is ClothingItem => Boolean(item));
   }, [formState.itemIds, sortedItems]);
+  const editingOutfit = editingOutfitId
+    ? outfits.find((outfit) => outfit.id === editingOutfitId) ?? null
+    : null;
 
   function showFlash(kind: FlashState["kind"], message: string) {
     setFlash({ kind, message });
   }
 
-  function updateCreateDraft(nextDraft: OutfitDraft) {
-    setFormState(nextDraft);
-    onDraftChange(nextDraft);
-  }
-
-  function updateFormState(updater: (current: OutfitDraft) => OutfitDraft) {
-    setFormState((current) => {
-      const nextDraft = updater(current);
-
-      if (!editingOutfitId) {
-        onDraftChange(nextDraft);
-      }
-
-      return nextDraft;
-    });
-  }
-
   function setFormField<Key extends keyof OutfitDraft>(key: Key, value: OutfitDraft[Key]) {
-    if (editingOutfitId) {
-      setFormState((current) => ({
-        ...current,
-        [key]: value,
-      }));
-      return;
-    }
-
-    updateFormState((current) => ({
+    setFormState((current) => ({
       ...current,
       [key]: value,
     }));
   }
-
-  useEffect(() => {
-    if (editingOutfitId) {
-      return;
-    }
-
-    setFormState(draft);
-  }, [draft, editingOutfitId]);
 
   useEffect(() => {
     if (!flash) {
@@ -165,32 +146,27 @@ export function MyOutfitsPage({
     setIsSaving(true);
 
     try {
-      if (editingOutfitId) {
-        const updatedOutfit = await updateOutfit({
-          id: editingOutfitId,
-          name: trimmedName,
-          itemIds: formState.itemIds,
-          notes: formState.notes.trim() || undefined,
-          tags: tags.length > 0 ? tags : undefined,
-        });
-
-        setOutfits((current) =>
-          current.map((outfit) => (outfit.id === updatedOutfit.id ? updatedOutfit : outfit)),
-        );
-        showFlash("success", "Outfit updated.");
-      } else {
-        const createdOutfit = await createOutfit({
-          userId: user.id,
-          name: trimmedName,
-          itemIds: formState.itemIds,
-          notes: formState.notes.trim() || undefined,
-          tags: tags.length > 0 ? tags : undefined,
-        });
-
-        setOutfits((current) => [createdOutfit, ...current]);
-        updateCreateDraft(emptyOutfitDraft());
-        showFlash("success", "Outfit saved.");
+      if (!editingOutfitId) {
+        showFlash("error", "Create new outfits from the closet cart.");
+        return;
       }
+
+      const updatedOutfit = await updateOutfit({
+        id: editingOutfitId,
+        name: trimmedName,
+        itemIds: formState.itemIds,
+        itemLayouts: formState.itemIds.map((itemId) => ({
+          item_id: itemId,
+          ...editorLayouts[itemId],
+        })),
+        notes: formState.notes.trim() || undefined,
+        tags: tags.length > 0 ? tags : undefined,
+      });
+
+      setOutfits((current) =>
+        current.map((outfit) => (outfit.id === updatedOutfit.id ? updatedOutfit : outfit)),
+      );
+      showFlash("success", "Outfit updated.");
 
       resetForm();
     } catch (error) {
@@ -210,23 +186,25 @@ export function MyOutfitsPage({
     }
   }
 
-  function removeSelectedItem(itemId: number) {
-    updateFormState((current) => ({
-      ...current,
-      itemIds: current.itemIds.filter((id) => id !== itemId),
-    }));
-  }
-
   function startEditing(outfit: Outfit) {
     setEditingOutfitId(outfit.id);
     setFormState(outfitToFormState(outfit));
+    const nextLayouts = resolveOutfitCollageLayouts(outfit.items);
+    setEditorLayouts(nextLayouts);
+    setSelectedCollageItemId(outfit.items[0]?.id ?? null);
     setFlash(null);
-    formSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function resetForm() {
     setEditingOutfitId(null);
-    setFormState(draft);
+    setFormState({
+      name: "",
+      notes: "",
+      tagInput: "",
+      itemIds: [],
+    });
+    setEditorLayouts({});
+    setSelectedCollageItemId(null);
   }
 
   return (
@@ -248,136 +226,6 @@ export function MyOutfitsPage({
         </PrimitiveText>
       </div>
 
-      <section ref={formSectionRef} className="border border-border bg-card p-6">
-        <div className="flex items-center gap-3 mb-5">
-          <Plus className="w-4 h-4" />
-          <h2>{editingOutfitId ? "Edit Outfit" : "Create Outfit"}</h2>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="space-y-2">
-              <PrimitiveText as="span" variant="bodySm" tone="muted">Name</PrimitiveText>
-              <input
-                value={formState.name}
-                onChange={(event) => setFormField("name", event.target.value)}
-                placeholder="Weekend Brunch"
-                className="w-full border border-border bg-background px-3 py-2"
-                maxLength={MAX_OUTFIT_NAME}
-              />
-            </label>
-
-            <label className="space-y-2">
-              <PrimitiveText as="span" variant="bodySm" tone="muted">
-                Tags (comma separated)
-              </PrimitiveText>
-              <input
-                value={formState.tagInput}
-                onChange={(event) => setFormField("tagInput", event.target.value)}
-                placeholder="casual, spring"
-                className="w-full border border-border bg-background px-3 py-2"
-              />
-            </label>
-          </div>
-
-          <label className="space-y-2 block">
-            <PrimitiveText as="span" variant="bodySm" tone="muted">Notes</PrimitiveText>
-            <textarea
-              value={formState.notes}
-              onChange={(event) => setFormField("notes", event.target.value)}
-              placeholder="When and where to wear this look"
-              className="w-full border border-border bg-background px-3 py-2 min-h-24"
-              maxLength={MAX_OUTFIT_NOTES}
-            />
-          </label>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <PrimitiveText as="p" variant="bodySm" tone="muted">
-                Items in this outfit
-              </PrimitiveText>
-              <PrimitiveButton
-                type="button"
-                onClick={onBrowseCloset}
-                variant="outline"
-                size="sm"
-              >
-                Add from closet
-              </PrimitiveButton>
-            </div>
-
-            {selectedItems.length === 0 ? (
-              <PrimitiveText
-                as="div"
-                variant="bodySm"
-                tone="muted"
-                className="border border-dashed border-border p-4"
-              >
-                Use “Add to Outfit” on any closet item, then come back here to save.
-              </PrimitiveText>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {selectedItems.map((item) => (
-                  <div key={item.id} className="border border-border p-2 flex items-center gap-3">
-                    <div className="h-12 w-12 shrink-0 border border-border bg-muted overflow-hidden">
-                      {item.image_url ? (
-                        <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <PrimitiveText
-                          as="div"
-                          variant="caption"
-                          className="h-full w-full flex items-center justify-center"
-                        >
-                          {buildPlaceholderLabel(item.name)}
-                        </PrimitiveText>
-                      )}
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <PrimitiveText as="p" className="truncate">{item.name}</PrimitiveText>
-                      <PrimitiveText as="p" variant="caption" tone="muted" className="truncate">
-                        {item.tags.length > 0 ? formatTagLabel(item.tags[0]) : "Unstyled"}
-                      </PrimitiveText>
-                    </div>
-
-                    <PrimitiveButton
-                      type="button"
-                      onClick={() => removeSelectedItem(item.id)}
-                      variant="outline"
-                      size="icon"
-                      className="size-8 p-1.5"
-                      aria-label={`Remove ${item.name}`}
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </PrimitiveButton>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <PrimitiveButton
-              type="submit"
-              disabled={isSaving}
-              variant="outline"
-            >
-              {editingOutfitId ? "Save Changes" : "Save Outfit"}
-            </PrimitiveButton>
-
-            {editingOutfitId ? (
-              <PrimitiveButton
-                type="button"
-                onClick={resetForm}
-                variant="outline"
-              >
-                Cancel Edit
-              </PrimitiveButton>
-            ) : null}
-          </div>
-        </form>
-      </section>
-
       <section className="space-y-4">
         {isLoading ? (
           <div className="grid gap-4 md:grid-cols-2">
@@ -395,85 +243,70 @@ export function MyOutfitsPage({
               No outfits yet
             </PrimitiveText>
             <PrimitiveText as="p" tone="muted">
-              Build your first look above and it will appear here.
+              Create your first look from the closet cart and it will appear here.
             </PrimitiveText>
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-2">
             {outfits.map((outfit, index) => (
               <motion.article
                 key={outfit.id}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, delay: index * 0.03 }}
-                className="border border-border bg-card p-5 space-y-4"
+                transition={{ duration: 0.35, delay: index * 0.04 }}
+                className="overflow-hidden border border-border bg-card"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3>{outfit.name}</h3>
-                    {outfit.tags && outfit.tags.length > 0 ? (
-                      <PrimitiveText as="p" variant="bodySm" tone="muted">
-                        {outfit.tags.join(" · ")}
+                <OutfitCollageCanvas items={outfit.items} maxVisibleItems={6} />
+
+                <div className="space-y-4 p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
+                        Saved Look
                       </PrimitiveText>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <PrimitiveButton
-                      onClick={() => startEditing(outfit)}
-                      variant="outline"
-                      size="icon"
-                      aria-label="Edit outfit"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </PrimitiveButton>
-                    <PrimitiveButton
-                      onClick={() => void handleDelete(outfit.id)}
-                      variant="outline"
-                      size="icon"
-                      className="hover:border-destructive"
-                      aria-label="Delete outfit"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </PrimitiveButton>
-                  </div>
-                </div>
-
-                {outfit.notes ? (
-                  <PrimitiveText as="p" variant="bodySm" tone="muted">{outfit.notes}</PrimitiveText>
-                ) : null}
-
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {outfit.items.map((item: ClothingItem) => (
-                    <PrimitiveButton
-                      key={item.id}
-                      onClick={() => onOpenItem(item.id)}
-                      variant="outline"
-                      className="h-auto w-full justify-start px-3 py-2 text-left"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 shrink-0 border border-border rounded-full flex items-center justify-center bg-muted">
-                          {item.image_url ? (
-                            <img
-                              src={item.image_url}
-                              alt={item.name}
-                              className="h-full w-full rounded-full object-cover"
-                            />
-                          ) : (
-                            <PrimitiveText as="span" variant="caption">
-                              {buildPlaceholderLabel(item.name)}
-                            </PrimitiveText>
-                          )}
-                        </div>
-                        <div>
-                          <PrimitiveText as="p">{item.name}</PrimitiveText>
-                          <PrimitiveText as="p" variant="caption" tone="muted">
-                            <Shirt className="inline w-3 h-3 mr-1" />
-                            {item.tags.length > 0 ? formatTagLabel(item.tags[0]) : "Unstyled"}
+                      <PrimitiveText as="h3" variant="display" font="serif" className="break-words">
+                        {outfit.name}
+                      </PrimitiveText>
+                      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <PrimitiveText as="p" variant="bodySm" tone="muted">
+                          <Shirt className="mr-1 inline h-3 w-3" />
+                          {outfit.items.length} {outfit.items.length === 1 ? "piece" : "pieces"}
+                        </PrimitiveText>
+                        {outfit.tags && outfit.tags.length > 0 ? (
+                          <PrimitiveText as="p" variant="bodySm" tone="muted">
+                            {outfit.tags.join(" · ")}
                           </PrimitiveText>
-                        </div>
+                        ) : null}
                       </div>
-                    </PrimitiveButton>
-                  ))}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <PrimitiveButton
+                        onClick={() => startEditing(outfit)}
+                        variant="outline"
+                        size="icon"
+                        aria-label="Edit outfit"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </PrimitiveButton>
+                      <PrimitiveButton
+                        onClick={() => void handleDelete(outfit.id)}
+                        variant="outline"
+                        size="icon"
+                        className="hover:border-destructive"
+                        aria-label="Delete outfit"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </PrimitiveButton>
+                    </div>
+                  </div>
+
+                  {outfit.notes ? (
+                    <PrimitiveText as="p" variant="bodySm" tone="muted" className="line-clamp-3">
+                      {outfit.notes}
+                    </PrimitiveText>
+                  ) : null}
+
                 </div>
               </motion.article>
             ))}
@@ -497,6 +330,134 @@ export function MyOutfitsPage({
           {flash.message}
         </motion.div>
       ) : null}
+
+      <Dialog open={Boolean(editingOutfitId)} onOpenChange={(open) => !open && resetForm()}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] rounded-none border-border p-0 sm:w-[calc(100vw-3rem)] sm:max-w-[calc(100vw-3rem)] xl:max-w-[120rem] 2xl:max-w-[128rem]">
+          <div className="grid max-h-[90vh] overflow-hidden lg:grid-cols-[minmax(0,1.55fr)_minmax(28rem,0.95fr)] 2xl:grid-cols-[minmax(0,1.7fr)_minmax(32rem,0.9fr)]">
+            <div className="overflow-y-auto border-b border-border bg-stone-50 px-6 py-8 md:px-10 lg:border-b-0 lg:border-r lg:px-12">
+              <div
+                ref={formSectionRef}
+                className="flex h-full flex-col gap-6"
+              >
+                <PrimitiveText as="p" variant="overline" tone="muted">
+                  Outfit Preview
+                </PrimitiveText>
+                {editingOutfit ? (
+                  <>
+                    <div className="grid min-h-0 gap-4 lg:grid-cols-[5.75rem_minmax(0,1fr)] lg:items-start">
+                      <div className="min-w-0 lg:order-1">
+                        <OutfitCollageLayersPanel
+                          items={editingOutfit.items}
+                          layouts={editorLayouts}
+                          selectedItemId={selectedCollageItemId}
+                          onSelectItem={setSelectedCollageItemId}
+                          onReorder={(orderedItemIds) => {
+                            setEditorLayouts((current) => reorderCollageLayers(current, orderedItemIds));
+                            setFormState((current) => ({
+                              ...current,
+                              itemIds: orderedItemIds,
+                            }));
+                          }}
+                        />
+                      </div>
+                      <div className="min-w-0 lg:order-2">
+                        <OutfitCollageCanvas
+                          items={editingOutfit.items}
+                          layouts={editorLayouts}
+                          editable
+                          selectedItemId={selectedCollageItemId}
+                          onSelectItem={setSelectedCollageItemId}
+                          onLayoutsChange={setEditorLayouts}
+                          className="mx-auto w-full max-w-[72rem]"
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="overflow-y-auto p-6 lg:p-8 xl:p-10">
+              <DialogHeader className="mb-6 text-left sm:text-left">
+                <DialogTitle asChild>
+                  <PrimitiveText as="h2" variant="display" font="serif">
+                    Edit Outfit
+                  </PrimitiveText>
+                </DialogTitle>
+                <DialogDescription asChild>
+                  <PrimitiveText as="p" tone="muted">
+                    Update the saved outfit details while keeping the current look in view.
+                  </PrimitiveText>
+                </DialogDescription>
+              </DialogHeader>
+
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <label className="block space-y-2">
+                  <PrimitiveText as="span" variant="bodySm" tone="muted">
+                    Title
+                  </PrimitiveText>
+                  <Input
+                    value={formState.name}
+                    onChange={(event) => setFormField("name", event.target.value)}
+                    placeholder="Weekend Brunch"
+                    maxLength={MAX_OUTFIT_NAME}
+                  />
+                </label>
+
+                <label className="block space-y-2">
+                  <PrimitiveText as="span" variant="bodySm" tone="muted">
+                    Tags
+                  </PrimitiveText>
+                  <Input
+                    value={formState.tagInput}
+                    onChange={(event) => setFormField("tagInput", event.target.value)}
+                    placeholder="casual, spring"
+                  />
+                </label>
+
+                <label className="block space-y-2">
+                  <PrimitiveText as="span" variant="bodySm" tone="muted">
+                    Notes
+                  </PrimitiveText>
+                  <Textarea
+                    value={formState.notes}
+                    onChange={(event) => setFormField("notes", event.target.value)}
+                    placeholder="When and where to wear this look"
+                    className="min-h-32"
+                    maxLength={MAX_OUTFIT_NOTES}
+                  />
+                </label>
+
+                {selectedItems.length > 0 ? (
+                  <div className="space-y-2">
+                    <PrimitiveText as="p" variant="bodySm" tone="muted">
+                      Included pieces
+                    </PrimitiveText>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedItems.map((item) => (
+                        <div key={item.id} className="border border-border bg-card px-3 py-2">
+                          <PrimitiveText as="span" variant="bodySm">
+                            {item.name}
+                          </PrimitiveText>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <DialogFooter className="pt-2 sm:justify-start">
+                  <PrimitiveButton type="submit" disabled={isSaving} variant="outline">
+                    Save Changes
+                  </PrimitiveButton>
+                  <PrimitiveButton type="button" onClick={resetForm} variant="outline">
+                    Cancel
+                  </PrimitiveButton>
+                </DialogFooter>
+              </form>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

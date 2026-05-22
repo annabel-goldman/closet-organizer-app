@@ -1,4 +1,5 @@
 import { requestJson, requestJsonOrNull, requestVoid } from "./api";
+import { OutfitCollageLayout } from "./outfitCollage";
 
 const LOCAL_BACKEND_BASE_URL = "http://127.0.0.1:3000";
 
@@ -53,6 +54,9 @@ export interface ClothingItem {
   clean_image_provider?: string | null;
   clean_image_model?: string | null;
   clean_image_generated_at?: string | null;
+  outfit_item_id?: number;
+  layer_order?: number;
+  collage_layout?: OutfitCollageLayout | null;
   user?: UserSummary;
 }
 
@@ -503,12 +507,18 @@ interface CreateOutfitInput {
   userId: number;
   name: string;
   itemIds: number[];
+  itemLayouts?: OutfitCollageLayoutInput[];
   notes?: string;
   tags?: string[];
 }
 
+interface OutfitCollageLayoutInput extends OutfitCollageLayout {
+  item_id: number;
+}
+
 function buildOutfitPayload(input: {
   itemIds: number[];
+  itemLayouts?: OutfitCollageLayoutInput[];
   name: string;
   notes?: string;
   tags?: string[];
@@ -519,6 +529,7 @@ function buildOutfitPayload(input: {
       user_id: input.userId,
       name: input.name,
       item_ids: input.itemIds,
+      item_layouts: input.itemLayouts,
       notes: input.notes,
       tags: input.tags,
     },
@@ -539,6 +550,7 @@ interface UpdateOutfitInput {
   id: number;
   name: string;
   itemIds: number[];
+  itemLayouts?: OutfitCollageLayoutInput[];
   notes?: string;
   tags?: string[];
 }
@@ -689,11 +701,34 @@ function normalizeCategoryValue(rawCategory: unknown) {
 }
 
 function normalizeClothingItemPayload(item: ClothingItem): ClothingItem {
+  const rawLayout = (item as ClothingItem & { collage_layout?: Partial<OutfitCollageLayout> | null }).collage_layout;
+  const collage_layout =
+    rawLayout &&
+    typeof rawLayout.x === "number" &&
+    typeof rawLayout.y === "number" &&
+    typeof rawLayout.width === "number" &&
+    typeof rawLayout.height === "number"
+      ? {
+          x: rawLayout.x,
+          y: rawLayout.y,
+          width: rawLayout.width,
+          height: rawLayout.height,
+          rotation: typeof rawLayout.rotation === "number" ? rawLayout.rotation : 0,
+          layer_order:
+            typeof rawLayout.layer_order === "number"
+              ? rawLayout.layer_order
+              : typeof item.layer_order === "number"
+                ? item.layer_order
+                : 0,
+        }
+      : null;
+
   return {
     ...item,
     category: normalizeCategoryValue(item.category) || null,
     brand: item.brand?.trim() ? item.brand.trim() : null,
     tags: normalizeTagList((item as ClothingItem & { tags?: unknown }).tags),
+    collage_layout,
   };
 }
 
