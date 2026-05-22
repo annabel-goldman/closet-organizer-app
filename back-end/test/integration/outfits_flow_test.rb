@@ -119,6 +119,16 @@ class OutfitsFlowTest < ActionDispatch::IntegrationTest
     assert_equal 18.0, response_json["items"].first["collage_layout"]["x"]
     assert_equal(-8.0, response_json["items"].first["collage_layout"]["rotation"])
     assert_equal 1, response_json["items"].second["layer_order"]
+
+    @outfit.reload
+    ordered_outfit_items = @outfit.outfit_items.order(:layer_order, :id)
+    assert_equal [ extra_item.id, @user_item.id ], ordered_outfit_items.map(&:clothing_item_id)
+    assert_equal 18.0, ordered_outfit_items.first.collage_x
+    assert_equal 44.0, ordered_outfit_items.first.collage_width
+    assert_equal(-8.0, ordered_outfit_items.first.collage_rotation)
+    assert_equal 36.0, ordered_outfit_items.second.collage_x
+    assert_equal 42.0, ordered_outfit_items.second.collage_height
+    assert_equal 6.0, ordered_outfit_items.second.collage_rotation
   end
 
   test "can delete an outfit" do
