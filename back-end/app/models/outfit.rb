@@ -1,6 +1,6 @@
 class Outfit < ApplicationRecord
   belongs_to :user
-  has_many :outfit_items, dependent: :destroy
+  has_many :outfit_items, -> { order(:layer_order, :id) }, dependent: :destroy
   has_many :clothing_items, through: :outfit_items
 
   validates :name, presence: true, length: { maximum: InputLengthPolicy::MAX_OUTFIT_NAME }

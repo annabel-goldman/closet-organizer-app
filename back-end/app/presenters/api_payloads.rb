@@ -109,9 +109,15 @@ class ApiPayloads
       ]
     )
 
-    payload["item_ids"] = outfit.clothing_items.map(&:id)
-    payload["items"] = outfit.clothing_items.order(:name).map do |item|
-      clothing_item(item, include_user: false)
+    ordered_outfit_items = outfit.outfit_items.sort_by { |outfit_item| [ outfit_item.layer_order, outfit_item.id ] }
+
+    payload["item_ids"] = ordered_outfit_items.map(&:clothing_item_id)
+    payload["items"] = ordered_outfit_items.map do |outfit_item|
+      clothing_item(outfit_item.clothing_item, include_user: false).merge(
+        "outfit_item_id" => outfit_item.id,
+        "layer_order" => outfit_item.layer_order,
+        "collage_layout" => outfit_item.collage_layout_payload
+      )
     end
     payload
   end

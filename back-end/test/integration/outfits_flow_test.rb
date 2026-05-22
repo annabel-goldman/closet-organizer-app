@@ -43,6 +43,7 @@ class OutfitsFlowTest < ActionDispatch::IntegrationTest
     assert_equal @user.id, created_outfit.user_id
     assert_equal [ @user_item.id ], created_outfit.clothing_item_ids
     assert_equal [ "rain", "casual" ], response_json["tags"]
+    assert_equal [ @user_item.id ], response_json["item_ids"]
   end
 
   test "cannot create an outfit using another user's item" do
@@ -74,6 +75,50 @@ class OutfitsFlowTest < ActionDispatch::IntegrationTest
     assert_equal "Weekend Capsule Updated", @outfit.name
     assert_equal "Updated note", @outfit.notes
     assert_empty @outfit.clothing_item_ids
+  end
+
+  test "can update outfit collage layout and layer order" do
+    extra_item = ClothingItem.create!(
+      user: @user,
+      name: "Layered Coat",
+      size: :large,
+      tags: [ "outerwear" ]
+    )
+    @outfit.clothing_items << extra_item
+
+    patch outfit_url(@outfit), params: {
+      outfit: {
+        name: @outfit.name,
+        item_ids: [ extra_item.id, @user_item.id ],
+        item_layouts: [
+          {
+            item_id: extra_item.id,
+            x: 18,
+            y: 10,
+            width: 44,
+            height: 48,
+            rotation: -8,
+            layer_order: 0
+          },
+          {
+            item_id: @user_item.id,
+            x: 36,
+            y: 32,
+            width: 40,
+            height: 42,
+            rotation: 6,
+            layer_order: 1
+          }
+        ]
+      }
+    }, headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal [ extra_item.id, @user_item.id ], response_json["item_ids"]
+    assert_equal extra_item.id, response_json["items"].first["id"]
+    assert_equal 18.0, response_json["items"].first["collage_layout"]["x"]
+    assert_equal(-8.0, response_json["items"].first["collage_layout"]["rotation"])
+    assert_equal 1, response_json["items"].second["layer_order"]
   end
 
   test "can delete an outfit" do
