@@ -75,6 +75,8 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
 - The app loads the signed-in user through `GET /me`.
 - Non-admin users are blocked from `/users` and `/users/:id` in both backend authorization and frontend navigation.
 - The admin users directory at `/users` is paginated (24 per page) and uses a `clothing_items_count` field per user instead of shipping each user's full items array.
+- The closet page now treats outfit selection like a cart: `Add to Outfit` updates a cart button in the closet action row beside `Add Item`, the selected pieces can be reviewed in a right-side tray, and the tray can capture outfit name, tags, and notes before creating the outfit. The `/outfits` page now focuses on browsing, editing, and deleting saved outfits, and editing opens a modal with the outfit preview on the left, direct collage editing controls (move, resize, rotate, and layer reordering), and editable metadata on the right.
+- The saved-outfit collage editor is library-backed: `react-moveable` owns the move/resize/rotate controls, while `OutfitCollageCanvas` keeps the rendered image viewport and persisted collage layout data in sync.
 - Item and outfit text inputs are length-capped through `src/app/lib/inputLengthPolicy.ts`, which mirrors the backend `InputLengthPolicy` constants and applies them as `maxLength` on the relevant `<input>` and `<textarea>` controls.
 - Closet filtering and sorting are handled through focused helpers in `src/app/lib/closetFilters.ts`.
 - Item create and edit flows send multipart form data so photos can be uploaded, cropped, removed, or sourced from detected outfit-photo regions.
@@ -92,6 +94,8 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
   Shared fetch helpers and API error formatting
 - `src/app/lib/closet.ts`
   Shared types plus frontend-facing API helpers for clothing items, outfits, uploads, clean-image flows, and metadata suggestions
+- `src/app/lib/outfitCollage.ts`
+  Shared default-layout, layer-order, and layout-normalization helpers for saved outfit collages
 - `src/app/lib/closetFilters.ts`
   Closet search, filter, and sort helpers
 - `src/app/lib/usePageData.ts`
@@ -106,6 +110,10 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
   Manual item creation plus orchestration for the image-based create flow
 - `src/app/components/ItemDetailPage.tsx`
   Edit and delete flow for an existing clothing item
+- `src/app/components/OutfitCartSheet.tsx`
+  Cart-style right-side tray for reviewing selected closet items and creating an outfit directly from the closet page
+- `src/app/components/OutfitCollageCanvas.tsx`
+  Shared saved-outfit collage renderer plus the edit-modal `react-moveable` interaction layer and content-bounds-aware image viewport
 - `src/app/components/ItemMetadataFields.tsx`
   Shared name, size, date, brand, tag, and AI autofill fields
 - `src/app/components/AiMetadataAutofillButton.tsx`
