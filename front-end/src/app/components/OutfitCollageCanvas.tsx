@@ -19,11 +19,15 @@ import {
   resolveOutfitCollageLayouts,
   sortItemsByCollageLayer,
 } from "../lib/outfitCollage";
+import {
+  COLLAGE_STAGE_ASPECT_RATIO,
+  normalizeOutfitCollageLayoutToAspectRatio,
+  resolveOutfitCollageResizeAspectRatio,
+} from "../lib/outfitCollageRenderMath";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 
 const MOVEABLE_RENDER_DIRECTIONS = [ "nw", "ne", "sw", "se" ] as const;
 const MIN_ITEM_SIZE_PERCENT = 8;
-const COLLAGE_STAGE_ASPECT_RATIO = 4 / 5;
 
 interface ActiveRotationGesture {
   itemId: number;
@@ -74,7 +78,7 @@ export function OutfitCollageCanvas({
       Object.fromEntries(
         visibleItems.map((item) => [
           item.id,
-          normalizeLayoutToAspectRatio(
+          normalizeOutfitCollageLayoutToAspectRatio(
             resolvedLayouts[item.id],
             imageContentBoundsByItemId[item.id]?.aspectRatio ?? imageAspectRatioByItemId[item.id],
           ),
@@ -190,11 +194,11 @@ export function OutfitCollageCanvas({
 
     pinItemFrameToPixels(selectedItemId);
     const selectedLayout = displayLayouts[selectedItemId] ?? resolvedLayouts[selectedItemId];
-    event.setRatio(
-      imageContentBoundsByItemId[selectedItemId]?.aspectRatio
-      ?? imageAspectRatioByItemId[selectedItemId]
-      ?? (selectedLayout.width / Math.max(selectedLayout.height, 0.001)),
-    );
+    event.setRatio(resolveOutfitCollageResizeAspectRatio({
+      contentBoundsAspectRatio: imageContentBoundsByItemId[selectedItemId]?.aspectRatio,
+      intrinsicAspectRatio: imageAspectRatioByItemId[selectedItemId],
+      layout: selectedLayout,
+    }));
     event.dragStart?.set([ 0, 0 ]);
   }
 
@@ -448,40 +452,6 @@ export function OutfitCollageCanvas({
       ) : null}
     </div>
   );
-}
-
-function normalizeLayoutToAspectRatio(
-  layout: OutfitCollageLayout,
-  aspectRatio?: number,
-): OutfitCollageLayout {
-  if (!aspectRatio || !Number.isFinite(aspectRatio) || aspectRatio <= 0) {
-    return clampCollageLayout(layout);
-  }
-
-  const safeLayout = clampCollageLayout(layout);
-  const currentRatio = (
-    safeLayout.width * COLLAGE_STAGE_ASPECT_RATIO
-  ) / Math.max(safeLayout.height, 0.001);
-
-  if (Math.abs(currentRatio - aspectRatio) < 0.001) {
-    return safeLayout;
-  }
-
-  if (currentRatio > aspectRatio) {
-    const width = (safeLayout.height * aspectRatio) / COLLAGE_STAGE_ASPECT_RATIO;
-    return clampCollageLayout({
-      ...safeLayout,
-      x: safeLayout.x + (safeLayout.width - width) / 2,
-      width,
-    });
-  }
-
-  const height = (safeLayout.width * COLLAGE_STAGE_ASPECT_RATIO) / aspectRatio;
-  return clampCollageLayout({
-    ...safeLayout,
-    y: safeLayout.y + (safeLayout.height - height) / 2,
-    height,
-  });
 }
 
 function imageStyleForContentBounds(bounds?: ImageContentBounds): CSSProperties {

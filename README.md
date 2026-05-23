@@ -20,7 +20,7 @@ Curated Closet is a monorepo with a Rails JSON API in `back-end/` and a React + 
 - Create, edit, delete, and photo-manage clothing items
 - Generate AI metadata suggestions for item type, name, brand, and tags
 - Generate cleaned catalog-style item images
-- Save outfits from owned closet items at `/outfits`
+- Build outfits from the closet cart and browse/edit saved outfits at `/outfits`
 - Upload an outfit photo, review detections, and convert detections into closet items
 - Restrict `/users` and `/users/:id` to admin users only
 - Show frontend not-found and unauthorized states instead of raw backend responses
@@ -53,6 +53,7 @@ Heroku deployment link:
 ## Current Code Organization
 
 - Frontend route parsing, closet filtering, shared API helpers, page-loading hooks, and outfit-draft persistence are split into focused modules under `front-end/src/app/lib/`.
+- Saved-outfit collage rendering and resize math are shared between the `/outfits` gallery and edit modal so the editor preview and saved card composition stay on the same contract.
 - Shared frontend control patterns live under `front-end/src/app/components/primitives/` and should be reused before introducing custom button, dropdown, select-trigger, or typography markup.
 - The add/edit item workflow is centered on `ItemEditorWorkspace.tsx`, `CreateItemPage.tsx`, `ItemDetailPage.tsx`, and extracted review components under `front-end/src/app/components/create-item/`.
 - Backend JSON response shaping lives in `back-end/app/presenters/api_payloads.rb`.
@@ -131,9 +132,11 @@ npm run dev
 ## Testing And CI
 
 - Rails tests run in GitHub Actions through `.github/workflows/ci.yml`
+- Frontend contract tests run through `cd front-end && npm test`
 - CI also runs `brakeman`, `bundler-audit`, and `rubocop`
 - Recent local verification:
   `npm run build`
+  `cd front-end && npm test`
   `bundle exec rails test`
   `bundle exec rubocop`
 

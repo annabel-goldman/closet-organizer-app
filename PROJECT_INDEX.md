@@ -1,6 +1,6 @@
 # Project Structure Index
 
-Last updated: 2026-05-22
+Last updated: 2026-05-23
 
 This file is intentionally concise and focused on repository structure.
 For the product purpose and problem statement, see `wiki.md`.
@@ -43,11 +43,13 @@ project-closet-organizer/
 - `src/app/lib/api.ts`: shared request/error helpers for frontend API calls
 - `src/app/lib/closet.ts`: shared types, formatting helpers, and feature-specific API helpers, including AI preview and metadata-suggestion requests
 - `src/app/lib/outfitCollage.ts`: shared default-layout and layer-order helpers for saved outfit collages
+- `src/app/lib/outfitCollageRenderMath.ts`: shared stage-aspect normalization and resize-aspect helpers that keep saved cards and the editor preview on the same rendering contract
 - `src/app/lib/outfitImageBounds.ts`: cached image-content-bounds measurement helpers for saved-outfit collage rendering and editing
 - `src/app/lib/closetFilters.ts`: closet search, filter, and sort helpers
 - `src/app/lib/useItemPhotoState.ts`: shared photo upload and preview state management
 - `src/app/lib/usePageData.ts`: shared async page-loading hook
 - `src/app/lib/useOutfitDraftState.ts`: persisted outfit draft state management
+- `tests/`: frontend contract tests run with Node's built-in test runner
 - `src/styles/`: fonts, theme, and global styling
 
 ## CI

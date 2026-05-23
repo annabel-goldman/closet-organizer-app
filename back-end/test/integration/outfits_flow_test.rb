@@ -131,6 +131,59 @@ class OutfitsFlowTest < ActionDispatch::IntegrationTest
     assert_equal 6.0, ordered_outfit_items.second.collage_rotation
   end
 
+  test "outfit show returns the same saved collage layout after editing" do
+    extra_item = ClothingItem.create!(
+      user: @user,
+      name: "Layered Coat",
+      size: :large,
+      tags: [ "outerwear" ]
+    )
+    @outfit.clothing_items << extra_item
+
+    patch outfit_url(@outfit), params: {
+      outfit: {
+        name: @outfit.name,
+        item_ids: [ extra_item.id, @user_item.id ],
+        item_layouts: [
+          {
+            item_id: extra_item.id,
+            x: 18,
+            y: 10,
+            width: 44,
+            height: 48,
+            rotation: -8,
+            layer_order: 0
+          },
+          {
+            item_id: @user_item.id,
+            x: 36,
+            y: 32,
+            width: 40,
+            height: 42,
+            rotation: 6,
+            layer_order: 1
+          }
+        ]
+      }
+    }, headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    updated_items = response_json.fetch("items").map do |item|
+      [
+        item.fetch("id"),
+        item.fetch("layer_order"),
+        item.fetch("collage_layout")
+      ]
+    end
+    updated_item_ids = response_json.fetch("item_ids")
+
+    get outfit_url(@outfit), headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal updated_item_ids, response_json.fetch("item_ids")
+    assert_equal updated_items, response_json.fetch("items").map { |item| [ item.fetch("id"), item.fetch("layer_order"), item.fetch("collage_layout") ] }
+  end
+
   test "can update outfit collage layout with an item partially off canvas" do
     patch outfit_url(@outfit), params: {
       outfit: {

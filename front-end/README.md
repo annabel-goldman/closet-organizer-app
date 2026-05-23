@@ -62,7 +62,7 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
 
 - `/` logged-out landing page
 - `/closet` signed-in closet home with search, filters, and sorting
-- `/outfits` saved outfit builder and editor
+- `/outfits` saved outfit gallery and editor
 - `/users` admin-only users directory
 - `/users/:id` admin-only user detail page
 - `/items/:id` clothing item detail editor
@@ -77,6 +77,7 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
 - The admin users directory at `/users` is paginated (24 per page) and uses a `clothing_items_count` field per user instead of shipping each user's full items array.
 - The closet page now treats outfit selection like a cart: `Add to Outfit` updates a cart button in the closet action row beside `Add Item`, the selected pieces can be reviewed in a right-side tray, and the tray can capture outfit name, tags, and notes before creating the outfit. The `/outfits` page now focuses on browsing, editing, and deleting saved outfits, and editing opens a modal with the outfit preview on the left, direct collage editing controls (move, resize, rotate, and layer reordering), and editable metadata on the right.
 - The saved-outfit collage editor is library-backed: `react-moveable` owns the move/resize/rotate controls, while `OutfitCollageCanvas` keeps the rendered image viewport and persisted collage layout data in sync.
+- The saved card and edit modal intentionally share the same collage-layout math: the editor seeds its layouts from the saved API payload, and both views normalize those layouts through the same render-math helpers so the saved preview matches what the editor shows after save.
 - Item and outfit text inputs are length-capped through `src/app/lib/inputLengthPolicy.ts`, which mirrors the backend `InputLengthPolicy` constants and applies them as `maxLength` on the relevant `<input>` and `<textarea>` controls.
 - Closet filtering and sorting are handled through focused helpers in `src/app/lib/closetFilters.ts`.
 - Item create and edit flows send multipart form data so photos can be uploaded, cropped, removed, or sourced from detected outfit-photo regions.
@@ -96,8 +97,12 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
   Shared types plus frontend-facing API helpers for clothing items, outfits, uploads, clean-image flows, and metadata suggestions
 - `src/app/lib/outfitCollage.ts`
   Shared default-layout, layer-order, and layout-normalization helpers for saved outfit collages
+- `src/app/lib/outfitCollageRenderMath.ts`
+  Shared stage-aspect normalization and resize-aspect helpers that keep saved cards and the editor preview on the same rendering contract
 - `src/app/lib/outfitImageBounds.ts`
   Cached image-content-bounds measurement helpers for saved-outfit collage rendering and editing
+- `tests/outfit-collage-contracts.test.ts`
+  Node-based frontend contract tests covering saved-view/editor layout parity and the resize-aspect fallback that prevents reselection drift
 - `src/app/lib/closetFilters.ts`
   Closet search, filter, and sort helpers
 - `src/app/lib/usePageData.ts`
@@ -145,4 +150,10 @@ Create a production build:
 
 ```bash
 npm run build
+```
+
+Run the frontend contract tests:
+
+```bash
+npm test
 ```
