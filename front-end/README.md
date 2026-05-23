@@ -80,7 +80,7 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
 - Item and outfit text inputs are length-capped through `src/app/lib/inputLengthPolicy.ts`, which mirrors the backend `InputLengthPolicy` constants and applies them as `maxLength` on the relevant `<input>` and `<textarea>` controls.
 - Closet filtering and sorting are handled through focused helpers in `src/app/lib/closetFilters.ts`.
 - Item create and edit flows send multipart form data so photos can be uploaded, cropped, removed, or sourced from detected outfit-photo regions.
-- The item editor can request AI metadata suggestions for type, name, brand, and tags, and can request cleaned item imagery for catalog-style presentation.
+- The item editor can request AI metadata suggestions for type, name, brand, and tags, and can request cleaned item imagery for catalog-style presentation; the backend now strips the generated white studio background before returning the final cleaned PNG.
 - Image-based item creation submits an outfit photo to `POST /outfit_uploads`, renders detections, and supports promoting a reviewed detection into a closet item.
 - Outfit drafts are stored per user in local storage through `useOutfitDraftState`.
 
@@ -96,6 +96,8 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
   Shared types plus frontend-facing API helpers for clothing items, outfits, uploads, clean-image flows, and metadata suggestions
 - `src/app/lib/outfitCollage.ts`
   Shared default-layout, layer-order, and layout-normalization helpers for saved outfit collages
+- `src/app/lib/outfitImageBounds.ts`
+  Cached image-content-bounds measurement helpers for saved-outfit collage rendering and editing
 - `src/app/lib/closetFilters.ts`
   Closet search, filter, and sort helpers
 - `src/app/lib/usePageData.ts`
@@ -113,7 +115,9 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
 - `src/app/components/OutfitCartSheet.tsx`
   Cart-style right-side tray for reviewing selected closet items and creating an outfit directly from the closet page
 - `src/app/components/OutfitCollageCanvas.tsx`
-  Shared saved-outfit collage renderer plus the edit-modal `react-moveable` interaction layer and content-bounds-aware image viewport
+  Shared saved-outfit collage renderer plus the edit-modal `react-moveable` interaction layer and the shared normalized-layout/stage-aspect contract used by both gallery and editor views
+- `src/app/components/OutfitCollageLayersPanel.tsx`
+  Focused layers sidebar for thumbnail selection plus pointer and keyboard-accessible layer reordering
 - `src/app/components/ItemMetadataFields.tsx`
   Shared name, size, date, brand, tag, and AI autofill fields
 - `src/app/components/AiMetadataAutofillButton.tsx`
@@ -128,7 +132,7 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
 The frontend API layer is split between shared request helpers in `src/app/lib/api.ts` and feature-facing helpers/types in `src/app/lib/closet.ts`.
 
 - `VITE_API_BASE_URL` defaults to `/api`
-- Vite proxies `/api` to the Rails backend in development
+- Vite proxies `/api` and `/rails/active_storage` to the Rails backend in development so API requests and local Active Storage media stay same-origin from the browser's perspective
 - `BACKEND_HOST` and `BACKEND_PORT` control the proxy target during local development
 - authenticated requests use `credentials: "include"`
 

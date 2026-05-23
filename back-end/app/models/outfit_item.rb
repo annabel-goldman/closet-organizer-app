@@ -1,4 +1,6 @@
 class OutfitItem < ApplicationRecord
+  MAX_OFF_CANVAS_VISIBLE_FRACTION = 0.5
+
   belongs_to :outfit
   belongs_to :clothing_item
 
@@ -45,16 +47,20 @@ class OutfitItem < ApplicationRecord
     return unless collage_layout_present?
     return if [ collage_x, collage_y, collage_width, collage_height ].any?(&:nil?)
 
-    unless collage_x.between?(0.0, 100.0) && collage_y.between?(0.0, 100.0)
-      errors.add(:base, "Collage layout origin must stay within the canvas")
-    end
-
     unless collage_width.positive? && collage_width <= 100.0 && collage_height.positive? && collage_height <= 100.0
       errors.add(:base, "Collage layout size must stay within the canvas")
+      return
     end
 
-    if collage_x + collage_width > 100.0 || collage_y + collage_height > 100.0
-      errors.add(:base, "Collage layout must stay within the canvas")
+    min_visible_width = collage_width * MAX_OFF_CANVAS_VISIBLE_FRACTION
+    min_visible_height = collage_height * MAX_OFF_CANVAS_VISIBLE_FRACTION
+    min_x = min_visible_width - collage_width
+    max_x = 100.0 - min_visible_width
+    min_y = min_visible_height - collage_height
+    max_y = 100.0 - min_visible_height
+
+    unless collage_x.between?(min_x, max_x) && collage_y.between?(min_y, max_y)
+      errors.add(:base, "At least half of each collage item must stay within the canvas")
     end
   end
 end

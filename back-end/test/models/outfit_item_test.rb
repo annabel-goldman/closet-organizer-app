@@ -31,17 +31,36 @@ class OutfitItemTest < ActiveSupport::TestCase
     assert_includes invalid.errors[:base], "Collage layout is incomplete"
   end
 
-  test "collage layout must stay within bounds" do
+  test "collage layout can sit partially outside the canvas" do
+    fresh_item = ClothingItem.create!(
+      user: outfits(:one).user,
+      name: "Partial Canvas Tee",
+      size: :medium,
+      tags: [ "test" ]
+    )
+    valid = OutfitItem.new(
+      outfit: outfits(:one),
+      clothing_item: fresh_item,
+      collage_x: -20,
+      collage_y: 10,
+      collage_width: 40,
+      collage_height: 30
+    )
+
+    assert valid.valid?
+  end
+
+  test "collage layout must keep at least half visible" do
     invalid = OutfitItem.new(
       outfit: outfits(:one),
       clothing_item: clothing_items(:one),
-      collage_x: 70,
+      collage_x: -25,
       collage_y: 10,
       collage_width: 40,
       collage_height: 30
     )
 
     assert_not invalid.valid?
-    assert_includes invalid.errors[:base], "Collage layout must stay within the canvas"
+    assert_includes invalid.errors[:base], "At least half of each collage item must stay within the canvas"
   end
 end

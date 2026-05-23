@@ -8,7 +8,11 @@ import Moveable, {
   type OnResizeEnd,
   type OnResizeStart,
 } from "react-moveable";
-import { ClothingItem, buildPlaceholderLabel } from "../lib/closet";
+import { ClothingItem } from "../lib/closet";
+import {
+  ImageContentBounds,
+  measureImageContentBounds,
+} from "../lib/outfitImageBounds";
 import {
   clampCollageLayout,
   OutfitCollageLayout,
@@ -37,7 +41,6 @@ interface OutfitCollageCanvasProps {
   onSelectItem?: (itemId: number | null) => void;
   selectedItemId?: number | null;
 }
-
 export function OutfitCollageCanvas({
   className = "",
   editable = false,
@@ -53,6 +56,7 @@ export function OutfitCollageCanvas({
   const itemFrameRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const transientRotationByItemId = useRef<Record<number, number>>({});
   const activeRotationGestureRef = useRef<ActiveRotationGesture | null>(null);
+  const [imageContentBoundsByItemId, setImageContentBoundsByItemId] = useState<Record<number, ImageContentBounds>>({});
   const [imageAspectRatioByItemId, setImageAspectRatioByItemId] = useState<Record<number, number>>({});
 
   const resolvedLayouts = useMemo(
@@ -70,51 +74,61 @@ export function OutfitCollageCanvas({
       Object.fromEntries(
         visibleItems.map((item) => [
           item.id,
-          normalizeLayoutToAspectRatio(resolvedLayouts[item.id], imageAspectRatioByItemId[item.id]),
+          normalizeLayoutToAspectRatio(
+            resolvedLayouts[item.id],
+            imageContentBoundsByItemId[item.id]?.aspectRatio ?? imageAspectRatioByItemId[item.id],
+          ),
         ]),
       ) as Record<number, OutfitCollageLayout>,
-    [imageAspectRatioByItemId, resolvedLayouts, visibleItems],
+    [imageAspectRatioByItemId, imageContentBoundsByItemId, resolvedLayouts, visibleItems],
   );
   const selectedTarget = editable && selectedItemId ? itemFrameRefs.current[selectedItemId] : null;
-  const displayLayouts = editable ? resolvedLayouts : normalizedLayouts;
+  const displayLayouts = normalizedLayouts;
+
+  function syncFrameToPercentLayout(itemId: number, layout: OutfitCollageLayout) {
+    const target = itemFrameRefs.current[itemId];
+    if (!target) {
+      return;
+    }
+
+    target.style.left = `${layout.x}%`;
+    target.style.top = `${layout.y}%`;
+    target.style.width = `${layout.width}%`;
+    target.style.height = `${layout.height}%`;
+    target.style.transform = `rotate(${layout.rotation}deg)`;
+  }
+
+  function syncFrameToPixelLayout(itemId: number, layout: OutfitCollageLayout, stageBounds: DOMRect) {
+    const target = itemFrameRefs.current[itemId];
+    if (!target) {
+      return;
+    }
+
+    target.style.left = `${(layout.x / 100) * stageBounds.width}px`;
+    target.style.top = `${(layout.y / 100) * stageBounds.height}px`;
+    target.style.width = `${(layout.width / 100) * stageBounds.width}px`;
+    target.style.height = `${(layout.height / 100) * stageBounds.height}px`;
+    target.style.transform = `rotate(${layout.rotation}deg)`;
+  }
 
   useLayoutEffect(() => {
-    if (editable && selectedItemId) {
-      pinItemFrameToPixels(selectedItemId);
-    }
+    visibleItems.forEach((item) => {
+      const layout = displayLayouts[item.id] ?? resolvedLayouts[item.id];
+      if (!layout) {
+        return;
+      }
 
-    moveableRef.current?.updateRect();
-  }, [displayLayouts, editable, selectedItemId]);
-
-  useEffect(() => {
-    if (!editable || !onLayoutsChange) {
-      return;
-    }
-
-    const nextEntries = visibleItems
-      .map((item) => {
-        const currentLayout = resolvedLayouts[item.id];
-        const normalizedLayout = normalizeLayoutToAspectRatio(currentLayout, imageAspectRatioByItemId[item.id]);
-        return layoutsDiffer(currentLayout, normalizedLayout) ? [item.id, normalizedLayout] : null;
-      })
-      .filter((entry): entry is [number, OutfitCollageLayout] => Boolean(entry));
-
-    if (nextEntries.length === 0) {
-      return;
-    }
-
-    onLayoutsChange({
-      ...resolvedLayouts,
-      ...Object.fromEntries(nextEntries),
+      syncFrameToPercentLayout(item.id, layout);
     });
-  }, [editable, imageAspectRatioByItemId, onLayoutsChange, resolvedLayouts, visibleItems]);
+    moveableRef.current?.updateRect();
+  }, [displayLayouts, resolvedLayouts, selectedItemId, visibleItems]);
 
   function updateItemLayout(itemId: number, nextPartial: Partial<OutfitCollageLayout>) {
     if (!onLayoutsChange) {
       return;
     }
 
-    const baseLayout = resolvedLayouts[itemId];
+    const baseLayout = displayLayouts[itemId] ?? resolvedLayouts[itemId];
     const nextLayout = clampCollageLayout({
       ...baseLayout,
       ...nextPartial,
@@ -155,7 +169,9 @@ export function OutfitCollageCanvas({
     activeRotationGestureRef.current = {
       itemId,
       startPointerAngle: pointAngleFromRectCenter(frameRect, clientX, clientY),
-      startRotation: transientRotationByItemId.current[itemId] ?? resolvedLayouts[itemId].rotation,
+      startRotation:
+        transientRotationByItemId.current[itemId]
+        ?? (displayLayouts[itemId] ?? resolvedLayouts[itemId]).rotation,
     };
   }
 
@@ -173,7 +189,12 @@ export function OutfitCollageCanvas({
     }
 
     pinItemFrameToPixels(selectedItemId);
-    event.setRatio(imageAspectRatioByItemId[selectedItemId] ?? (resolvedLayouts[selectedItemId].width / Math.max(resolvedLayouts[selectedItemId].height, 0.001)));
+    const selectedLayout = displayLayouts[selectedItemId] ?? resolvedLayouts[selectedItemId];
+    event.setRatio(
+      imageContentBoundsByItemId[selectedItemId]?.aspectRatio
+      ?? imageAspectRatioByItemId[selectedItemId]
+      ?? (selectedLayout.width / Math.max(selectedLayout.height, 0.001)),
+    );
     event.dragStart?.set([ 0, 0 ]);
   }
 
@@ -218,37 +239,37 @@ export function OutfitCollageCanvas({
   }
 
   function pinItemFrameToPixels(itemId: number) {
-    const target = itemFrameRefs.current[itemId];
     const stageBounds = stageRef.current?.getBoundingClientRect();
-    const layout = resolvedLayouts[itemId];
+    const layout = displayLayouts[itemId] ?? resolvedLayouts[itemId];
 
-    if (!target || !stageBounds) {
+    if (!stageBounds) {
       return;
     }
 
-    target.style.left = `${(layout.x / 100) * stageBounds.width}px`;
-    target.style.top = `${(layout.y / 100) * stageBounds.height}px`;
-    target.style.width = `${(layout.width / 100) * stageBounds.width}px`;
-    target.style.height = `${(layout.height / 100) * stageBounds.height}px`;
-    target.style.transform = `rotate(${layout.rotation}deg)`;
+    syncFrameToPixelLayout(itemId, layout, stageBounds);
     transientRotationByItemId.current[itemId] = layout.rotation;
   }
 
   function commitItemFrameFromPixels(itemId: number) {
     const target = itemFrameRefs.current[itemId];
     const stageBounds = stageRef.current?.getBoundingClientRect();
+    const baseLayout = displayLayouts[itemId] ?? resolvedLayouts[itemId];
 
-    if (!target || !stageBounds) {
+    if (!target || !stageBounds || !baseLayout) {
       return;
     }
 
-    updateItemLayout(itemId, {
+    const nextLayout = clampCollageLayout({
+      ...baseLayout,
       x: pixelsToPercent(parseFloat(target.style.left || "0"), stageBounds.width),
       y: pixelsToPercent(parseFloat(target.style.top || "0"), stageBounds.height),
       width: Math.max(MIN_ITEM_SIZE_PERCENT, pixelsToPercent(parseFloat(target.style.width || "0"), stageBounds.width)),
       height: Math.max(MIN_ITEM_SIZE_PERCENT, pixelsToPercent(parseFloat(target.style.height || "0"), stageBounds.height)),
       rotation: transientRotationByItemId.current[itemId] ?? 0,
     });
+
+    syncFrameToPercentLayout(itemId, nextLayout);
+    updateItemLayout(itemId, nextLayout);
   }
 
   useEffect(() => {
@@ -290,12 +311,15 @@ export function OutfitCollageCanvas({
       window.removeEventListener("pointerup", handleWindowPointerEnd);
       window.removeEventListener("pointercancel", handleWindowPointerEnd);
     };
-  }, [resolvedLayouts]);
+  }, [displayLayouts, resolvedLayouts]);
   return (
     <div
       ref={stageRef}
-      className={`relative aspect-[4/5] overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-100 ${editable ? "touch-none" : ""} ${className}`.trim()}
-      style={editable ? ({ "--moveable-color": "#111111" } as CSSProperties) : undefined}
+      className={`relative overflow-hidden bg-white ${editable ? "touch-none" : ""} ${className}`.trim()}
+      style={{
+        aspectRatio: String(COLLAGE_STAGE_ASPECT_RATIO),
+        ...(editable ? ({ "--moveable-color": "#111111" } as CSSProperties) : {}),
+      }}
       onPointerDown={handleStagePointerDown}
     >
       {visibleItems.map((item, index) => {
@@ -330,23 +354,51 @@ export function OutfitCollageCanvas({
               event.stopPropagation();
               onSelectItem?.(item.id);
             }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") {
+                return;
+              }
+
+              event.preventDefault();
+              onSelectItem?.(item.id);
+            }}
           >
             <div className="relative h-full w-full overflow-hidden bg-transparent">
               {item.image_url ? (
                 <img
                   src={item.image_url}
                   alt={item.name}
-                  className="pointer-events-none h-full w-full object-contain drop-shadow-[0_10px_18px_rgba(0,0,0,0.12)]"
+                  className="pointer-events-none absolute max-w-none"
+                  style={imageStyleForContentBounds(imageContentBoundsByItemId[item.id])}
                   onLoad={(event) => {
-                    const nextRatio = event.currentTarget.naturalWidth / Math.max(1, event.currentTarget.naturalHeight);
+                    const nextAspectRatio = event.currentTarget.naturalWidth / Math.max(1, event.currentTarget.naturalHeight);
                     setImageAspectRatioByItemId((current) =>
-                      nearlyEqual(current[item.id] ?? 0, nextRatio)
+                      nearlyEqual(current[item.id] ?? 0, nextAspectRatio, 0.001)
                         ? current
                         : {
                             ...current,
-                            [item.id]: nextRatio,
+                            [item.id]: nextAspectRatio,
                           },
                     );
+                    void measureImageContentBounds({
+                      imageUrl: item.image_url,
+                    }).then((nextBounds) => {
+                      if (!nextBounds) {
+                        return;
+                      }
+
+                      setImageContentBoundsByItemId((current) => {
+                        const previous = current[item.id];
+                        if (previous && imageContentBoundsEqual(previous, nextBounds)) {
+                          return current;
+                        }
+
+                        return {
+                          ...current,
+                          [item.id]: nextBounds,
+                        };
+                      });
+                    });
                   }}
                 />
               ) : (
@@ -432,19 +484,37 @@ function normalizeLayoutToAspectRatio(
   });
 }
 
-function nearlyEqual(left: number, right: number, tolerance = 0.002) {
-  return Math.abs(left - right) <= tolerance;
+function imageStyleForContentBounds(bounds?: ImageContentBounds): CSSProperties {
+  if (!bounds) {
+    return {
+      height: "100%",
+      left: 0,
+      objectFit: "contain",
+      top: 0,
+      width: "100%",
+    };
+  }
+
+  return {
+    height: `${100 / bounds.heightFraction}%`,
+    left: `${-(bounds.leftFraction / bounds.widthFraction) * 100}%`,
+    top: `${-(bounds.topFraction / bounds.heightFraction) * 100}%`,
+    width: `${100 / bounds.widthFraction}%`,
+  };
 }
 
-function layoutsDiffer(left: OutfitCollageLayout, right: OutfitCollageLayout) {
+function imageContentBoundsEqual(left: ImageContentBounds, right: ImageContentBounds) {
   return (
-    !nearlyEqual(left.x, right.x)
-    || !nearlyEqual(left.y, right.y)
-    || !nearlyEqual(left.width, right.width)
-    || !nearlyEqual(left.height, right.height)
-    || !nearlyEqual(left.rotation, right.rotation)
-    || left.layer_order !== right.layer_order
+    nearlyEqual(left.leftFraction, right.leftFraction, 0.001)
+    && nearlyEqual(left.topFraction, right.topFraction, 0.001)
+    && nearlyEqual(left.widthFraction, right.widthFraction, 0.001)
+    && nearlyEqual(left.heightFraction, right.heightFraction, 0.001)
+    && nearlyEqual(left.aspectRatio, right.aspectRatio, 0.001)
   );
+}
+
+function nearlyEqual(left: number, right: number, tolerance = 0.002) {
+  return Math.abs(left - right) <= tolerance;
 }
 
 function pointAngleFromRectCenter(rect: DOMRect, clientX: number, clientY: number) {
@@ -459,142 +529,4 @@ function pixelsToPercent(value: number, total: number) {
   }
 
   return (value / total) * 100;
-}
-
-interface OutfitCollageLayersPanelProps {
-  items: ClothingItem[];
-  layouts: Record<number, OutfitCollageLayout>;
-  onReorder: (orderedItemIds: number[]) => void;
-  onSelectItem: (itemId: number) => void;
-  selectedItemId?: number | null;
-}
-
-export function OutfitCollageLayersPanel({
-  items,
-  layouts,
-  onReorder,
-  onSelectItem,
-  selectedItemId = null,
-}: OutfitCollageLayersPanelProps) {
-  const orderedItems = useMemo(
-    () => [...sortItemsByCollageLayer(items, layouts)].reverse(),
-    [items, layouts],
-  );
-  const [draggingItemId, setDraggingItemId] = useState<number | null>(null);
-  const [dragHoverItemId, setDragHoverItemId] = useState<number | null>(null);
-  const lastDropTargetIdRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!draggingItemId) {
-      return;
-    }
-
-    function handleWindowPointerMove(event: PointerEvent) {
-      const hoveredElement = document.elementFromPoint(event.clientX, event.clientY);
-      const layerButton = hoveredElement instanceof HTMLElement
-        ? hoveredElement.closest<HTMLElement>("[data-layer-item-id]")
-        : null;
-
-      if (!layerButton) {
-        setDragHoverItemId(null);
-        return;
-      }
-
-      const targetItemId = Number(layerButton.dataset.layerItemId);
-      if (!Number.isFinite(targetItemId)) {
-        return;
-      }
-
-      setDragHoverItemId(targetItemId);
-      if (lastDropTargetIdRef.current === targetItemId) {
-        return;
-      }
-
-      reorderItems(draggingItemId, targetItemId);
-      lastDropTargetIdRef.current = targetItemId;
-    }
-
-    function handleWindowPointerUp() {
-      setDraggingItemId(null);
-      setDragHoverItemId(null);
-      lastDropTargetIdRef.current = null;
-    }
-
-    window.addEventListener("pointermove", handleWindowPointerMove);
-    window.addEventListener("pointerup", handleWindowPointerUp);
-    window.addEventListener("pointercancel", handleWindowPointerUp);
-
-    return () => {
-      window.removeEventListener("pointermove", handleWindowPointerMove);
-      window.removeEventListener("pointerup", handleWindowPointerUp);
-      window.removeEventListener("pointercancel", handleWindowPointerUp);
-    };
-  }, [draggingItemId]);
-
-  function reorderItems(draggedItemId: number, targetItemId: number) {
-    if (draggedItemId === targetItemId) {
-      return;
-    }
-
-    const reordered = [...orderedItems];
-    const draggingIndex = reordered.findIndex((entry) => entry.id === draggedItemId);
-    const targetIndex = reordered.findIndex((entry) => entry.id === targetItemId);
-    if (draggingIndex < 0 || targetIndex < 0) {
-      return;
-    }
-
-    const [draggingItem] = reordered.splice(draggingIndex, 1);
-    reordered.splice(targetIndex, 0, draggingItem);
-    onReorder([...reordered].reverse().map((entry) => entry.id));
-  }
-
-  function handleLayerPointerDown(itemId: number) {
-    onSelectItem(itemId);
-    setDraggingItemId(itemId);
-    setDragHoverItemId(itemId);
-    lastDropTargetIdRef.current = itemId;
-  }
-
-  return (
-    <div className="flex h-full min-h-0 flex-col gap-3 border border-border bg-card/90 p-3">
-      <PrimitiveText as="p" variant="overline" tone="muted">
-        Layers
-      </PrimitiveText>
-      <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
-        {orderedItems.map((item) => {
-          const isSelected = selectedItemId === item.id;
-
-          return (
-            <button
-              key={item.id}
-              type="button"
-              data-layer-item-id={item.id}
-              onClick={() => onSelectItem(item.id)}
-              onPointerDown={(event) => {
-                event.preventDefault();
-                handleLayerPointerDown(item.id);
-              }}
-              className={`group flex aspect-[3/4] w-full items-center justify-center overflow-hidden border bg-background transition-colors ${
-                isSelected ? "border-foreground shadow-[0_0_0_1px_rgba(17,17,17,0.18)]" : "border-border hover:bg-stone-50"
-              } ${
-                draggingItemId === item.id ? "cursor-grabbing opacity-80" : "cursor-grab"
-              } ${
-                dragHoverItemId === item.id && draggingItemId && draggingItemId !== item.id ? "border-foreground/70 bg-stone-50" : ""
-              }`}
-              aria-label={`Select layer ${item.name}`}
-              title={item.name}
-            >
-              {item.image_url ? (
-                <img src={item.image_url} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <PrimitiveText as="span" variant="bodySm" tone="muted">
-                  {buildPlaceholderLabel(item.name) || "?"}
-                </PrimitiveText>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
 }

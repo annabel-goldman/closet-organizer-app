@@ -131,6 +131,32 @@ class OutfitsFlowTest < ActionDispatch::IntegrationTest
     assert_equal 6.0, ordered_outfit_items.second.collage_rotation
   end
 
+  test "can update outfit collage layout with an item partially off canvas" do
+    patch outfit_url(@outfit), params: {
+      outfit: {
+        name: @outfit.name,
+        item_ids: [ @user_item.id ],
+        item_layouts: [
+          {
+            item_id: @user_item.id,
+            x: -20,
+            y: 12,
+            width: 40,
+            height: 48,
+            rotation: 0,
+            layer_order: 0
+          }
+        ]
+      }
+    }, headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal(-20.0, response_json["items"].first["collage_layout"]["x"])
+
+    @outfit.reload
+    assert_equal(-20.0, @outfit.outfit_items.first.collage_x)
+  end
+
   test "can delete an outfit" do
     assert_difference("Outfit.count", -1) do
       delete outfit_url(@outfit), headers: auth_headers(@user), as: :json

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { Pencil, Shirt, Trash2 } from "lucide-react";
 import {
@@ -11,7 +11,8 @@ import {
   updateOutfit,
   User,
 } from "../lib/closet";
-import { OutfitCollageCanvas, OutfitCollageLayersPanel } from "./OutfitCollageCanvas";
+import { OutfitCollageCanvas } from "./OutfitCollageCanvas";
+import { OutfitCollageLayersPanel } from "./OutfitCollageLayersPanel";
 import {
   OutfitCollageLayout,
   reorderCollageLayers,
@@ -65,7 +66,6 @@ export function MyOutfitsPage({
   const [editorLayouts, setEditorLayouts] = useState<Record<number, OutfitCollageLayout>>({});
   const [selectedCollageItemId, setSelectedCollageItemId] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const formSectionRef = useRef<HTMLElement | null>(null);
 
   const sortedItems = useMemo(
     () => [...user.clothing_items].sort((left, right) => left.name.localeCompare(right.name)),
@@ -247,16 +247,22 @@ export function MyOutfitsPage({
             </PrimitiveText>
           </div>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {outfits.map((outfit, index) => (
               <motion.article
                 key={outfit.id}
                 initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, delay: index * 0.04 }}
-                className="overflow-hidden border border-border bg-card"
+                className="mx-auto w-full max-w-[22rem] overflow-hidden border border-border bg-card"
               >
-                <OutfitCollageCanvas items={outfit.items} maxVisibleItems={6} />
+                <div className="px-5 pt-5">
+                  <OutfitCollageCanvas
+                    items={outfit.items}
+                    maxVisibleItems={6}
+                    className="mx-auto w-full max-w-[15.5rem]"
+                  />
+                </div>
 
                 <div className="space-y-4 p-6">
                   <div className="flex items-start justify-between gap-4">
@@ -314,11 +320,11 @@ export function MyOutfitsPage({
         )}
       </section>
 
-      {flash ? (
+      {flash && !editingOutfitId ? (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`fixed bottom-6 right-6 z-50 max-w-sm border px-4 py-3 text-sm shadow-lg backdrop-blur ${
+          className={`fixed bottom-6 right-6 z-[70] max-w-sm border px-4 py-3 text-sm shadow-lg backdrop-blur ${
             flash.kind === "success"
               ? "border-foreground/20 bg-background/95 text-foreground"
               : "border-destructive/25 bg-destructive/10 text-destructive"
@@ -333,19 +339,16 @@ export function MyOutfitsPage({
 
       <Dialog open={Boolean(editingOutfitId)} onOpenChange={(open) => !open && resetForm()}>
         <DialogContent className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] rounded-none border-border p-0 sm:w-[calc(100vw-3rem)] sm:max-w-[calc(100vw-3rem)] xl:max-w-[120rem] 2xl:max-w-[128rem]">
-          <div className="grid max-h-[90vh] overflow-hidden lg:grid-cols-[minmax(0,1.55fr)_minmax(28rem,0.95fr)] 2xl:grid-cols-[minmax(0,1.7fr)_minmax(32rem,0.9fr)]">
-            <div className="overflow-y-auto border-b border-border bg-stone-50 px-6 py-8 md:px-10 lg:border-b-0 lg:border-r lg:px-12">
-              <div
-                ref={formSectionRef}
-                className="flex h-full flex-col gap-6"
-              >
+          <div className="max-h-[90vh] overflow-y-auto lg:grid lg:overflow-hidden lg:grid-cols-[minmax(0,1.55fr)_minmax(28rem,0.95fr)] 2xl:grid-cols-[minmax(0,1.7fr)_minmax(32rem,0.9fr)]">
+            <div className="min-h-[calc(100svh-8rem)] border-b border-border bg-stone-50 px-5 py-6 md:px-8 lg:min-h-0 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-10">
+              <div className="flex h-full min-h-0 flex-col gap-4">
                 <PrimitiveText as="p" variant="overline" tone="muted">
                   Outfit Preview
                 </PrimitiveText>
                 {editingOutfit ? (
                   <>
-                    <div className="grid min-h-0 gap-4 lg:grid-cols-[5.75rem_minmax(0,1fr)] lg:items-start">
-                      <div className="min-w-0 lg:order-1">
+                    <div className="grid min-h-0 flex-1 grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[5rem_minmax(0,1fr)] sm:gap-4 lg:grid-cols-[5.75rem_minmax(0,1fr)]">
+                      <div className="min-w-0">
                         <OutfitCollageLayersPanel
                           items={editingOutfit.items}
                           layouts={editorLayouts}
@@ -360,7 +363,8 @@ export function MyOutfitsPage({
                           }}
                         />
                       </div>
-                      <div className="min-w-0 lg:order-2">
+                      <div className="min-w-0">
+                        <div className="mx-auto w-full max-w-[min(20rem,calc((100vh-20rem)*0.8))] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.16)] sm:max-w-[min(32rem,calc((100vh-22rem)*0.8))] lg:max-w-[min(72rem,calc((100vh-16rem)*0.8))]">
                         <OutfitCollageCanvas
                           items={editingOutfit.items}
                           layouts={editorLayouts}
@@ -368,8 +372,9 @@ export function MyOutfitsPage({
                           selectedItemId={selectedCollageItemId}
                           onSelectItem={setSelectedCollageItemId}
                           onLayoutsChange={setEditorLayouts}
-                          className="mx-auto w-full max-w-[72rem]"
+                          className="w-full"
                         />
+                        </div>
                       </div>
                     </div>
                   </>
@@ -377,7 +382,7 @@ export function MyOutfitsPage({
               </div>
             </div>
 
-            <div className="overflow-y-auto p-6 lg:p-8 xl:p-10">
+            <div className="p-6 lg:overflow-y-auto lg:p-8 xl:p-10">
               <DialogHeader className="mb-6 text-left sm:text-left">
                 <DialogTitle asChild>
                   <PrimitiveText as="h2" variant="display" font="serif">
@@ -390,6 +395,23 @@ export function MyOutfitsPage({
                   </PrimitiveText>
                 </DialogDescription>
               </DialogHeader>
+
+              {flash ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`mb-5 border px-4 py-3 text-sm ${
+                    flash.kind === "success"
+                      ? "border-foreground/20 bg-background text-foreground"
+                      : "border-destructive/25 bg-destructive/10 text-destructive"
+                  }`}
+                  role={flash.kind === "error" ? "alert" : "status"}
+                  aria-live={flash.kind === "error" ? "assertive" : "polite"}
+                  aria-atomic="true"
+                >
+                  {flash.message}
+                </motion.div>
+              ) : null}
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 <label className="block space-y-2">

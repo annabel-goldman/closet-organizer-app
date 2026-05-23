@@ -18,6 +18,8 @@ interface NumericCollageFrame {
   zIndex: number;
 }
 
+const MAX_OFF_STAGE_VISIBLE_FRACTION = 0.5;
+
 const DEFAULT_COLLAGE_FRAMES: Record<number, NumericCollageFrame[]> = {
   1: [
     { left: 12, top: 6, width: 76, height: 84, rotate: -2, zIndex: 0 },
@@ -159,8 +161,14 @@ export function reorderCollageLayers(
 export function clampCollageLayout(layout: OutfitCollageLayout): OutfitCollageLayout {
   const width = Math.min(100, Math.max(10, layout.width));
   const height = Math.min(100, Math.max(10, layout.height));
-  const x = Math.min(100 - width, Math.max(0, layout.x));
-  const y = Math.min(100 - height, Math.max(0, layout.y));
+  const minVisibleWidth = width * MAX_OFF_STAGE_VISIBLE_FRACTION;
+  const minVisibleHeight = height * MAX_OFF_STAGE_VISIBLE_FRACTION;
+  const minX = minVisibleWidth - width;
+  const maxX = 100 - minVisibleWidth;
+  const minY = minVisibleHeight - height;
+  const maxY = 100 - minVisibleHeight;
+  const x = Math.min(maxX, Math.max(minX, layout.x));
+  const y = Math.min(maxY, Math.max(minY, layout.y));
 
   return {
     ...layout,

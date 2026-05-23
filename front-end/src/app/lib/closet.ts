@@ -143,6 +143,38 @@ export interface Outfit {
   updated_at?: string;
 }
 
+function normalizeAttachmentUrl(rawUrl: unknown) {
+  if (typeof rawUrl !== "string" || rawUrl.trim().length === 0) {
+    return null;
+  }
+
+  const trimmed = rawUrl.trim();
+
+  if (typeof window === "undefined") {
+    return trimmed;
+  }
+
+  if (!isLocalDevelopmentHost(window.location.hostname) || window.location.port === "3000") {
+    return trimmed;
+  }
+
+  try {
+    const normalizedBackendOrigin = new URL(BACKEND_BASE_URL, window.location.origin).origin;
+    const parsed = new URL(trimmed, normalizedBackendOrigin);
+
+    if (
+      parsed.origin === normalizedBackendOrigin
+      && parsed.pathname.startsWith("/rails/active_storage/")
+    ) {
+      return `${parsed.pathname}${parsed.search}`;
+    }
+  } catch {
+    return trimmed;
+  }
+
+  return trimmed;
+}
+
 export type CreateItemMode = "manual" | "image";
 
 export interface ClothingItemFormValues {
@@ -489,18 +521,18 @@ export async function createOutfitUpload(
   formData.append("outfit_upload[user_id]", String(userId));
   formData.append("outfit_upload[source_photo]", photoOptions.photo);
 
-  return requestJson<OutfitUpload>(`${API_BASE_URL}/outfit_uploads`, {
+  return normalizeOutfitUploadPayload(await requestJson<OutfitUpload>(`${API_BASE_URL}/outfit_uploads`, {
     method: "POST",
     body: formData,
-  });
+  }));
 }
 
 export async function fetchOutfitUpload(id: number, signal?: AbortSignal) {
-  return requestJson<OutfitUpload>(`${API_BASE_URL}/outfit_uploads/${id}`, { signal });
+  return normalizeOutfitUploadPayload(await requestJson<OutfitUpload>(`${API_BASE_URL}/outfit_uploads/${id}`, { signal }));
 }
 
 export async function fetchOutfits(signal?: AbortSignal) {
-  return requestJson<Outfit[]>(`${API_BASE_URL}/outfits`, { signal });
+  return (await requestJson<Outfit[]>(`${API_BASE_URL}/outfits`, { signal })).map(normalizeOutfitPayload);
 }
 
 interface CreateOutfitInput {
@@ -537,13 +569,13 @@ function buildOutfitPayload(input: {
 }
 
 export async function createOutfit(input: CreateOutfitInput) {
-  return requestJson<Outfit>(`${API_BASE_URL}/outfits`, {
+  return normalizeOutfitPayload(await requestJson<Outfit>(`${API_BASE_URL}/outfits`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(buildOutfitPayload(input)),
-  });
+  }));
 }
 
 interface UpdateOutfitInput {
@@ -556,13 +588,13 @@ interface UpdateOutfitInput {
 }
 
 export async function updateOutfit(input: UpdateOutfitInput) {
-  return requestJson<Outfit>(`${API_BASE_URL}/outfits/${input.id}`, {
+  return normalizeOutfitPayload(await requestJson<Outfit>(`${API_BASE_URL}/outfits/${input.id}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(buildOutfitPayload(input)),
-  });
+  }));
 }
 
 export async function destroyOutfit(id: number) {
@@ -727,8 +759,33 @@ function normalizeClothingItemPayload(item: ClothingItem): ClothingItem {
     ...item,
     category: normalizeCategoryValue(item.category) || null,
     brand: item.brand?.trim() ? item.brand.trim() : null,
+    cleaned_image_url: normalizeAttachmentUrl(item.cleaned_image_url),
+    image_url: normalizeAttachmentUrl(item.image_url),
+    original_image_url: normalizeAttachmentUrl(item.original_image_url),
     tags: normalizeTagList((item as ClothingItem & { tags?: unknown }).tags),
     collage_layout,
+  };
+}
+
+function normalizeOutfitDetectionPayload(detection: OutfitDetection): OutfitDetection {
+  return {
+    ...detection,
+    cleaned_image_url: normalizeAttachmentUrl(detection.cleaned_image_url),
+  };
+}
+
+function normalizeOutfitUploadPayload(upload: OutfitUpload): OutfitUpload {
+  return {
+    ...upload,
+    detections: (upload.detections ?? []).map(normalizeOutfitDetectionPayload),
+    source_photo_url: normalizeAttachmentUrl(upload.source_photo_url),
+  };
+}
+
+function normalizeOutfitPayload(outfit: Outfit): Outfit {
+  return {
+    ...outfit,
+    items: (outfit.items ?? []).map(normalizeClothingItemPayload),
   };
 }
 

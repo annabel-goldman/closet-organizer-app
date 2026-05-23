@@ -42,6 +42,10 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (requestPath) => requestPath.replace(/^\/api/, ''),
         },
+        '/rails/active_storage': {
+          target: `http://${backendHost}:${backendPort}`,
+          changeOrigin: true,
+        },
       },
     },
 

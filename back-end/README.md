@@ -22,7 +22,7 @@ Rails 8 JSON backend for Curated Closet.
 - admin-only user directory access
 - saved outfit CRUD with owned-item validation
 - outfit photo upload, detection persistence, crop refinement, and review support
-- AI-assisted image cleanup and metadata suggestion flows for clothing items and outfit detections
+- AI-assisted image cleanup and metadata suggestion flows for clothing items and outfit detections, including transparent-background post-processing on generated clean images
 - HTML fallback routes for the SPA frontend
 
 ## Local Setup
@@ -109,6 +109,8 @@ Notes:
   Handles temporary AI preview generation and metadata suggestions for uploaded but unsaved images
 - `app/services/openrouter_image_cleaner.rb`
   Calls OpenRouter image generation for cleaned item imagery
+- `app/services/clean_image_background_remover.rb`
+  Removes the white studio backdrop from generated clean images and produces the final transparent PNG attachment
 - `app/services/openrouter_metadata_suggester.rb`
   Calls OpenRouter structured vision responses for item metadata suggestions
 - `app/services/outfit_upload_analyzer.rb`
@@ -217,6 +219,8 @@ See [back-end/.env.example](./.env.example) for expected variables.
 - `OPENROUTER_API_KEY` is required for outfit detection, metadata suggestion, and image-cleaning features.
 - `OPENROUTER_MODEL` defaults to `openai/gpt-4.1-mini`.
 - `OPENROUTER_METADATA_MODEL` can override the metadata suggestion model independently.
+- `AI_CLEAN_BACKGROUND_FUZZ` optionally tunes how aggressively the clean-image post-process removes near-white edge background pixels. It defaults to `12%`.
+- `AI_CLEAN_SHARPEN` optionally adds a light sharpen pass after background removal to recover edge crispness in the final transparent PNG. It defaults to `0x0.8`.
 - `OUTFIT_CROP_CYCLE_LIMIT` controls refinement and verification retries.
 - Active Storage can be configured for S3-style storage through the provided AWS variables.
 
