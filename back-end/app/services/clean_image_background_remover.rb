@@ -20,9 +20,8 @@ class CleanImageBackgroundRemover
     output_file = temporary_files.track(Tempfile.new([ "#{filename_root}-no-background", ".png" ]))
     output_file.binmode
 
-    image = MiniMagick::Image.open(source_file.path)
-    image.format("png")
-    image.combine_options do |command|
+    MiniMagick.convert do |command|
+      command << source_file.path
       # Flood-filling from the added corner border removes only edge-connected
       # near-white pixels, which preserves white details that belong to the item.
       command.alpha "set"
@@ -35,8 +34,8 @@ class CleanImageBackgroundRemover
       # A light sharpen pass restores some edge definition after the AI clean
       # image generation and transparent-background conversion steps.
       command.sharpen configured_sharpen_amount
+      command << output_file.path
     end
-    image.write(output_file.path)
     output_file.rewind
 
     {
