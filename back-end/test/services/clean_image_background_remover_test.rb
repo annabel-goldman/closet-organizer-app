@@ -7,14 +7,14 @@ class CleanImageBackgroundRemoverTest < ActiveSupport::TestCase
     source = Tempfile.new([ "background-removal-source", ".png" ])
     source.binmode
 
-    MiniMagick.convert do |convert|
-      convert.size "40x40"
-      convert.xc "white"
-      convert.fill "black"
-      convert.draw "rectangle 8,8 31,31"
-      convert.fill "white"
-      convert.draw "rectangle 16,16 23,23"
-      convert << source.path
+    MiniMagick::Tool.new(image_magick_command_name) do |command|
+      command.size "40x40"
+      command.xc "white"
+      command.fill "black"
+      command.draw "rectangle 8,8 31,31"
+      command.fill "white"
+      command.draw "rectangle 16,16 23,23"
+      command << source.path
     end
     source.rewind
 
@@ -29,5 +29,11 @@ class CleanImageBackgroundRemoverTest < ActiveSupport::TestCase
   ensure
     source&.close!
     result&.dig(:tempfile)&.close!
+  end
+
+  private
+
+  def image_magick_command_name
+    MiniMagick.imagemagick7? ? "magick" : "convert"
   end
 end
