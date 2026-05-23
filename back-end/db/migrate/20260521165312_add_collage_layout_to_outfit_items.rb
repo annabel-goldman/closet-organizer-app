@@ -12,7 +12,7 @@ class AddCollageLayoutToOutfitItems < ActiveRecord::Migration[8.1]
     OutfitItem.reset_column_information
 
     OutfitItem.all.group_by(&:outfit_id).each_value do |outfit_items|
-      outfit_items.sort_by { |outfit_item| [outfit_item.created_at, outfit_item.id] }.each_with_index do |outfit_item, index|
+      outfit_items.sort_by { |outfit_item| [ outfit_item.created_at, outfit_item.id ] }.each_with_index do |outfit_item, index|
         outfit_item.update_columns(layer_order: index)
       end
     end
