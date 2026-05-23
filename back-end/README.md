@@ -33,6 +33,8 @@ bin/rails db:prepare db:seed
 bin/dev
 ```
 
+Local image-cleaning flows and related tests also expect the ImageMagick CLI to be installed, because the transparent-background cleanup step currently runs through MiniMagick.
+
 Default local backend URL:
 
 ```text
