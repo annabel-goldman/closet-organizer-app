@@ -100,8 +100,6 @@ GEM
     base64 (0.3.0)
     bcrypt (3.1.22)
     bcrypt_pbkdf (1.1.2)
-    bcrypt_pbkdf (1.1.2-arm64-darwin)
-    bcrypt_pbkdf (1.1.2-x86_64-darwin)
     better_html (2.2.0)
       actionview (>= 7.0)
       activesupport (>= 7.0)

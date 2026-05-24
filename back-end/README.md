@@ -22,7 +22,7 @@ Rails 8 JSON backend for Curated Closet.
 - admin-only user directory access
 - saved outfit CRUD with owned-item validation
 - outfit photo upload, detection persistence, crop refinement, and review support
-- AI-assisted image cleanup and metadata suggestion flows for clothing items and outfit detections
+- AI-assisted image cleanup and metadata suggestion flows for clothing items and outfit detections, including transparent-background post-processing on generated clean images
 - HTML fallback routes for the SPA frontend
 
 ## Local Setup
@@ -32,6 +32,8 @@ bin/setup
 bin/rails db:prepare db:seed
 bin/dev
 ```
+
+Local image-cleaning flows and related tests also expect the ImageMagick CLI to be installed, because the transparent-background cleanup step currently runs through MiniMagick.
 
 Default local backend URL:
 
@@ -95,6 +97,7 @@ Notes:
 - `ApplicationController` returns `404` JSON for missing records and `422` JSON for validation failures.
 - Text input length is capped at every layer: `app/models/concerns/input_length_policy.rb` exposes the limits (username 60, email 254, item name 120, brand 80, category 60, outfit name 120, notes 2_000, tag 40 chars × 30 per record); the `User`/`ClothingItem`/`Outfit` models validate against the same constants and surface friendly errors; the `AddInputLengthConstraints` migration enforces matching `limit:` and `null: false` constraints at the database. SQL injection is mitigated by ActiveRecord's parameterized queries — the only raw SQL fragment in the app (`where("lower(email) = ?", ...)` in `User`) uses bound placeholders.
 - `GET /users` is paginated via Kaminari. It accepts `page` and `per_page` query params (default 24, max 100) and returns `{ users: [...], meta: { page, per_page, total_pages, total_count } }`. The index payload omits each user's `clothing_items` array and only includes a `clothing_items_count` field; per-user `GET /users/:id` still returns the full items array.
+- Outfit payloads now preserve per-piece collage presentation through `outfit_items`: each embedded outfit item can include `outfit_item_id`, `layer_order`, and `collage_layout` (`x`, `y`, `width`, `height`, `rotation`) so the frontend can reopen and edit saved collages faithfully. The outfit integration suite also covers the round-trip contract that the collage layout returned by `PATCH /outfits/:id` matches the subsequent `GET /outfits/:id` payload used by the saved gallery.
 
 ## Important Internal Files
 
@@ -108,6 +111,8 @@ Notes:
   Handles temporary AI preview generation and metadata suggestions for uploaded but unsaved images
 - `app/services/openrouter_image_cleaner.rb`
   Calls OpenRouter image generation for cleaned item imagery
+- `app/services/clean_image_background_remover.rb`
+  Removes the white studio backdrop from generated clean images and produces the final transparent PNG attachment
 - `app/services/openrouter_metadata_suggester.rb`
   Calls OpenRouter structured vision responses for item metadata suggestions
 - `app/services/outfit_upload_analyzer.rb`
@@ -166,6 +171,17 @@ Supported `size` enum values:
 - `has_many :outfit_items`
 - `has_many :clothing_items, through: :outfit_items`
 
+### `OutfitItem`
+
+- `outfit_id`
+- `clothing_item_id`
+- `layer_order`
+- `collage_x`
+- `collage_y`
+- `collage_width`
+- `collage_height`
+- `collage_rotation`
+
 ### `OutfitUpload`
 
 - `user_id`
@@ -204,7 +220,11 @@ See [back-end/.env.example](./.env.example) for expected variables.
 - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` enable Google sign-in.
 - `OPENROUTER_API_KEY` is required for outfit detection, metadata suggestion, and image-cleaning features.
 - `OPENROUTER_MODEL` defaults to `openai/gpt-4.1-mini`.
+- `AI_CLEAN_BACKGROUND_FUZZ` optionally adjusts how aggressively edge-connected near-white pixels are removed from AI-cleaned images.
+- `AI_CLEAN_SHARPEN` optionally adjusts the sharpen pass that restores edge definition on the final transparent PNG.
 - `OPENROUTER_METADATA_MODEL` can override the metadata suggestion model independently.
+- `AI_CLEAN_BACKGROUND_FUZZ` optionally tunes how aggressively the clean-image post-process removes near-white edge background pixels. It defaults to `12%`.
+- `AI_CLEAN_SHARPEN` optionally adds a light sharpen pass after background removal to recover edge crispness in the final transparent PNG. It defaults to `0x0.8`.
 - `OUTFIT_CROP_CYCLE_LIMIT` controls refinement and verification retries.
 - Active Storage can be configured for S3-style storage through the provided AWS variables.
 

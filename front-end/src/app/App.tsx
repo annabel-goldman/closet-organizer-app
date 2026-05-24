@@ -1,11 +1,13 @@
 import { Dispatch, SetStateAction, useDeferredValue, useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { Search } from "lucide-react";
+import { Search, ShoppingBag } from "lucide-react";
 import { AddItemMenu } from "./components/AddItemMenu";
 import { ClothingCard } from "./components/ClothingCard";
 import { CreateItemPage } from "./components/CreateItemPage";
 import { ItemDetailPage } from "./components/ItemDetailPage";
 import { MyOutfitsPage } from "./components/MyOutfitsPage";
+import { OutfitCartSheet } from "./components/OutfitCartSheet";
+import { OutfitCreatedDialog } from "./components/OutfitCreatedDialog";
 import { UserDetailPage } from "./components/UserDetailPage";
 import { UsersDirectoryPage } from "./components/UsersDirectoryPage";
 import {
@@ -41,11 +43,13 @@ import { SiteHeader } from "./components/shared/SiteHeader";
 import { Input } from "./components/ui/input";
 import {
   ClothingItem,
+  createOutfit,
   fetchCurrentUser,
   formatPossessive,
   formatPreferredStyle,
   logoutSession,
   OutfitDraft,
+  parseTagInput,
   titleize,
   User,
 } from "./lib/closet";
@@ -71,6 +75,15 @@ import { useOutfitDraftState } from "./lib/useOutfitDraftState";
 interface HomeMessageState {
   kind: "error" | "success";
   text: string;
+}
+
+function buildCartOutfitName(itemCount: number) {
+  const formattedDate = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(new Date());
+
+  return `Outfit ${formattedDate} · ${itemCount} ${itemCount === 1 ? "piece" : "pieces"}`;
 }
 
 interface ClosetFilterMenuProps {
@@ -177,7 +190,12 @@ export default function App() {
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [selectedOtherTags, setSelectedOtherTags] = useState<string[]>([]);
   const [sortOption, setSortOption] = useState<ClosetSortOption>("name-asc");
-  const [outfitDraftNotice, setOutfitDraftNotice] = useState("");
+  const [isOutfitCartOpen, setIsOutfitCartOpen] = useState(false);
+  const [isOutfitCreatedDialogOpen, setIsOutfitCreatedDialogOpen] = useState(false);
+  const [isCreatingOutfitFromCart, setIsCreatingOutfitFromCart] = useState(false);
+  const [outfitCartErrorMessage, setOutfitCartErrorMessage] = useState("");
+  const [outfitCartName, setOutfitCartName] = useState("");
+  const [outfitCartStatusMessage, setOutfitCartStatusMessage] = useState("");
   const [outfitDraft, setOutfitDraft] = useOutfitDraftState(user);
 
   useEffect(() => {
@@ -247,16 +265,16 @@ export default function App() {
   }, [route.kind]);
 
   useEffect(() => {
-    if (!outfitDraftNotice) {
+    if (!outfitCartStatusMessage) {
       return;
     }
 
     const timeout = window.setTimeout(() => {
-      setOutfitDraftNotice("");
+      setOutfitCartStatusMessage("");
     }, 2400);
 
     return () => window.clearTimeout(timeout);
-  }, [outfitDraftNotice]);
+  }, [outfitCartStatusMessage]);
 
   useEffect(() => {
     if (route.kind === "home" && user) {
@@ -264,7 +282,24 @@ export default function App() {
     }
   }, [route.kind, user]);
 
+  useEffect(() => {
+    if (user) {
+      return;
+    }
+
+    setIsOutfitCartOpen(false);
+    setIsOutfitCreatedDialogOpen(false);
+    setOutfitCartName("");
+    setOutfitCartErrorMessage("");
+    setOutfitCartStatusMessage("");
+  }, [user]);
+
   const clothingItems = user?.clothing_items ?? [];
+  const outfitDraftItems = outfitDraft.itemIds
+    .map((itemId) => clothingItems.find((item) => item.id === itemId))
+    .filter((item): item is ClothingItem => Boolean(item));
+  const outfitCartBadgeLabel =
+    outfitDraftItems.length > 9 ? "9+" : String(outfitDraftItems.length);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const isLoggedOutProtectedRoute = isProtectedRoute(route) && !user;
   const closetTitle = user ? formatPossessive(titleize(user.username)) : "Your Closet";
@@ -312,7 +347,8 @@ export default function App() {
       return;
     }
 
-    setOutfitDraftNotice("Added to outfit draft.");
+    setOutfitCartStatusMessage("Added to outfit cart.");
+    setOutfitCartErrorMessage("");
     setOutfitDraft((current) => ({
       ...current,
       itemIds: [itemId, ...current.itemIds],
@@ -320,11 +356,59 @@ export default function App() {
   }
 
   function removeItemFromOutfitDraft(itemId: number) {
-    setOutfitDraftNotice("Removed from outfit draft.");
+    setOutfitCartStatusMessage("Removed from outfit cart.");
     setOutfitDraft((current) => ({
       ...current,
       itemIds: current.itemIds.filter((id) => id !== itemId),
     }));
+  }
+
+  async function handleCreateOutfitFromCart() {
+    if (!user || outfitDraft.itemIds.length === 0) {
+      return;
+    }
+
+    setIsCreatingOutfitFromCart(true);
+    setOutfitCartErrorMessage("");
+
+    try {
+      const tags = parseTagInput(outfitDraft.tagInput);
+
+      await createOutfit({
+        userId: user.id,
+        name: outfitCartName.trim() || buildCartOutfitName(outfitDraft.itemIds.length),
+        itemIds: outfitDraft.itemIds,
+        notes: outfitDraft.notes.trim() || undefined,
+        tags: tags.length > 0 ? tags : undefined,
+      });
+
+      setOutfitDraft((current) => ({
+        ...current,
+        itemIds: [],
+        notes: "",
+        tagInput: "",
+      }));
+      setOutfitCartName("");
+      setIsOutfitCartOpen(false);
+      setIsOutfitCreatedDialogOpen(true);
+      setOutfitCartStatusMessage("Outfit created.");
+    } catch (error) {
+      setOutfitCartErrorMessage(
+        error instanceof Error ? error.message : "Unable to create this outfit right now.",
+      );
+    } finally {
+      setIsCreatingOutfitFromCart(false);
+    }
+  }
+
+  function handleBackToClosetFromOutfitDialog() {
+    setIsOutfitCreatedDialogOpen(false);
+    navigateTo("/closet");
+  }
+
+  function handleGoToOutfitsFromDialog() {
+    setIsOutfitCreatedDialogOpen(false);
+    navigateTo("/outfits");
   }
 
   async function handleLogout() {
@@ -444,10 +528,6 @@ export default function App() {
     pageContent = user ? (
       <MyOutfitsPage
         user={user}
-        draft={outfitDraft}
-        onDraftChange={setOutfitDraft}
-        onBrowseCloset={() => navigateTo("/closet")}
-        onOpenItem={(itemId) => navigateTo(`/items/${itemId}`)}
       />
     ) : null;
   } else {
@@ -492,6 +572,7 @@ export default function App() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6 }}
+            className="flex items-center gap-3"
           >
             <AddItemMenu
               disabled={!user}
@@ -510,6 +591,28 @@ export default function App() {
                 navigateTo(`/items/new?userId=${user.id}&mode=manual`);
               }}
             />
+            <PrimitiveButton
+              type="button"
+              variant="outline"
+              onClick={() => setIsOutfitCartOpen(true)}
+              disabled={!user}
+              aria-label={`Open outfit cart with ${outfitDraftItems.length} ${
+                outfitDraftItems.length === 1 ? "item" : "items"
+              }`}
+              className="relative h-auto gap-3 px-5 py-3"
+            >
+              <span className="relative inline-flex">
+                <ShoppingBag className="h-4 w-4" />
+                {outfitDraftItems.length > 0 ? (
+                  <span className="absolute -right-2 -top-2 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-[9px] font-semibold leading-none text-background">
+                    {outfitCartBadgeLabel}
+                  </span>
+                ) : null}
+              </span>
+              <PrimitiveText as="span" variant="bodySm">
+                Outfit Cart
+              </PrimitiveText>
+            </PrimitiveButton>
           </motion.div>
         </div>
 
@@ -700,19 +803,42 @@ export default function App() {
         {pageContent}
       </main>
 
-      {outfitDraftNotice ? (
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="fixed bottom-6 right-6 z-50 max-w-sm border border-foreground/20 bg-background/95 px-4 py-3 text-sm shadow-lg backdrop-blur"
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          {outfitDraftNotice} Draft has {outfitDraft.itemIds.length}{" "}
-          {outfitDraft.itemIds.length === 1 ? "item" : "items"}.
-        </motion.div>
-      ) : null}
+      <OutfitCartSheet
+        createErrorMessage={outfitCartErrorMessage}
+        isCreating={isCreatingOutfitFromCart}
+        isOpen={isOutfitCartOpen}
+        items={outfitDraftItems}
+        notes={outfitDraft.notes}
+        onCreateOutfit={() => void handleCreateOutfitFromCart()}
+        onNotesChange={(value) =>
+          setOutfitDraft((current) => ({
+            ...current,
+            notes: value,
+          }))
+        }
+        onOpenChange={setIsOutfitCartOpen}
+        onOutfitNameChange={setOutfitCartName}
+        onRemoveItem={removeItemFromOutfitDraft}
+        onTagInputChange={(value) =>
+          setOutfitDraft((current) => ({
+            ...current,
+            tagInput: value,
+          }))
+        }
+        outfitName={outfitCartName}
+        tagInput={outfitDraft.tagInput}
+      />
+
+      <OutfitCreatedDialog
+        isOpen={isOutfitCreatedDialogOpen}
+        onBackToCloset={handleBackToClosetFromOutfitDialog}
+        onGoToOutfits={handleGoToOutfitsFromDialog}
+        onOpenChange={setIsOutfitCreatedDialogOpen}
+      />
+
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {outfitCartStatusMessage}
+      </div>
 
       <SiteFooter />
     </div>

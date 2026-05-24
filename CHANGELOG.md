@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- Added a configurable post-removal sharpen step to AI-cleaned transparent PNG outputs so item edges render a bit crisper after background removal.
+- Added automated saved-outfit collage contract coverage for backend round-trips and frontend layout math so saved cards, the editor preview, and resize-ratio fallback stay aligned.
+- Updated CI to install ImageMagick alongside `libvips` so the MiniMagick-backed clean-image background removal path and its tests run in GitHub Actions.
+- Routed local Active Storage image URLs through the Vite dev server so outfit collage previews can measure image bounds without cross-origin console errors while developing at `127.0.0.1:5173`.
+- Slimmed the `/outfits` saved-look cards so the collage stage reads closer to the editor preview proportions instead of feeling visually too wide.
+- Updated the `/outfits` gallery to use three saved-look cards per row on larger screens so the slimmer cards fill the page more naturally.
+- Reworked the mobile Edit Outfit modal so the collage preview stays dominant, with the layers strip pinned to the left of the canvas instead of stacking above it.
+- Changed the mobile Edit Outfit modal to scroll as a single vertical flow, with the outfit editor taking the first screen and the detail form living below it.
+- Fixed the `/outfits` collage renderer so local Active Storage images load again from the Rails origin without tripping browser CORS enforcement on the visible `<img>` elements.
+- Switched outfit collage rendering to measure each image's visible alpha bounds and use those same content bounds in both the saved view and editor.
+- Unified the saved-look and edit-modal outfit previews onto the same normalized renderer path in `OutfitCollageCanvas` so edited and saved composition stay in lockstep.
+- Moved the saved-look and edit-modal outfit previews back onto a single shared stage-aspect contract in `OutfitCollageCanvas` so saved outfits render the same composition you see while editing.
+- Reduced the saved-look card preview size on `/outfits` and capped the edit-modal collage preview by viewport height so the full outfit stays visible without preview-pane scrolling.
+- Relaxed the outfit collage editor bounds so pieces can now sit partially off-canvas, allowing looks where up to half of an item extends beyond the white outfit stage.
+- Added a background-removal post-process to the AI clean-image pipeline so generated item photos are attached as transparent PNG cutouts instead of keeping the white studio backdrop.
+- Rebuilt the saved-outfit collage editor on `react-moveable`, replacing the custom drag/resize/rotate control math with library-backed corner handles, top rotation control, and a cleaner DOM-target interaction model.
+- Simplified the edit-modal layers panel into a slim left-side thumbnail strip so the collage preview keeps more vertical room and better matches the outfit canvas proportions.
+- Corrected the outfit edit collage editor so the resize outline now follows the actual visible photo bounds with corner-only resize controls, and fixed the edit modal's breakpoint width cap so the preview workspace can expand properly on larger screens.
+- Added persisted outfit-collage layout data on `outfit_items` so saved looks can store per-piece position, size, rotation, and layer order for edit-modal collage editing.
+- Expanded the outfit edit modal so the collage preview now appears at full size in the left panel while editing saved looks.
+- Removed the outfit cart footer helper copy so the selected-items tray has more room to show outfit pieces before creation.
+- Redesigned the closet-to-outfit flow into a cart-style builder: adding an item now updates a closet-page cart button with a notification badge, the cart opens a right-side review tray with inline outfit name, tag, and notes fields, and creating an outfit from that tray now ends with a success popup that links back to Closet or into My Outfits.
+- Removed the standalone create-outfit form from the `/outfits` page so new outfits now enter the system through the closet cart, while `/outfits` stays focused on browsing and editing saved looks.
+- Refreshed the `/outfits` gallery into larger, photo-led saved-look cards so outfit pieces are previewed visually first instead of appearing primarily as text rows.
+- Replaced the inline `/outfits` edit section with a focused edit modal that keeps the outfit preview visible on the left while title, tags, and notes are edited on the right.
 - Added project-wide text input length limits enforced at every layer: a shared `InputLengthPolicy` module (Rails) with model validations on `User`, `ClothingItem`, and `Outfit`; a new migration that mirrors the caps as database `limit:` constraints and marks load-bearing identifier columns (`users.username`, `users.provider`, `users.uid`, `clothing_items.name`, `outfits.name`) as `null: false` with backfill for legacy blank rows; and a matching `inputLengthPolicy.ts` on the frontend that exposes `maxLength` on the item, outfit name, notes, and tag inputs.
 - Documented the SQL injection posture: every query uses ActiveRecord's parameterized API or strong params; the only raw SQL fragment (`where("lower(email) = ?", ...)`) uses bound placeholders so user-supplied values are never interpolated into SQL.
 - Added Kaminari-backed pagination to the admin users index (`GET /users?page=&per_page=`) returning a `{ users, meta }` envelope, surfaced a paginated grid with Previous/Next/page controls on the admin users directory, and switched the directory cards to a `clothing_items_count` field so per-user item arrays no longer ship with the index payload.

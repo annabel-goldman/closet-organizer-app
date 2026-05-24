@@ -32,11 +32,18 @@ class CleanImageAttachmentGenerator
       metadata_context: metadata_context
     )
     generated_tempfile = temporary_files.track(generated.fetch(:tempfile))
+    filename_root = File.basename(generated.fetch(:filename).to_s, ".*").presence || "item-clean"
+    processed = CleanImageBackgroundRemover.call(
+      generated_tempfile,
+      filename_root: filename_root,
+      temporary_files: temporary_files
+    )
+    processed_tempfile = temporary_files.track(processed.fetch(:tempfile))
 
     record.cleaned_photo.attach(
-      io: generated_tempfile,
-      filename: generated.fetch(:filename),
-      content_type: generated.fetch(:content_type)
+      io: processed_tempfile,
+      filename: processed.fetch(:filename),
+      content_type: processed.fetch(:content_type)
     )
     record.update!(
       clean_image_status: :succeeded,

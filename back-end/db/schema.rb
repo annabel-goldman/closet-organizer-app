@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_17_220000) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_21_165312) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -101,7 +101,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_17_220000) do
 
   create_table "outfit_items", force: :cascade do |t|
     t.integer "clothing_item_id", null: false
+    t.float "collage_height"
+    t.float "collage_rotation", default: 0.0, null: false
+    t.float "collage_width"
+    t.float "collage_x"
+    t.float "collage_y"
     t.datetime "created_at", null: false
+    t.integer "layer_order", default: 0, null: false
     t.integer "outfit_id", null: false
     t.datetime "updated_at", null: false
     t.index ["clothing_item_id"], name: "index_outfit_items_on_clothing_item_id"
