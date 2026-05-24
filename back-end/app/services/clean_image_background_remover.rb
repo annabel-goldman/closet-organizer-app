@@ -29,7 +29,7 @@ class CleanImageBackgroundRemover
       command.border "1x1"
       command.fuzz configured_background_fuzz
       command.fill "none"
-      command.draw "alpha 0,0 floodfill"
+      command.draw "color 0,0 floodfill"
       command.shave "1x1"
       # A light sharpen pass restores some edge definition after the AI clean
       # image generation and transparent-background conversion steps.
