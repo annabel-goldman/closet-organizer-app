@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed Heroku frontend deploys by keeping the Vite build-time plugins (`@tailwindcss/vite` and `@vitejs/plugin-react`) in production dependencies and pinning the root Node runtime to `22.x`.
 - Added a configurable post-removal sharpen step to AI-cleaned transparent PNG outputs so item edges render a bit crisper after background removal.
 - Added automated saved-outfit collage contract coverage for backend round-trips and frontend layout math so saved cards, the editor preview, and resize-ratio fallback stay aligned.
 - Updated CI to install ImageMagick alongside `libvips` so the MiniMagick-backed clean-image background removal path and its tests run in GitHub Actions.

@@ -145,6 +145,8 @@ The frontend API layer is split between shared request helpers in `src/app/lib/a
 
 - `vite.config.ts` proxies `/api` to the Rails backend and strips the prefix before forwarding.
 - The production deploy flow builds the frontend and copies `dist/` into `back-end/public`.
+- `vite.config.ts` imports `@tailwindcss/vite` and `@vitejs/plugin-react` during the production build, so those packages must remain in `dependencies` instead of `devDependencies` for Heroku-style `NODE_ENV=production` installs.
+- The repository root `package.json` pins Node `22.x` so Heroku resolves a predictable runtime for the frontend build step.
 
 Create a production build:
 

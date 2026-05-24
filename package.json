@@ -1,6 +1,9 @@
 {
   "name": "project-closet-organizer",
   "version": "1.0.0",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "heroku-postbuild": "cd front-end && npm install && npm run build && cp -r dist/. ../back-end/public"
   }
