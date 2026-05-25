@@ -26,6 +26,8 @@ import {
 } from "../lib/inputLengthPolicy";
 import { Input } from "./ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
+import { Command, CommandGroup, CommandItem, CommandList } from "./ui/command";
 
 interface ItemMetadataFieldsProps {
   autofillDisabled?: boolean;
@@ -86,6 +88,76 @@ function LabelWithTooltip({
   );
 }
 
+function BrandAutocomplete({
+  id,
+  value,
+  onChange,
+  suggestions,
+  placeholder,
+  className,
+  maxLength,
+}: {
+  id: string;
+  value: string;
+  onChange: (val: string) => void;
+  suggestions: string[];
+  placeholder?: string;
+  className?: string;
+  maxLength?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const filtered = value
+    ? suggestions.filter((s) => s.toLowerCase().includes(value.toLowerCase()))
+    : suggestions;
+  return (
+    <Popover open={open && filtered.length > 0} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <Input
+          id={id}
+          value={value}
+          placeholder={placeholder}
+          className={className}
+          maxLength={maxLength}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setOpen(e.target.value.length > 0);
+          }}
+          onFocus={() => {}}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setOpen(false);
+          }}
+        />
+      </PopoverAnchor>
+      <PopoverContent
+        align="start"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        className="p-0"
+        style={{ width: "var(--radix-popover-trigger-width)" }}
+      >
+        <Command>
+          <CommandList>
+            <CommandGroup>
+              {filtered.map((brand) => (
+                <CommandItem
+                  key={brand}
+                  value={brand}
+                  onSelect={() => {
+                    onChange(brand);
+                    setOpen(false);
+                  }}
+                >
+                  {brand}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function ItemMetadataFields({
   autofillDisabled = false,
   brandSuggestions = [],
@@ -104,7 +176,6 @@ export function ItemMetadataFields({
   const tags = parseTagInput(values.tags);
   const visibleTags = editingTag ? tags.filter((tag) => tag !== editingTag) : tags;
 
-  const brandListId = `${fieldIdPrefix}item-brand-suggestions`;
   const tagListId = `${fieldIdPrefix}item-tag-suggestions`;
 
   function fieldId(field: keyof ClothingItemFormValues) {
@@ -278,22 +349,15 @@ export function ItemMetadataFields({
           label="Brand"
           tooltip="Brands power the Brands filter on your closet. Start typing to reuse a brand you have already saved."
         />
-        <Input
+        <BrandAutocomplete
           id={fieldId("brand")}
-          list={brandSuggestions.length > 0 ? brandListId : undefined}
-          value={values.brand}
-          onChange={(event) => updateField("brand", event.target.value)}
+          value={values.brand ?? ""}
+          onChange={(val) => updateField("brand", val)}
+          suggestions={brandSuggestions}
           placeholder="Optional, e.g. COS, Nike"
           className="h-auto px-4 py-3"
           maxLength={MAX_CLOTHING_ITEM_BRAND}
         />
-        {brandSuggestions.length > 0 ? (
-          <datalist id={brandListId}>
-            {brandSuggestions.map((brand) => (
-              <option key={brand} value={brand} />
-            ))}
-          </datalist>
-        ) : null}
       </label>
 
       <div className="space-y-2 sm:col-span-2">

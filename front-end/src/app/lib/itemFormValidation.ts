@@ -1,4 +1,5 @@
 import { ClothingItem, ClothingItemFormValues } from "./closet";
+import { COMMON_BRANDS } from "./commonBrands";
 
 export type ClothingItemFormErrors = Partial<Record<keyof ClothingItemFormValues, string>>;
 
@@ -43,7 +44,7 @@ export function clothingItemFieldElementId(field: keyof ClothingItemFormValues) 
 }
 
 export function collectClosetSuggestions(items: ClothingItem[]) {
-  const brands = new Set<string>();
+  const brands = new Set<string>(COMMON_BRANDS);
   const tags = new Set<string>();
 
   for (const item of items) {
