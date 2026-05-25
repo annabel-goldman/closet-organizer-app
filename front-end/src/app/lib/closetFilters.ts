@@ -67,18 +67,100 @@ function itemMatchesSelectedBrand(item: ClothingItem, selectedBrand: string): bo
   return normalizeKey(itemBrand) === normalizeKey(selectedBrand);
 }
 
-export function matchesSearchQuery(item: ClothingItem, query: string) {
+export function buildClothingItemSearchHaystack(item: ClothingItem): string {
+  return [item.name, item.category, item.brand, item.size, ...item.tags]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function levenshteinDistance(left: string, right: string): number {
+  if (left === right) {
+    return 0;
+  }
+
+  if (left.length === 0) {
+    return right.length;
+  }
+
+  if (right.length === 0) {
+    return left.length;
+  }
+
+  const rows = left.length + 1;
+  const cols = right.length + 1;
+  const matrix = Array.from({ length: rows }, () => Array<number>(cols).fill(0));
+
+  for (let row = 0; row < rows; row += 1) {
+    matrix[row][0] = row;
+  }
+
+  for (let col = 0; col < cols; col += 1) {
+    matrix[0][col] = col;
+  }
+
+  for (let row = 1; row < rows; row += 1) {
+    for (let col = 1; col < cols; col += 1) {
+      const cost = left[row - 1] === right[col - 1] ? 0 : 1;
+      matrix[row][col] = Math.min(
+        matrix[row - 1][col] + 1,
+        matrix[row][col - 1] + 1,
+        matrix[row - 1][col - 1] + cost,
+      );
+    }
+  }
+
+  return matrix[rows - 1][cols - 1];
+}
+
+function maxFuzzyDistance(term: string, candidate: string): number {
+  const shortest = Math.min(term.length, candidate.length);
+  if (shortest <= 3) {
+    return 0;
+  }
+  if (shortest <= 6) {
+    return 1;
+  }
+  return 2;
+}
+
+export function termMatchesInHaystack(term: string, haystack: string): boolean {
+  const normalizedTerm = term.trim().toLowerCase();
+  if (!normalizedTerm) {
+    return true;
+  }
+
+  if (haystack.includes(normalizedTerm)) {
+    return true;
+  }
+
+  if (normalizedTerm.length < 3) {
+    return false;
+  }
+
+  const tokens = haystack.split(/\s+/).filter(Boolean);
+  return tokens.some((token) => {
+    if (token.includes(normalizedTerm) || normalizedTerm.includes(token)) {
+      return true;
+    }
+
+    const allowedDistance = maxFuzzyDistance(normalizedTerm, token);
+    if (allowedDistance === 0) {
+      return false;
+    }
+
+    return levenshteinDistance(normalizedTerm, token) <= allowedDistance;
+  });
+}
+
+export function matchesSearchQuery(item: ClothingItem, query: string): boolean {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) {
     return true;
   }
 
-  const haystack = [item.name, item.size, item.brand, ...item.tags]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  return normalizedQuery.split(/\s+/).every((term) => haystack.includes(term));
+  const haystack = buildClothingItemSearchHaystack(item);
+  return normalizedQuery.split(/\s+/).every((term) => termMatchesInHaystack(term, haystack));
 }
 
 export function sortClothingItems(items: ClothingItem[], sortOption: ClosetSortOption) {
@@ -137,6 +219,25 @@ export function buildGroupedTagOptions(items: ClothingItem[]): GroupedTagOptions
   };
 }
 
+export function passesClothingItemFilters(
+  item: ClothingItem,
+  selectedBrands: string[],
+  selectedColors: string[],
+  selectedOtherTags: string[],
+): boolean {
+  const selectedTagTokens = [...selectedColors, ...selectedOtherTags];
+
+  if (selectedTagTokens.length > 0 && !selectedTagTokens.some((tag) => item.tags.includes(tag))) {
+    return false;
+  }
+
+  if (selectedBrands.length > 0 && !selectedBrands.some((brand) => itemMatchesSelectedBrand(item, brand))) {
+    return false;
+  }
+
+  return true;
+}
+
 export function filterClothingItems(
   items: ClothingItem[],
   searchQuery: string,
@@ -145,15 +246,9 @@ export function filterClothingItems(
   selectedOtherTags: string[],
   sortOption: ClosetSortOption,
 ) {
-  const selectedTagTokens = [...selectedColors, ...selectedOtherTags];
-
   return sortClothingItems(
     items.filter((item) => {
-      if (selectedTagTokens.length > 0 && !selectedTagTokens.some((tag) => item.tags.includes(tag))) {
-        return false;
-      }
-
-      if (selectedBrands.length > 0 && !selectedBrands.some((brand) => itemMatchesSelectedBrand(item, brand))) {
+      if (!passesClothingItemFilters(item, selectedBrands, selectedColors, selectedOtherTags)) {
         return false;
       }
 
@@ -161,6 +256,42 @@ export function filterClothingItems(
     }),
     sortOption,
   );
+}
+
+export function getClosetSearchSuggestions(
+  items: ClothingItem[],
+  searchQuery: string,
+  selectedBrands: string[],
+  selectedColors: string[],
+  selectedOtherTags: string[],
+  sortOption: ClosetSortOption,
+  options: { limit?: number } = {},
+): ClothingItem[] {
+  const limit = options.limit ?? 8;
+  if (!searchQuery.trim()) {
+    return [];
+  }
+
+  return filterClothingItems(
+    items,
+    searchQuery,
+    selectedBrands,
+    selectedColors,
+    selectedOtherTags,
+    sortOption,
+  ).slice(0, limit);
+}
+
+export function formatClosetSearchSuggestionLabel(item: ClothingItem): string {
+  return item.name.trim();
+}
+
+export function formatClosetSearchSuggestionDetail(item: ClothingItem): string | null {
+  const parts = [item.brand?.trim(), item.category?.trim(), ...item.tags.slice(0, 2)].filter(Boolean);
+  if (parts.length === 0) {
+    return item.size ? `Size ${item.size}` : null;
+  }
+  return parts.join(" · ");
 }
 
 export function hasActiveClosetControls(

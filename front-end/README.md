@@ -79,7 +79,7 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
 - The saved-outfit collage editor is library-backed: `react-moveable` owns the move/resize/rotate controls, while `OutfitCollageCanvas` keeps the rendered image viewport and persisted collage layout data in sync.
 - The saved card and edit modal intentionally share the same collage-layout math: the editor seeds its layouts from the saved API payload, and both views normalize those layouts through the same render-math helpers so the saved preview matches what the editor shows after save.
 - Item and outfit text inputs are length-capped through `src/app/lib/inputLengthPolicy.ts`, which mirrors the backend `InputLengthPolicy` constants and applies them as `maxLength` on the relevant `<input>` and `<textarea>` controls.
-- Closet filtering and sorting are handled through focused helpers in `src/app/lib/closetFilters.ts`.
+- Closet filtering, fuzzy search, and sorting are handled through focused helpers in `src/app/lib/closetFilters.ts`. The closet search field shows filter-aware item suggestions while typing (click fills the query, Enter opens the highlighted item).
 - Item create and edit flows send multipart form data so photos can be uploaded, cropped, removed, or sourced from detected outfit-photo regions.
 - The item editor can request AI metadata suggestions for type, name, brand, and tags, and can request cleaned item imagery for catalog-style presentation; the backend now strips the generated white studio background before returning the final cleaned PNG.
 - Image-based item creation submits an outfit photo to `POST /outfit_uploads`, renders detections, and supports promoting a reviewed detection into a closet item.
@@ -104,7 +104,11 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
 - `tests/outfit-collage-contracts.test.ts`
   Node-based frontend contract tests covering saved-view/editor layout parity and the resize-aspect fallback that prevents reselection drift
 - `src/app/lib/closetFilters.ts`
-  Closet search, filter, and sort helpers
+  Closet search, fuzzy matching, filter-aware suggestion helpers, and sort helpers
+- `src/app/components/ClosetSearchField.tsx`
+  Closet page search input with filter-aware item suggestions (click to fill, Enter to open item)
+- `tests/closetFilters.test.ts`
+  Node-based tests for closet fuzzy search and filter-aware suggestions
 - `src/app/lib/usePageData.ts`
   Shared async page-loading hook
 - `src/app/lib/useItemPhotoState.ts`

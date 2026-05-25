@@ -1,6 +1,6 @@
 import { Dispatch, SetStateAction, useDeferredValue, useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { Search, ShoppingBag } from "lucide-react";
+import { ShoppingBag } from "lucide-react";
 import { AddItemMenu } from "./components/AddItemMenu";
 import { ClothingCard } from "./components/ClothingCard";
 import { CreateItemPage } from "./components/CreateItemPage";
@@ -40,7 +40,7 @@ import { HomeLanding } from "./components/shared/HomeLanding";
 import { NotFoundPage } from "./components/shared/NotFoundPage";
 import { SiteFooter } from "./components/shared/SiteFooter";
 import { SiteHeader } from "./components/shared/SiteHeader";
-import { Input } from "./components/ui/input";
+import { ClosetSearchField } from "./components/ClosetSearchField";
 import {
   ClothingItem,
   createOutfit,
@@ -57,6 +57,8 @@ import {
   buildGroupedTagOptions,
   ClosetSortOption,
   filterClothingItems,
+  formatClosetSearchSuggestionLabel,
+  getClosetSearchSuggestions,
   hasActiveClosetControls,
 } from "./lib/closetFilters";
 import {
@@ -318,6 +320,15 @@ export default function App() {
     selectedColors,
     selectedOtherTags,
     sortOption,
+  );
+  const closetSearchSuggestions = getClosetSearchSuggestions(
+    clothingItems,
+    searchQuery,
+    selectedBrands,
+    selectedColors,
+    selectedOtherTags,
+    sortOption,
+    { limit: 8 },
   );
   const hasActiveFilters = hasActiveClosetControls(
     searchQuery,
@@ -644,15 +655,19 @@ export default function App() {
               className="mb-8 space-y-5"
             >
               <div className="space-y-3 min-[660px]:grid min-[660px]:gap-3 min-[660px]:space-y-0 min-[660px]:grid-cols-[minmax(0,3.2fr)_repeat(3,minmax(0,0.8fr))_minmax(0,1fr)] min-[660px]:items-start">
-                <div className="relative min-w-0 self-start">
+                <div className="min-w-0 self-start">
                   <label htmlFor="closet-search" className="sr-only">
                     Search closet items
                   </label>
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
+                  <ClosetSearchField
                     id="closet-search"
                     value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
+                    onChange={setSearchQuery}
+                    suggestions={closetSearchSuggestions}
+                    onSelectSuggestion={(item) =>
+                      setSearchQuery(formatClosetSearchSuggestionLabel(item))
+                    }
+                    onOpenItem={(item) => navigateTo(`/items/${item.id}`)}
                     placeholder="Search by name or describe an item with tags"
                     className="h-14 pl-10"
                   />
