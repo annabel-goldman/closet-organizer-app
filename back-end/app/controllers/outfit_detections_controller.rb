@@ -4,9 +4,9 @@ class OutfitDetectionsController < ApplicationController
 
   def generate_metadata_suggestions
     temporary_files = ManagedTempfiles.new
-    source_photo = source_photo_for_processing(@outfit_detection, temporary_files)
+    source_photo = @outfit_detection.source_photo_for_cleaning(temporary_files: temporary_files)
 
-    unless source_photo
+    unless source_photo&.attached?
       render json: { error: "This detection does not have a usable crop to analyze." }, status: :unprocessable_content
       return
     end
@@ -30,8 +30,8 @@ class OutfitDetectionsController < ApplicationController
   def generate_clean_image
     temporary_files = ManagedTempfiles.new
 
-    source_photo = source_photo_for_processing(@outfit_detection, temporary_files)
-    unless source_photo
+    source_photo = @outfit_detection.source_photo_for_cleaning(temporary_files: temporary_files)
+    unless source_photo&.attached?
       render json: { error: "This detection does not have a usable crop to clean." }, status: :unprocessable_content
       return
     end
@@ -56,24 +56,28 @@ class OutfitDetectionsController < ApplicationController
     temporary_files&.close_all
   end
 
+  def generate_transparent_png
+    source_photo = @outfit_detection.source_photo_for_transparent_png
+    unless source_photo&.attached?
+      render json: { error: "Run AI clean image before making a transparent PNG." }, status: :unprocessable_content
+      return
+    end
+
+    TransparentPngAttachmentGenerator.call(
+      record: @outfit_detection,
+      source_photo: source_photo
+    )
+
+    render json: payloads.outfit_detection(@outfit_detection.reload)
+  rescue StandardError => error
+    render json: { error: error.message }, status: :unprocessable_content
+  end
+
   private
 
   def set_outfit_detection
     @outfit_detection = OutfitDetection
       .joins(:outfit_upload)
       .find_by!(id: params[:id], outfit_uploads: { user_id: current_user.id })
-  end
-
-  def source_photo_for_processing(outfit_detection, temporary_files)
-    return outfit_detection.cleaned_photo if outfit_detection.cleaned_photo.attached?
-
-    crop_box = outfit_detection.preferred_preview_box
-    return nil unless crop_box
-
-    cropped_photo = ClothingItemPhotoCropper.call(
-      outfit_detection.outfit_upload.source_photo,
-      crop_box
-    )
-    PreparedImageSource.from_crop_result(cropped_photo, temporary_files: temporary_files)
   end
 end

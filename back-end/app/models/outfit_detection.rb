@@ -1,6 +1,7 @@
 class OutfitDetection < ApplicationRecord
   belongs_to :outfit_upload
   has_one_attached :cleaned_photo
+  has_one_attached :cleaned_working_photo
 
   enum :crop_status, {
     pending: 0,
@@ -56,7 +57,26 @@ class OutfitDetection < ApplicationRecord
     final_box || refined_box || coarse_box
   end
 
-  def source_photo_for_cleaning
+  def source_photo_for_cleaning(temporary_files:)
+    crop_box = preferred_preview_box
+    return nil unless crop_box
+
+    cropped_photo = ClothingItemPhotoCropper.call(
+      outfit_upload.source_photo,
+      crop_box
+    )
+    PreparedImageSource.from_crop_result(cropped_photo, temporary_files: temporary_files)
+  end
+
+  def source_photo_for_clothing_item(temporary_files:)
+    return PreparedImageSource.from_attachment(cleaned_photo) if cleaned_photo.attached?
+
+    source_photo_for_cleaning(temporary_files: temporary_files)
+  end
+
+  def source_photo_for_transparent_png
+    return cleaned_working_photo if cleaned_working_photo.attached?
+
     cleaned_photo.attached? ? cleaned_photo : nil
   end
 

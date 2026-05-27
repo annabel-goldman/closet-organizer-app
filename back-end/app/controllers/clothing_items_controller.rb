@@ -1,6 +1,13 @@
 class ClothingItemsController < ApplicationController
   before_action :require_login
-  before_action :set_clothing_item, only: %i[show update destroy generate_clean_image generate_metadata_suggestions]
+  before_action :set_clothing_item, only: %i[
+    show
+    update
+    destroy
+    generate_clean_image
+    generate_transparent_png
+    generate_metadata_suggestions
+  ]
 
   def index
     @clothing_items = current_user.clothing_items.includes(:user).order(:name)
@@ -27,7 +34,8 @@ class ClothingItemsController < ApplicationController
   end
 
   def generate_clean_image
-    unless @clothing_item.source_photo_for_cleaning.attached?
+    source_photo = @clothing_item.source_photo_for_cleaning
+    unless source_photo&.attached?
       render json: { error: "This item does not have a photo to clean." }, status: :unprocessable_content
       return
     end
@@ -38,7 +46,7 @@ class ClothingItemsController < ApplicationController
 
     CleanImageAttachmentGenerator.call(
       record: @clothing_item,
-      source_photo: @clothing_item.source_photo_for_cleaning,
+      source_photo: source_photo,
       prompt_context: ImageCleanPromptBuilder.for_clothing_item(@clothing_item),
       reference_photos: clothing_item_reference_photos,
       metadata_context: metadata_context
@@ -50,18 +58,36 @@ class ClothingItemsController < ApplicationController
   end
 
   def generate_metadata_suggestions
-    unless @clothing_item.source_photo_for_cleaning.attached?
+    source_photo = @clothing_item.source_photo_for_cleaning
+    unless source_photo&.attached?
       render json: { error: "This item does not have a photo to analyze." }, status: :unprocessable_content
       return
     end
 
     render json: OpenrouterMetadataSuggester.call(
-      @clothing_item.source_photo_for_cleaning,
+      source_photo,
       reference_photos: clothing_item_reference_photos,
       metadata_context: clothing_item_ai_metadata_context(@clothing_item).merge(
         ai_metadata_context_from_params(params[:ai_context])
       )
     )
+  rescue StandardError => error
+    render json: { error: error.message }, status: :unprocessable_content
+  end
+
+  def generate_transparent_png
+    source_photo = @clothing_item.source_photo_for_transparent_png
+    unless source_photo&.attached?
+      render json: { error: "Run AI clean image before making a transparent PNG." }, status: :unprocessable_content
+      return
+    end
+
+    TransparentPngAttachmentGenerator.call(
+      record: @clothing_item,
+      source_photo: source_photo
+    )
+
+    render json: payloads.clothing_item(@clothing_item.reload)
   rescue StandardError => error
     render json: { error: error.message }, status: :unprocessable_content
   end
@@ -84,11 +110,13 @@ class ClothingItemsController < ApplicationController
 
   def persist_clothing_item(clothing_item, status: :ok)
     temporary_files = ManagedTempfiles.new
+    ensure_clean_image_defaults(clothing_item)
     attach_photo_from_request(clothing_item, temporary_files)
+    prepare_requested_cleaned_photo_state(clothing_item)
 
     if clothing_item.errors.empty? && clothing_item.save
-      remove_all_item_photos(clothing_item) if remove_photo_requested?
-      render json: payloads.clothing_item(clothing_item), status: status
+      apply_post_save_photo_changes(clothing_item)
+      render json: payloads.clothing_item(clothing_item.reload), status: status
     else
       render_validation_errors(clothing_item)
     end
@@ -140,16 +168,8 @@ class ClothingItemsController < ApplicationController
       return
     end
 
-    if source_outfit_detection.cleaned_photo.attached?
-      PreparedImageSource.from_attachment(source_outfit_detection.cleaned_photo).attach_to(clothing_item.photo)
-      return
-    end
-
-    cropped_photo = ClothingItemPhotoCropper.call(
-      source_outfit_detection.outfit_upload.source_photo,
-      source_outfit_detection.usable_crop_box
-    )
-    PreparedImageSource.from_crop_result(cropped_photo, temporary_files: temporary_files).attach_to(clothing_item.photo)
+    prepared_source = source_outfit_detection.source_photo_for_clothing_item(temporary_files: temporary_files)
+    prepared_source&.attach_to(clothing_item.photo)
   end
 
   def normalized_crop_box
@@ -181,17 +201,83 @@ class ClothingItemsController < ApplicationController
 
   def reset_clean_image_state(clothing_item)
     clothing_item.cleaned_photo.purge if clothing_item.cleaned_photo.attached?
+    clothing_item.cleaned_working_photo.purge if clothing_item.cleaned_working_photo.attached?
     clothing_item.clean_image_status = :idle
     clothing_item.clean_image_error_message = nil
     clothing_item.clean_image_provider = nil
     clothing_item.clean_image_model = nil
     clothing_item.clean_image_generated_at = nil
+    clothing_item.clean_image_variant = nil
+    clothing_item.clean_image_cutout_fallback = false
+  end
+
+  def ensure_clean_image_defaults(clothing_item)
+    clothing_item[:clean_image_status] = ClothingItem.clean_image_statuses[:idle] if clothing_item[:clean_image_status].nil?
+    clothing_item[:clean_image_cutout_fallback] = false if clothing_item[:clean_image_cutout_fallback].nil?
   end
 
   def remove_all_item_photos(clothing_item)
     clothing_item.photo.purge if clothing_item.photo.attached?
     reset_clean_image_state(clothing_item)
     clothing_item.save! if clothing_item.persisted?
+  end
+
+  def prepare_requested_cleaned_photo_state(clothing_item)
+    return if requested_cleaned_photo.blank?
+
+    clothing_item.clean_image_status = :succeeded
+    clothing_item.clean_image_error_message = nil
+    clothing_item.clean_image_provider = nil
+    clothing_item.clean_image_model = nil
+    clothing_item.clean_image_generated_at = Time.current
+    clothing_item.clean_image_variant = requested_clean_image_variant.presence || "cleaned"
+    clothing_item[:clean_image_cutout_fallback] = requested_clean_image_cutout_fallback?
+  end
+
+  def apply_post_save_photo_changes(clothing_item)
+    if remove_photo_requested?
+      remove_all_item_photos(clothing_item)
+      return
+    end
+
+    if remove_cleaned_photo_requested?
+      remove_cleaned_photo(clothing_item)
+      return
+    end
+
+    attach_requested_cleaned_photos(clothing_item)
+  end
+
+  def attach_requested_cleaned_photos(clothing_item)
+    return if requested_cleaned_photo.blank?
+
+    clothing_item.cleaned_photo.purge if clothing_item.cleaned_photo.attached?
+    clothing_item.cleaned_working_photo.purge if clothing_item.cleaned_working_photo.attached?
+    attach_uploaded_image(clothing_item.cleaned_photo, requested_cleaned_photo)
+    attach_uploaded_image(clothing_item.cleaned_working_photo, requested_cleaned_working_photo) if requested_cleaned_working_photo.present?
+  end
+
+  def attach_uploaded_image(attachment, uploaded_file)
+    uploaded_file.tempfile.rewind if uploaded_file.respond_to?(:tempfile)
+    attachment.attach(
+      io: uploaded_file,
+      filename: uploaded_file.original_filename,
+      content_type: uploaded_file.content_type.presence || "image/png"
+    )
+  end
+
+  def remove_cleaned_photo(clothing_item)
+    clothing_item.cleaned_photo.purge if clothing_item.cleaned_photo.attached?
+    clothing_item.cleaned_working_photo.purge if clothing_item.cleaned_working_photo.attached?
+    clothing_item.update!(
+      clean_image_status: :idle,
+      clean_image_error_message: nil,
+      clean_image_provider: nil,
+      clean_image_model: nil,
+      clean_image_generated_at: nil,
+      clean_image_variant: nil,
+      clean_image_cutout_fallback: false
+    )
   end
 
   def source_outfit_detection
@@ -210,6 +296,26 @@ class ClothingItemsController < ApplicationController
 
   def remove_photo_requested?
     ActiveModel::Type::Boolean.new.cast(params.dig(:clothing_item, :remove_photo))
+  end
+
+  def remove_cleaned_photo_requested?
+    ActiveModel::Type::Boolean.new.cast(params.dig(:clothing_item, :remove_cleaned_photo))
+  end
+
+  def requested_clean_image_variant
+    params.dig(:clothing_item, :clean_image_variant).to_s.strip.presence
+  end
+
+  def requested_clean_image_cutout_fallback?
+    ActiveModel::Type::Boolean.new.cast(params.dig(:clothing_item, :clean_image_cutout_fallback))
+  end
+
+  def requested_cleaned_photo
+    params.dig(:clothing_item, :cleaned_photo)
+  end
+
+  def requested_cleaned_working_photo
+    params.dig(:clothing_item, :cleaned_working_photo)
   end
 
   def clothing_item_reference_photos

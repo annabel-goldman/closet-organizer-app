@@ -16,7 +16,7 @@ export function AiCleanImageButton({
   disabled = false,
   iconOnly = false,
   isLoading = false,
-  label = "AI clean PNG",
+  label = "AI clean image",
   onClick,
 }: AiCleanImageButtonProps) {
   const buttonLabel = label;

@@ -19,17 +19,20 @@ Rails.application.routes.draw do
     resources :users, except: %i[new edit]
     resources :clothing_items, except: %i[new edit] do
       post :generate_clean_image, on: :member
+      post :generate_transparent_png, on: :member
       post :generate_metadata_suggestions, on: :member
     end
     resources :outfits, except: %i[new edit]
     resources :outfit_uploads, only: %i[create show]
     resources :outfit_detections, only: [] do
       post :generate_clean_image, on: :member
+      post :generate_transparent_png, on: :member
       post :generate_metadata_suggestions, on: :member
     end
     resources :image_variants, only: [] do
       post :metadata_suggestions, on: :collection
       post :preview, on: :collection
+      post :transparent_preview, on: :collection
     end
   end
 

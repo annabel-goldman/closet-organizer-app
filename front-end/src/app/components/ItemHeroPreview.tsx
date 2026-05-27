@@ -55,6 +55,17 @@ export function ItemHeroPreview({
     ? "bg-gradient-to-br from-stone-100 via-neutral-50 to-stone-200"
     : "bg-stone-300";
 
+  function deferPreviewAction(action?: () => void) {
+    if (!action) {
+      return;
+    }
+
+    // Wait until the dialog close has committed before opening the hidden file input.
+    window.setTimeout(() => {
+      action();
+    }, 0);
+  }
+
   return (
     <>
       <motion.div
@@ -220,7 +231,7 @@ export function ItemHeroPreview({
                       className="border-white/40 bg-white/10 text-white hover:bg-white/18"
                       onClick={() => {
                         setIsImageExpanded(false);
-                        onPreviewEdit();
+                        deferPreviewAction(onPreviewEdit);
                       }}
                     >
                       <Upload className="w-4 h-4" />
@@ -237,7 +248,7 @@ export function ItemHeroPreview({
                     className="border-white/40 bg-white/10 text-white hover:bg-white/18"
                     onClick={() => {
                       setIsImageExpanded(false);
-                      onPreviewClear();
+                      deferPreviewAction(onPreviewClear);
                     }}
                     aria-label="Clear image"
                     title="Clear image"

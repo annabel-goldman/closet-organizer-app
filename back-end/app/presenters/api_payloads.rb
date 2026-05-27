@@ -8,12 +8,14 @@ class ApiPayloads
       only: %i[id username preferred_style email avatar_url admin created_at updated_at]
     )
 
-    payload["clothing_items_count"] = user.clothing_items.size
-
     if include_items
-      payload["clothing_items"] = user.clothing_items.order(:name).map do |item|
+      clothing_items = clothing_items_for_user_payload(user)
+      payload["clothing_items_count"] = clothing_items.length
+      payload["clothing_items"] = clothing_items.map do |item|
         clothing_item(item, include_user: false)
       end
+    else
+      payload["clothing_items_count"] = clothing_item_count_for_user(user)
     end
 
     payload
@@ -36,6 +38,8 @@ class ApiPayloads
         clean_image_provider
         clean_image_model
         clean_image_generated_at
+        clean_image_variant
+        clean_image_cutout_fallback
       ]
     )
 
@@ -44,6 +48,7 @@ class ApiPayloads
     payload["image_url"] = attachment_url(clothing_item.display_photo_attachment)
     payload["original_image_url"] = attachment_url(clothing_item.photo)
     payload["cleaned_image_url"] = attachment_url(clothing_item.cleaned_photo)
+    payload["cleaned_working_image_url"] = attachment_url(clothing_item.cleaned_working_photo)
     payload["user"] = user(clothing_item.user, include_items: false) if include_user
     payload
   end
@@ -83,6 +88,8 @@ class ApiPayloads
         clean_image_provider
         clean_image_model
         clean_image_generated_at
+        clean_image_variant
+        clean_image_cutout_fallback
         created_at
         updated_at
       ]
@@ -93,6 +100,7 @@ class ApiPayloads
     payload["refined_box"] = outfit_detection.refined_box
     payload["final_box"] = outfit_detection.final_box
     payload["cleaned_image_url"] = attachment_url(outfit_detection.cleaned_photo)
+    payload["cleaned_working_image_url"] = attachment_url(outfit_detection.cleaned_working_photo)
     payload
   end
 
@@ -130,5 +138,26 @@ class ApiPayloads
     return unless attachment.attached?
 
     url_helpers.url_for(attachment)
+  end
+
+  def clothing_items_for_user_payload(user)
+    association = user.association(:clothing_items)
+
+    if association.loaded?
+      association.target.sort_by { |item| item.name.to_s.downcase }
+    else
+      user
+        .clothing_items
+        .with_attached_photo
+        .with_attached_cleaned_photo
+        .with_attached_cleaned_working_photo
+        .order(:name)
+        .to_a
+    end
+  end
+
+  def clothing_item_count_for_user(user)
+    association = user.association(:clothing_items)
+    association.loaded? ? association.target.length : user.clothing_items.count
   end
 end

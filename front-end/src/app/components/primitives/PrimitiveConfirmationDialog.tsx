@@ -16,6 +16,9 @@ interface PrimitiveConfirmationDialogProps {
   children?: ReactNode;
   confirmLabel?: string;
   description: string;
+  confirmClassName?: string;
+  destructive?: boolean;
+  isConfirmDisabled?: boolean;
   onConfirm: () => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
@@ -27,6 +30,9 @@ function PrimitiveConfirmationDialog({
   children,
   confirmLabel = "Proceed",
   description,
+  confirmClassName = "",
+  destructive = false,
+  isConfirmDisabled = false,
   onConfirm,
   onOpenChange,
   open,
@@ -41,8 +47,17 @@ function PrimitiveConfirmationDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>{confirmLabel}</AlertDialogAction>
+          <AlertDialogCancel disabled={isConfirmDisabled}>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={isConfirmDisabled}
+            className={`${destructive ? "bg-destructive text-white hover:bg-destructive/90" : ""} ${confirmClassName}`.trim()}
+            onClick={(event) => {
+              event.preventDefault();
+              onConfirm();
+            }}
+          >
+            {confirmLabel}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

@@ -79,6 +79,35 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_match %r{/rails/active_storage/}, response_json["image_url"]
   end
 
+  test "can create a clothing item with original and staged cleaned photos" do
+    assert_difference("ClothingItem.count", 1) do
+      post clothing_items_url, params: {
+        clothing_item: {
+          name: "Preview-Clean Tee",
+          category: "shirt",
+          user_id: @user.id,
+          size: "medium",
+          tags: [ "white", "tee", "preview-clean" ],
+          photo: item_photo_upload_png(original_filename: "preview-clean-source.png"),
+          cleaned_photo: item_photo_upload_png(original_filename: "preview-clean-result.png")
+        }
+      }, headers: auth_headers(@user)
+    end
+
+    assert_response :created
+
+    created_item = ClothingItem.order(:created_at).last
+    assert_predicate created_item.photo, :attached?
+    assert_predicate created_item.cleaned_photo, :attached?
+    assert_equal "preview-clean-source.png", created_item.photo.blob.filename.to_s
+    assert_equal "preview-clean-result.png", created_item.cleaned_photo.blob.filename.to_s
+    assert_equal "succeeded", response_json["clean_image_status"]
+    assert_equal "cleaned", response_json["clean_image_variant"]
+    assert_equal false, response_json["clean_image_cutout_fallback"]
+    assert_match %r{/rails/active_storage/}, response_json["original_image_url"]
+    assert_equal response_json["cleaned_image_url"], response_json["image_url"]
+  end
+
   test "can create a clothing item with a cropped photo" do
     assert_difference("ClothingItem.count", 1) do
       post clothing_items_url, params: {
@@ -149,6 +178,60 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_equal "image/png", created_item.photo.blob.content_type
     assert_match(/crop\.png\z/, created_item.photo.blob.filename.to_s)
     assert_equal "shirt", created_item.category
+    assert_equal upload.id, created_item.source_outfit_upload_id
+    assert_equal detection.id, created_item.source_outfit_detection_id
+  end
+
+  test "can create a clothing item from a detection crop with a staged cleaned photo" do
+    upload = OutfitUpload.new(user: @user, status: :succeeded, provider: "openrouter")
+    upload.source_photo.attach(item_photo_upload_png)
+    upload.save!
+    detection = upload.outfit_detections.create!(
+      category: "shirt",
+      confidence: 0.91,
+      suggested_name: "Verified Shirt",
+      details: { dominant_color: "white" },
+      coarse_bbox_x: 0.12,
+      coarse_bbox_y: 0.1,
+      coarse_bbox_width: 0.42,
+      coarse_bbox_height: 0.48,
+      refined_bbox_x: 0.14,
+      refined_bbox_y: 0.12,
+      refined_bbox_width: 0.36,
+      refined_bbox_height: 0.42,
+      final_bbox_x: 0.15,
+      final_bbox_y: 0.13,
+      final_bbox_width: 0.34,
+      final_bbox_height: 0.4,
+      crop_status: :verified,
+      crop_attempts: 2,
+      position: 0
+    )
+
+    assert_difference("ClothingItem.count", 1) do
+      post clothing_items_url, params: {
+        clothing_item: {
+          name: "Verified Shirt",
+          user_id: @user.id,
+          size: "medium",
+          tags: [ "white", "shirt", "verified" ],
+          source_outfit_detection_id: detection.id,
+          cleaned_photo: item_photo_upload_png(original_filename: "verified-shirt-clean.png")
+        }
+      }, headers: auth_headers(@user)
+    end
+
+    assert_response :created
+
+    created_item = ClothingItem.order(:created_at).last
+    assert_predicate created_item.photo, :attached?
+    assert_predicate created_item.cleaned_photo, :attached?
+    assert_match(/crop\.png\z/, created_item.photo.blob.filename.to_s)
+    assert_equal "verified-shirt-clean.png", created_item.cleaned_photo.blob.filename.to_s
+    assert_equal "succeeded", response_json["clean_image_status"]
+    assert_equal "cleaned", response_json["clean_image_variant"]
+    assert_equal false, response_json["clean_image_cutout_fallback"]
+    assert_equal response_json["cleaned_image_url"], response_json["image_url"]
     assert_equal upload.id, created_item.source_outfit_upload_id
     assert_equal detection.id, created_item.source_outfit_detection_id
   end
@@ -262,8 +345,12 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
 
     @clothing_item.reload
     assert_predicate @clothing_item.cleaned_photo, :attached?
+    assert_predicate @clothing_item.cleaned_working_photo, :attached?
     assert_equal "succeeded", response_json["clean_image_status"]
+    assert_equal "cleaned", response_json["clean_image_variant"]
+    assert_equal false, response_json["clean_image_cutout_fallback"]
     assert_equal response_json["cleaned_image_url"], response_json["image_url"]
+    assert_not_nil response_json["cleaned_working_image_url"]
     assert_equal "Ivory Silk Blouse", captured.dig(:metadata_context, :name)
     assert_equal "Maison North", captured.dig(:metadata_context, :brand)
   end
@@ -293,6 +380,55 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_equal "Maison North", captured.dig(:metadata_context, :brand)
   end
 
+  test "can generate a transparent png for an existing cleaned clothing item" do
+    @clothing_item.photo.attach(item_photo_upload_png)
+    @clothing_item.cleaned_photo.attach(item_photo_upload_png(original_filename: "already-cleaned.png"))
+    @clothing_item.cleaned_working_photo.attach(item_photo_upload_png(original_filename: "already-cleaned-working.png"))
+    @clothing_item.update!(
+      clean_image_status: :succeeded,
+      clean_image_variant: "cleaned",
+      clean_image_generated_at: Time.current
+    )
+
+    with_transparent_generator_stub do
+      post generate_transparent_png_clothing_item_url(@clothing_item), headers: auth_headers(@user)
+    end
+
+    assert_response :success
+
+    @clothing_item.reload
+    assert_predicate @clothing_item.cleaned_photo, :attached?
+    assert_predicate @clothing_item.cleaned_working_photo, :attached?
+    assert_equal "succeeded", response_json["clean_image_status"]
+    assert_equal "transparent", response_json["clean_image_variant"]
+    assert_equal false, response_json["clean_image_cutout_fallback"]
+    assert_equal response_json["cleaned_image_url"], response_json["image_url"]
+  end
+
+  test "can save a staged cleaned photo without removing the original item photo" do
+    @clothing_item.photo.attach(item_photo_upload_png)
+
+    patch clothing_item_url(@clothing_item), params: {
+      clothing_item: {
+        name: @clothing_item.name,
+        user_id: @user.id,
+        size: @clothing_item.size,
+        date: @clothing_item.date&.to_date&.iso8601,
+        tags: @clothing_item.tags,
+        cleaned_photo: item_photo_upload_png
+      }
+    }, headers: auth_headers(@user)
+
+    assert_response :success
+
+    @clothing_item.reload
+    assert_predicate @clothing_item.photo, :attached?
+    assert_predicate @clothing_item.cleaned_photo, :attached?
+    assert_equal "succeeded", response_json["clean_image_status"]
+    assert_equal "cleaned", response_json["clean_image_variant"]
+    assert_equal response_json["cleaned_image_url"], response_json["image_url"]
+  end
+
   test "can delete a clothing item" do
     assert_difference("ClothingItem.count", -1) do
       delete clothing_item_url(@clothing_item), headers: auth_headers(@user), as: :json
@@ -307,8 +443,13 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     Rack::Test::UploadedFile.new(file_fixture("item-photo.svg"), "image/svg+xml")
   end
 
-  def item_photo_upload_png
-    Rack::Test::UploadedFile.new(file_fixture("item-photo.png"), "image/png")
+  def item_photo_upload_png(original_filename: nil)
+    Rack::Test::UploadedFile.new(
+      file_fixture("item-photo.png"),
+      "image/png",
+      false,
+      original_filename: original_filename
+    )
   end
 
   def with_metadata_suggester_stub(capture: nil)
@@ -355,6 +496,7 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
       {
         tempfile: tempfile,
         filename: "cleaned-photo.png",
+        filename_root: "cleaned-photo",
         content_type: "image/png",
         provider: "openrouter",
         model: "google/gemini-2.5-flash-image",
@@ -365,5 +507,31 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     yield
   ensure
     OpenrouterImageCleaner.singleton_class.send(:define_method, :call, original)
+  end
+
+  def with_transparent_generator_stub(image_variant: "transparent", cutout_fallback: false)
+    original = TransparentPngVariantGenerator.method(:call)
+    fixture_path = file_fixture("item-photo.png")
+
+    TransparentPngVariantGenerator.singleton_class.send(:define_method, :call) do |_source_photo, filename_root:, temporary_files: []|
+      tempfile = ManagedTempfiles.wrap(temporary_files).track(
+        Tempfile.new([ "#{filename_root}-transparent", ".png" ])
+      )
+      tempfile.binmode
+      tempfile.write(File.binread(fixture_path))
+      tempfile.rewind
+
+      {
+        tempfile: tempfile,
+        filename: "#{filename_root}-transparent.png",
+        content_type: "image/png",
+        image_variant: image_variant,
+        cutout_fallback: cutout_fallback
+      }
+    end
+
+    yield
+  ensure
+    TransparentPngVariantGenerator.singleton_class.send(:define_method, :call, original)
   end
 end

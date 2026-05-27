@@ -22,35 +22,40 @@ class CleanImageAttachmentGenerator
   def call
     record.update!(
       clean_image_status: :processing,
-      clean_image_error_message: nil
+      clean_image_error_message: nil,
+      clean_image_cutout_fallback: false
     )
 
-    generated = OpenrouterImageCleaner.call(
+    generated = CleanImageVariantSetGenerator.call(
       source_photo,
       prompt_context: prompt_context,
       reference_photos: reference_photos,
-      metadata_context: metadata_context
-    )
-    generated_tempfile = temporary_files.track(generated.fetch(:tempfile))
-    filename_root = File.basename(generated.fetch(:filename).to_s, ".*").presence || "item-clean"
-    processed = CleanImageBackgroundRemover.call(
-      generated_tempfile,
-      filename_root: filename_root,
+      metadata_context: metadata_context,
       temporary_files: temporary_files
     )
-    processed_tempfile = temporary_files.track(processed.fetch(:tempfile))
+    display = generated.fetch(:display)
+    working = generated.fetch(:working)
+    display_tempfile = temporary_files.track(display.fetch(:tempfile))
+    working_tempfile = temporary_files.track(working.fetch(:tempfile))
 
     record.cleaned_photo.attach(
-      io: processed_tempfile,
-      filename: processed.fetch(:filename),
-      content_type: processed.fetch(:content_type)
+      io: display_tempfile,
+      filename: display.fetch(:filename),
+      content_type: display.fetch(:content_type)
+    )
+    record.cleaned_working_photo.attach(
+      io: working_tempfile,
+      filename: working.fetch(:filename),
+      content_type: working.fetch(:content_type)
     )
     record.update!(
       clean_image_status: :succeeded,
       clean_image_error_message: nil,
       clean_image_provider: generated.fetch(:provider),
       clean_image_model: generated.fetch(:model),
-      clean_image_generated_at: Time.current
+      clean_image_generated_at: Time.current,
+      clean_image_variant: "cleaned",
+      clean_image_cutout_fallback: false
     )
   rescue StandardError => error
     record.update(

@@ -8,7 +8,6 @@ import {
 } from "../lib/closet";
 import { ClothingItemFormErrors, clothingItemFieldElementId } from "../lib/itemFormValidation";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
-import { AiActionLoadingNotice } from "./shared/AiActionLoadingNotice";
 import {
   PrimitiveSelect,
   PrimitiveSelectContent,
@@ -36,6 +35,7 @@ interface ItemMetadataFieldsProps {
   fieldIdPrefix?: string;
   isAutofilling?: boolean;
   onChange: (nextValues: ClothingItemFormValues) => void;
+  onFieldCommit?: (nextValues: ClothingItemFormValues) => void;
   onRequestAutofill?: () => void;
   showAutofillButton?: boolean;
   tagSuggestions?: string[];
@@ -92,6 +92,7 @@ function BrandAutocomplete({
   id,
   value,
   onChange,
+  onCommit,
   suggestions,
   placeholder,
   className,
@@ -100,6 +101,7 @@ function BrandAutocomplete({
   id: string;
   value: string;
   onChange: (val: string) => void;
+  onCommit?: (val: string) => void;
   suggestions: string[];
   placeholder?: string;
   className?: string;
@@ -123,7 +125,10 @@ function BrandAutocomplete({
             setOpen(e.target.value.length > 0);
           }}
           onFocus={() => {}}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onBlur={(event) => {
+            onCommit?.(event.target.value);
+            setTimeout(() => setOpen(false), 150);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Escape") setOpen(false);
           }}
@@ -144,6 +149,7 @@ function BrandAutocomplete({
                   value={brand}
                   onSelect={() => {
                     onChange(brand);
+                    onCommit?.(brand);
                     setOpen(false);
                   }}
                 >
@@ -165,6 +171,7 @@ export function ItemMetadataFields({
   fieldIdPrefix = "",
   isAutofilling = false,
   onChange,
+  onFieldCommit,
   onRequestAutofill,
   showAutofillButton = true,
   tagSuggestions = [],
@@ -182,28 +189,43 @@ export function ItemMetadataFields({
     return `${fieldIdPrefix}${clothingItemFieldElementId(field)}`;
   }
 
+  function nextFieldValues<K extends keyof ClothingItemFormValues>(
+    fieldName: K,
+    value: ClothingItemFormValues[K],
+  ) {
+    return {
+      ...values,
+      [fieldName]: value,
+    };
+  }
+
   function updateField<K extends keyof ClothingItemFormValues>(
     fieldName: K,
     value: ClothingItemFormValues[K],
   ) {
-    onChange({
-      ...values,
-      [fieldName]: value,
-    });
+    const nextValues = nextFieldValues(fieldName, value);
+
+    onChange(nextValues);
+    return nextValues;
   }
 
   function updateTags(nextTags: string[]) {
-    updateField("tags", formatTagInput(nextTags));
+    return updateField("tags", formatTagInput(nextTags));
+  }
+
+  function commitValues(nextValues: ClothingItemFormValues = values) {
+    onFieldCommit?.(nextValues);
   }
 
   function handleAddTag() {
     const baseTags = editingTag ? tags.filter((tag) => tag !== editingTag) : tags;
     const nextTags = parseTagInput([...baseTags, draftTag].filter(Boolean).join(","));
 
-    updateTags(nextTags);
+    const nextValues = updateTags(nextTags);
     setDraftTag("");
     setEditingTag(null);
     setIsAddingTag(false);
+    commitValues(nextValues);
   }
 
   function closeTagEditor() {
@@ -226,7 +248,8 @@ export function ItemMetadataFields({
   }
 
   function removeTag(tagToRemove: string) {
-    updateTags(tags.filter((tag) => tag !== tagToRemove));
+    const nextValues = updateTags(tags.filter((tag) => tag !== tagToRemove));
+    commitValues(nextValues);
   }
 
   function beginTagEdit(tag: string) {
@@ -240,13 +263,14 @@ export function ItemMetadataFields({
       return;
     }
 
-    updateTags([...tags, tag.trim()]);
+    const nextValues = updateTags([...tags, tag.trim()]);
+    commitValues(nextValues);
   }
 
   return (
     <>
       {onRequestAutofill && showAutofillButton ? (
-        <div className="flex justify-end sm:col-span-2">
+        <div className="flex justify-end sm:col-span-full">
           <AiMetadataAutofillButton
             className="h-9 w-9"
             disabled={autofillDisabled}
@@ -257,34 +281,14 @@ export function ItemMetadataFields({
         </div>
       ) : null}
 
-      {isAutofilling ? (
-        <AiActionLoadingNotice
-          className="sm:col-span-2"
-          message="Autofilling type, name, brand, and tags..."
-        />
-      ) : null}
-
-      <label className="space-y-2 sm:col-span-2" htmlFor={fieldId("category")}>
-        <PrimitiveText as="span" variant="label">
-          Type
-        </PrimitiveText>
-        <Input
-          id={fieldId("category")}
-          value={values.category}
-          onChange={(event) => updateField("category", event.target.value)}
-          placeholder="e.g. sweater, jacket, dress"
-          className="h-auto px-4 py-3"
-          maxLength={MAX_CLOTHING_ITEM_CATEGORY}
-        />
-      </label>
-
-      <label className="space-y-2 sm:col-span-2" htmlFor={fieldId("name")}>
+      <label className="space-y-2 sm:col-span-full" htmlFor={fieldId("name")}>
         <PrimitiveText as="span" variant="label">
           Name
         </PrimitiveText>
         <Input
           id={fieldId("name")}
           value={values.name}
+          onBlur={(event) => commitValues(nextFieldValues("name", event.target.value))}
           onChange={(event) => updateField("name", event.target.value)}
           aria-invalid={Boolean(errors.name)}
           aria-describedby={errors.name ? `${fieldId("name")}-error` : undefined}
@@ -300,11 +304,32 @@ export function ItemMetadataFields({
         ) : null}
       </label>
 
+      <label className="space-y-2 sm:col-span-full" htmlFor={fieldId("category")}>
+        <PrimitiveText as="span" variant="label">
+          Type
+        </PrimitiveText>
+        <Input
+          id={fieldId("category")}
+          value={values.category}
+          onBlur={(event) => commitValues(nextFieldValues("category", event.target.value))}
+          onChange={(event) => updateField("category", event.target.value)}
+          placeholder="e.g. sweater, jacket, dress"
+          className="h-auto px-4 py-3"
+          maxLength={MAX_CLOTHING_ITEM_CATEGORY}
+        />
+      </label>
+
       <div className="space-y-2">
         <PrimitiveText as="span" variant="label" id={`${fieldId("size")}-label`}>
           Size
         </PrimitiveText>
-        <PrimitiveSelect value={values.size} onValueChange={(value) => updateField("size", value)}>
+        <PrimitiveSelect
+          value={values.size}
+          onValueChange={(value) => {
+            const nextValues = updateField("size", value);
+            commitValues(nextValues);
+          }}
+        >
           <PrimitiveSelectTrigger
             id={fieldId("size")}
             aria-labelledby={`${fieldId("size")}-label`}
@@ -330,6 +355,7 @@ export function ItemMetadataFields({
           id={fieldId("date")}
           type="date"
           value={values.date}
+          onBlur={(event) => commitValues(nextFieldValues("date", event.target.value))}
           onChange={(event) => updateField("date", event.target.value)}
           aria-invalid={Boolean(errors.date)}
           aria-describedby={errors.date ? `${fieldId("date")}-error` : undefined}
@@ -343,16 +369,15 @@ export function ItemMetadataFields({
         ) : null}
       </label>
 
-      <label className="space-y-2 sm:col-span-2" htmlFor={fieldId("brand")}>
-        <LabelWithTooltip
-          htmlFor={fieldId("brand")}
-          label="Brand"
-          tooltip="Brands power the Brands filter on your closet. Start typing to reuse a brand you have already saved."
-        />
+      <label className="space-y-2" htmlFor={fieldId("brand")}>
+        <PrimitiveText as="span" variant="label">
+          Brand
+        </PrimitiveText>
         <BrandAutocomplete
           id={fieldId("brand")}
           value={values.brand ?? ""}
           onChange={(val) => updateField("brand", val)}
+          onCommit={(val) => commitValues(nextFieldValues("brand", val))}
           suggestions={brandSuggestions}
           placeholder="Optional, e.g. COS, Nike"
           className="h-auto px-4 py-3"
@@ -360,7 +385,7 @@ export function ItemMetadataFields({
         />
       </label>
 
-      <div className="space-y-2 sm:col-span-2">
+      <div className="space-y-2 sm:col-span-full">
         <LabelWithTooltip
           htmlFor={fieldId("tags")}
           label="Tags"

@@ -26,18 +26,22 @@ interface CreateItemImageModeProps {
   autofillingDetectionId: number | null;
   brandSuggestions?: string[];
   cleaningDetectionIds: number[];
+  detectionCleanImageVariant: (detection: OutfitDetection) => "cleaned" | "transparent" | null;
   detectionCleanErrors: Record<number, string>;
   detections: OutfitDetection[];
   errorMessage: string;
+  getDetectionCleanedImageUrl: (detection: OutfitDetection) => string | null;
   getDetectionDraft: (detection: OutfitDetection) => ClothingItemFormValues;
   hasDetectionDraft: (detectionId: number) => boolean;
   isPreparingDetectedMetadata: boolean;
   isCreating: boolean;
   isDetecting: boolean;
   inputRef: RefObject<HTMLInputElement | null>;
+  makingDetectionTransparentIds: number[];
   onBack: () => void;
   onClearImageSelection: () => void;
   onCleanDetectionImage: (detection: OutfitDetection) => void;
+  onMakeDetectionTransparent: (detection: OutfitDetection) => void;
   onDetectItems: () => void;
   onDraftChange: (detectionId: number, nextValues: ClothingItemFormValues) => void;
   onFileChange: (file: File | null) => void;
@@ -57,18 +61,22 @@ export function CreateItemImageMode({
   autofillingDetectionId,
   brandSuggestions = [],
   cleaningDetectionIds,
+  detectionCleanImageVariant,
   detectionCleanErrors,
   detections,
   errorMessage,
+  getDetectionCleanedImageUrl,
   getDetectionDraft,
   hasDetectionDraft,
   isPreparingDetectedMetadata,
   isCreating,
   isDetecting,
   inputRef,
+  makingDetectionTransparentIds,
   onBack,
   onClearImageSelection,
   onCleanDetectionImage,
+  onMakeDetectionTransparent,
   onDetectItems,
   onDraftChange,
   onFileChange,
@@ -144,14 +152,26 @@ export function CreateItemImageMode({
   const focusedCleanError = detailsDetection
     ? detectionCleanErrors[detailsDetection.id]
     : undefined;
+  const previewDetectionCleanedImageUrl = previewDetection
+    ? getDetectionCleanedImageUrl(previewDetection)
+    : null;
+  const previewDetectionCleanVariant = previewDetection
+    ? detectionCleanImageVariant(previewDetection)
+    : null;
+  const detailsDetectionCleanedImageUrl = detailsDetection
+    ? getDetectionCleanedImageUrl(detailsDetection)
+    : null;
   const focusedIsCleaning = detailsDetection
     ? cleaningDetectionIds.includes(detailsDetection.id)
+    : false;
+  const focusedIsMakingTransparent = detailsDetection
+    ? makingDetectionTransparentIds.includes(detailsDetection.id)
     : false;
   const focusedIsAutofilling = detailsDetection
     ? autofillingDetectionId === detailsDetection.id
     : false;
   const previewMedia = useMemo(() => {
-    if (!previewDetection || !sourceImageUrl || !previewDetectionBox || previewDetection.cleaned_image_url) {
+    if (!previewDetection || !sourceImageUrl || !previewDetectionBox || previewDetectionCleanedImageUrl) {
       return undefined;
     }
 
@@ -162,9 +182,9 @@ export function CreateItemImageMode({
         sourceImageUrl={sourceImageUrl}
       />
     );
-  }, [focusedSuggestedName, previewDetection, previewDetectionBox, sourceImageUrl]);
+  }, [focusedSuggestedName, previewDetection, previewDetectionBox, previewDetectionCleanedImageUrl, sourceImageUrl]);
   const expandedPreview = useMemo(() => {
-    if (!previewDetection || !sourceImageUrl || !previewDetectionBox || previewDetection.cleaned_image_url) {
+    if (!previewDetection || !sourceImageUrl || !previewDetectionBox || previewDetectionCleanedImageUrl) {
       return undefined;
     }
 
@@ -175,7 +195,7 @@ export function CreateItemImageMode({
         sourceImageUrl={sourceImageUrl}
       />
     );
-  }, [focusedSuggestedName, previewDetection, previewDetectionBox, sourceImageUrl]);
+  }, [focusedSuggestedName, previewDetection, previewDetectionBox, previewDetectionCleanedImageUrl, sourceImageUrl]);
   const sourcePreviewTitle = selectedFileName ?? "Upload an image";
   const sourcePreviewPrimaryDetail = isDetecting
     ? "Detecting items"
@@ -211,7 +231,7 @@ export function CreateItemImageMode({
 
       <UploadWorkspace
         expandedPreview={expandedPreview}
-        imageUrl={previewDetection?.cleaned_image_url ?? (isSourceFocused ? sourceImageUrl : null)}
+        imageUrl={previewDetectionCleanedImageUrl ?? (isSourceFocused ? sourceImageUrl : null)}
         isPreviewProcessing={focusedIsCleaning}
         onPreviewClick={() => inputRef.current?.click()}
         onPreviewClear={selectedFileName ? onClearImageSelection : undefined}
@@ -228,14 +248,24 @@ export function CreateItemImageMode({
         previewMedia={previewDetection ? previewMedia : undefined}
         previewTopAction={
           previewDetection ? (
-            <AiCleanImageButton
-              className="size-11 border border-white/75 bg-white/70 p-0 shadow-sm backdrop-blur-sm hover:bg-white/85"
-              disabled={!previewDetection.cleaned_image_url && !previewDetectionBox}
-              iconOnly
-              isLoading={focusedIsCleaning}
-              label="AI clean PNG"
-              onClick={() => onCleanDetectionImage(previewDetection)}
-            />
+            <div className="flex flex-col gap-2">
+              <AiCleanImageButton
+                className="size-11 border border-white/75 bg-white/70 p-0 shadow-sm backdrop-blur-sm hover:bg-white/85"
+                disabled={focusedIsMakingTransparent || (!previewDetectionCleanedImageUrl && !previewDetectionBox)}
+                iconOnly
+                isLoading={focusedIsCleaning}
+                label="AI clean image"
+                onClick={() => onCleanDetectionImage(previewDetection)}
+              />
+              <AiCleanImageButton
+                className="size-11 border border-white/75 bg-white/70 p-0 shadow-sm backdrop-blur-sm hover:bg-white/85"
+                disabled={focusedIsCleaning || previewDetectionCleanVariant !== "cleaned"}
+                iconOnly
+                isLoading={focusedIsMakingTransparent}
+                label="Make transparent PNG"
+                onClick={() => onMakeDetectionTransparent(previewDetection)}
+              />
+            </div>
           ) : undefined
         }
         previewLabel={previewDetection ? "Detected Item" : "Original Image"}
@@ -357,7 +387,7 @@ export function CreateItemImageMode({
             action={
               <AiMetadataAutofillButton
                 className="mt-0.5 h-9 w-9 shrink-0 self-start"
-                disabled={!detailsPreviewBox && !detailsDetection.cleaned_image_url}
+                disabled={!detailsPreviewBox && !detailsDetectionCleanedImageUrl}
                 isLoading={focusedIsAutofilling}
                 label="AI autofill type, name, brand, and tags"
                 onClick={() => onRequestDetectionAutofill(detailsDetection)}
@@ -378,7 +408,7 @@ export function CreateItemImageMode({
 
             <div className="grid gap-5 sm:grid-cols-2">
               <ItemMetadataFields
-                autofillDisabled={!detailsPreviewBox && !detailsDetection.cleaned_image_url}
+                autofillDisabled={!detailsPreviewBox && !detailsDetectionCleanedImageUrl}
                 brandSuggestions={brandSuggestions}
                 fieldIdPrefix={`detection-${detailsDetection.id}-`}
                 isAutofilling={focusedIsAutofilling}

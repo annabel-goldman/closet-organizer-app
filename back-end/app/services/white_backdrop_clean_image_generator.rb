@@ -1,9 +1,8 @@
 require "mini_magick"
 require "tempfile"
 
-class CleanImageBackgroundRemover
-  DEFAULT_BACKGROUND_FUZZ = "12%".freeze
-  DEFAULT_SHARPEN_AMOUNT = "0x0.8".freeze
+class WhiteBackdropCleanImageGenerator
+  DEFAULT_BACKGROUND_FUZZ = CleanImageBackgroundRemover::DEFAULT_BACKGROUND_FUZZ
 
   def self.call(image_source, filename_root:, temporary_files: [])
     new(image_source, filename_root: filename_root, temporary_files: temporary_files).call
@@ -17,25 +16,19 @@ class CleanImageBackgroundRemover
 
   def call
     source_file = prepared_source_file
-    output_file = temporary_files.track(Tempfile.new([ "#{filename_root}-no-background", ".png" ]))
+    output_file = temporary_files.track(Tempfile.new([ "#{filename_root}-white-background", ".png" ]))
     output_file.binmode
     sampled_background_color = dominant_corner_background_color(source_file.path)
 
     MiniMagick::Tool.new(image_magick_command_name) do |command|
       command << source_file.path
-      # Flood-filling from the dominant corner backdrop color removes only
-      # edge-connected pixels that match the flat studio background, which
-      # preserves similar colors that belong to the item itself.
-      command.alpha "set"
       command.bordercolor sampled_background_color
       command.border "1x1"
       command.fuzz configured_background_fuzz
-      command.fill "none"
+      command.fill "white"
       command.draw "color 0,0 floodfill"
       command.shave "1x1"
-      # A light sharpen pass restores some edge definition after the AI clean
-      # image generation and transparent-background conversion steps.
-      command.sharpen configured_sharpen_amount
+      command.alpha "off"
       command << output_file.path
     end
     output_file.rewind
@@ -53,10 +46,6 @@ class CleanImageBackgroundRemover
 
   def configured_background_fuzz
     ENV.fetch("AI_CLEAN_BACKGROUND_FUZZ", DEFAULT_BACKGROUND_FUZZ)
-  end
-
-  def configured_sharpen_amount
-    ENV.fetch("AI_CLEAN_SHARPEN", DEFAULT_SHARPEN_AMOUNT)
   end
 
   def image_magick_command_name

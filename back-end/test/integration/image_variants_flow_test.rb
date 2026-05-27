@@ -7,29 +7,54 @@ class ImageVariantsFlowTest < ActionDispatch::IntegrationTest
 
   test "can create a cleaned preview image from an uploaded file" do
     captured = {}
+    transparent_calls = []
 
     with_image_cleaner_stub(capture: captured) do
-      post preview_image_variants_url, params: {
-        image_variant: {
-          source_photo: item_photo_upload,
-          original_source_photo: item_photo_upload
-        },
-        ai_context: {
-          category: "shirt",
-          name: "Striped Shirt",
-          brand: "Acme",
-          size: "medium",
-          tags: [ "striped", "cotton", "shirt" ]
-        }
-      }, headers: auth_headers(@user)
+      with_transparent_generator_stub(calls: transparent_calls) do
+        post preview_image_variants_url, params: {
+          image_variant: {
+            source_photo: item_photo_upload,
+            original_source_photo: item_photo_upload
+          },
+          ai_context: {
+            category: "shirt",
+            name: "Striped Shirt",
+            brand: "Acme",
+            size: "medium",
+            tags: [ "striped", "cotton", "shirt" ]
+          }
+        }, headers: auth_headers(@user)
+      end
     end
 
     assert_response :success
     assert_equal "image/png", response_json["content_type"]
     assert_match(/\Adata:image\/png;base64,/, response_json["data_url"])
+    assert_match(/\Adata:image\/png;base64,/, response_json["working_data_url"])
+    assert_equal "cleaned", response_json["clean_image_variant"]
+    assert_equal false, response_json["clean_image_cutout_fallback"]
+    assert_equal 0, transparent_calls.size
     assert_equal "Striped Shirt", captured.dig(:metadata_context, :name)
     assert_equal "Acme", captured.dig(:metadata_context, :brand)
     assert_equal [ "striped", "cotton", "shirt" ], captured.dig(:metadata_context, :tags)
+  end
+
+  test "can create a transparent preview image from a cleaned upload" do
+    transparent_calls = []
+
+    with_transparent_generator_stub(calls: transparent_calls) do
+      post transparent_preview_image_variants_url, params: {
+        image_variant: {
+          source_photo: item_photo_upload
+        }
+      }, headers: auth_headers(@user)
+    end
+
+    assert_response :success
+    assert_equal "transparent", response_json["clean_image_variant"]
+    assert_equal false, response_json["clean_image_cutout_fallback"]
+    assert_equal 1, transparent_calls.size
+    assert_equal "item-photo", transparent_calls.first[:filename_root]
   end
 
   test "can create metadata suggestions from an uploaded file" do
@@ -87,6 +112,7 @@ class ImageVariantsFlowTest < ActionDispatch::IntegrationTest
       {
         tempfile: tempfile,
         filename: "preview-photo.png",
+        filename_root: "preview-photo",
         content_type: "image/png",
         provider: "openrouter",
         model: "google/gemini-2.5-flash-image",
@@ -122,5 +148,36 @@ class ImageVariantsFlowTest < ActionDispatch::IntegrationTest
     yield
   ensure
     OpenrouterMetadataSuggester.singleton_class.send(:define_method, :call, original)
+  end
+
+  def with_transparent_generator_stub(calls: [], image_variant: "transparent", cutout_fallback: false)
+    original = TransparentPngVariantGenerator.method(:call)
+    fixture_path = file_fixture("item-photo.png")
+
+    TransparentPngVariantGenerator.singleton_class.send(:define_method, :call) do |image_source, filename_root:, temporary_files: []|
+      calls << {
+        filename_root: filename_root,
+        image_source_class: image_source.class.name
+      }
+
+      tempfile = ManagedTempfiles.wrap(temporary_files).track(
+        Tempfile.new([ "#{filename_root}-transparent", ".png" ])
+      )
+      tempfile.binmode
+      tempfile.write(File.binread(fixture_path))
+      tempfile.rewind
+
+      {
+        tempfile: tempfile,
+        filename: "#{filename_root}-transparent.png",
+        content_type: "image/png",
+        image_variant: image_variant,
+        cutout_fallback: cutout_fallback
+      }
+    end
+
+    yield
+  ensure
+    TransparentPngVariantGenerator.singleton_class.send(:define_method, :call, original)
   end
 end

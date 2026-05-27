@@ -1,6 +1,7 @@
 import { LoaderCircle, Sparkles } from "lucide-react";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import { cn } from "./ui/utils";
 
 interface AiMetadataAutofillButtonProps {
   className?: string;
@@ -19,7 +20,6 @@ export function AiMetadataAutofillButton({
 }: AiMetadataAutofillButtonProps) {
   const buttonLabel = isLoading ? "Autofilling details..." : label;
   const isDisabled = disabled || isLoading;
-  const Icon = isLoading ? LoaderCircle : Sparkles;
 
   return (
     <Tooltip>
@@ -30,11 +30,19 @@ export function AiMetadataAutofillButton({
             onClick={onClick}
             disabled={isDisabled}
             variant="outline"
-            className={className}
+            className={cn("relative overflow-hidden", className)}
             aria-busy={isLoading}
             aria-label={buttonLabel}
           >
-            <Icon className={`h-4 w-4 shrink-0 ${isLoading ? "animate-spin" : ""}`} />
+            <Sparkles
+              className={cn(
+                "h-4 w-4 shrink-0 transition-opacity",
+                isLoading && "opacity-30",
+              )}
+            />
+            {isLoading ? (
+              <LoaderCircle className="absolute h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : null}
           </PrimitiveButton>
         </span>
       </TooltipTrigger>

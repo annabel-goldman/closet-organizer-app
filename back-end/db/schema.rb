@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_21_165312) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_25_214500) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -42,11 +42,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_21_165312) do
   create_table "clothing_items", force: :cascade do |t|
     t.string "brand", limit: 80
     t.string "category", limit: 60
+    t.boolean "clean_image_cutout_fallback", default: false
     t.text "clean_image_error_message"
     t.datetime "clean_image_generated_at"
     t.string "clean_image_model"
     t.string "clean_image_provider"
     t.integer "clean_image_status", default: 0, null: false
+    t.string "clean_image_variant"
     t.datetime "created_at", null: false
     t.datetime "date"
     t.string "name", limit: 120, null: false
@@ -67,11 +69,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_21_165312) do
     t.float "bbox_x"
     t.float "bbox_y"
     t.string "category", null: false
+    t.boolean "clean_image_cutout_fallback", default: false
     t.text "clean_image_error_message"
     t.datetime "clean_image_generated_at"
     t.string "clean_image_model"
     t.string "clean_image_provider"
     t.integer "clean_image_status", default: 0, null: false
+    t.string "clean_image_variant"
     t.float "coarse_bbox_height"
     t.float "coarse_bbox_width"
     t.float "coarse_bbox_x"

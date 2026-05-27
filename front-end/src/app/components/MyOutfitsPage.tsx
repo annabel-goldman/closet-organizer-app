@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
+import { PrimitiveConfirmationDialog } from "./primitives/PrimitiveConfirmationDialog";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { MAX_OUTFIT_NAME, MAX_OUTFIT_NOTES } from "../lib/inputLengthPolicy";
 
@@ -66,6 +67,8 @@ export function MyOutfitsPage({
   const [editorLayouts, setEditorLayouts] = useState<Record<number, OutfitCollageLayout>>({});
   const [selectedCollageItemId, setSelectedCollageItemId] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [outfitPendingDelete, setOutfitPendingDelete] = useState<Outfit | null>(null);
 
   const sortedItems = useMemo(
     () => [...user.clothing_items].sort((left, right) => left.name.localeCompare(right.name)),
@@ -177,12 +180,17 @@ export function MyOutfitsPage({
   }
 
   async function handleDelete(outfitId: number) {
+    setIsDeleting(true);
+
     try {
       await destroyOutfit(outfitId);
       setOutfits((current) => current.filter((outfit) => outfit.id !== outfitId));
       showFlash("success", "Outfit deleted.");
+      setOutfitPendingDelete(null);
     } catch (error) {
       showFlash("error", error instanceof Error ? error.message : "Unable to delete outfit.");
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -296,7 +304,7 @@ export function MyOutfitsPage({
                         <Pencil className="h-4 w-4" />
                       </PrimitiveButton>
                       <PrimitiveButton
-                        onClick={() => void handleDelete(outfit.id)}
+                        onClick={() => setOutfitPendingDelete(outfit)}
                         variant="outline"
                         size="icon"
                         className="hover:border-destructive"
@@ -336,6 +344,25 @@ export function MyOutfitsPage({
           {flash.message}
         </motion.div>
       ) : null}
+
+      <PrimitiveConfirmationDialog
+        confirmLabel={isDeleting ? "Deleting..." : "Delete outfit"}
+        description={
+          outfitPendingDelete
+            ? `This removes ${outfitPendingDelete.name} from My Outfits and cannot be undone.`
+            : "This removes this outfit from My Outfits and cannot be undone."
+        }
+        destructive
+        isConfirmDisabled={isDeleting}
+        onConfirm={() => outfitPendingDelete && void handleDelete(outfitPendingDelete.id)}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) {
+            setOutfitPendingDelete(null);
+          }
+        }}
+        open={Boolean(outfitPendingDelete)}
+        title={outfitPendingDelete ? `Delete ${outfitPendingDelete.name}?` : "Delete outfit?"}
+      />
 
       <Dialog open={Boolean(editingOutfitId)} onOpenChange={(open) => !open && resetForm()}>
         <DialogContent className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] rounded-none border-border p-0 sm:w-[calc(100vw-3rem)] sm:max-w-[calc(100vw-3rem)] xl:max-w-[120rem] 2xl:max-w-[128rem]">

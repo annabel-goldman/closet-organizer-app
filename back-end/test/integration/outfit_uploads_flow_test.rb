@@ -458,6 +458,7 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
       {
         tempfile: tempfile,
         filename: "cleaned-photo.png",
+        filename_root: "cleaned-photo",
         content_type: "image/png",
         provider: "openrouter",
         model: "google/gemini-2.5-flash-image",

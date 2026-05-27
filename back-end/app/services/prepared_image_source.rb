@@ -33,6 +33,10 @@ class PreparedImageSource
     filename
   end
 
+  def attached?
+    true
+  end
+
   attr_reader :content_type
 
   private

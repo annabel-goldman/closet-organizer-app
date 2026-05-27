@@ -49,11 +49,14 @@ export interface ClothingItem {
   image_url?: string | null;
   original_image_url?: string | null;
   cleaned_image_url?: string | null;
+  cleaned_working_image_url?: string | null;
   clean_image_status?: "idle" | "processing" | "succeeded" | "failed";
   clean_image_error_message?: string | null;
   clean_image_provider?: string | null;
   clean_image_model?: string | null;
   clean_image_generated_at?: string | null;
+  clean_image_variant?: "cleaned" | "transparent" | null;
+  clean_image_cutout_fallback?: boolean;
   outfit_item_id?: number;
   layer_order?: number;
   collage_layout?: OutfitCollageLayout | null;
@@ -100,11 +103,14 @@ export interface OutfitDetection {
   refined_box?: OutfitDetectionBoundingBox | null;
   final_box?: OutfitDetectionBoundingBox | null;
   cleaned_image_url?: string | null;
+  cleaned_working_image_url?: string | null;
   clean_image_status?: "idle" | "processing" | "succeeded" | "failed";
   clean_image_error_message?: string | null;
   clean_image_provider?: string | null;
   clean_image_model?: string | null;
   clean_image_generated_at?: string | null;
+  clean_image_variant?: "cleaned" | "transparent" | null;
+  clean_image_cutout_fallback?: boolean;
   position: number;
   created_at?: string;
   updated_at?: string;
@@ -187,9 +193,14 @@ export interface ClothingItemFormValues {
 }
 
 export interface ClothingItemPhotoOptions {
+  cleanedPhoto?: File | null;
+  cleanedWorkingPhoto?: File | null;
+  cleanImageCutoutFallback?: boolean;
+  cleanImageVariant?: "cleaned" | "transparent" | null;
   photo?: File | null;
   crop?: OutfitDetectionBoundingBox | null;
   sourceOutfitDetectionId?: number | null;
+  removeCleanedPhoto?: boolean;
   removePhoto?: boolean;
 }
 
@@ -197,10 +208,15 @@ export interface OutfitUploadPhotoOptions {
   photo: File;
 }
 
-export interface TemporaryCleanImageResult {
+export interface TemporaryImageVariantResult {
   content_type: string;
   data_url: string;
   filename: string;
+  working_content_type?: string;
+  working_data_url?: string;
+  working_filename?: string;
+  clean_image_variant: "cleaned" | "transparent";
+  clean_image_cutout_fallback: boolean;
 }
 
 export interface ClothingItemMetadataSuggestion {
@@ -613,20 +629,32 @@ export async function generateClothingItemCleanImage(
   id: number,
   metadata?: ClothingItemFormValues,
 ) {
-  return requestJson<ClothingItem>(`${API_BASE_URL}/clothing_items/${id}/generate_clean_image`, {
+  return normalizeClothingItemPayload(await requestJson<ClothingItem>(`${API_BASE_URL}/clothing_items/${id}/generate_clean_image`, {
     method: "POST",
     body: buildAiContextFormData(metadata),
-  });
+  }));
 }
 
 export async function generateOutfitDetectionCleanImage(
   id: number,
   metadata?: ClothingItemFormValues,
 ) {
-  return requestJson<OutfitDetection>(`${API_BASE_URL}/outfit_detections/${id}/generate_clean_image`, {
+  return normalizeOutfitDetectionPayload(await requestJson<OutfitDetection>(`${API_BASE_URL}/outfit_detections/${id}/generate_clean_image`, {
     method: "POST",
     body: buildAiContextFormData(metadata),
-  });
+  }));
+}
+
+export async function generateClothingItemTransparentPng(id: number) {
+  return normalizeClothingItemPayload(await requestJson<ClothingItem>(`${API_BASE_URL}/clothing_items/${id}/generate_transparent_png`, {
+    method: "POST",
+  }));
+}
+
+export async function generateOutfitDetectionTransparentPng(id: number) {
+  return normalizeOutfitDetectionPayload(await requestJson<OutfitDetection>(`${API_BASE_URL}/outfit_detections/${id}/generate_transparent_png`, {
+    method: "POST",
+  }));
 }
 
 export async function generateClothingItemMetadataSuggestions(
@@ -695,7 +723,17 @@ export async function previewCleanImage(photo: File, options: AiImageOptions = {
     formData.append("image_variant[original_source_photo]", options.originalSourcePhoto);
   }
 
-  return requestJson<TemporaryCleanImageResult>(`${API_BASE_URL}/image_variants/preview`, {
+  return requestJson<TemporaryImageVariantResult>(`${API_BASE_URL}/image_variants/preview`, {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export async function previewTransparentPng(photo: File) {
+  const formData = new FormData();
+  formData.append("image_variant[source_photo]", photo);
+
+  return requestJson<TemporaryImageVariantResult>(`${API_BASE_URL}/image_variants/transparent_preview`, {
     method: "POST",
     body: formData,
   });
@@ -703,13 +741,111 @@ export async function previewCleanImage(photo: File, options: AiImageOptions = {
 
 export async function createCleanPreviewFile(photo: File, options: AiImageOptions = {}) {
   const preview = await previewCleanImage(photo, options);
-  return fileFromDataUrl(preview.data_url, preview.filename, preview.content_type);
+  return {
+    cleanImageCutoutFallback: preview.clean_image_cutout_fallback,
+    cleanImageVariant: preview.clean_image_variant,
+    file: await fileFromDataUrl(preview.data_url, preview.filename, preview.content_type),
+    workingFile:
+      preview.working_data_url && preview.working_filename && preview.working_content_type
+        ? await fileFromDataUrl(
+            preview.working_data_url,
+            preview.working_filename,
+            preview.working_content_type,
+          )
+        : null,
+  };
+}
+
+export async function createTransparentPreviewFile(photo: File) {
+  const preview = await previewTransparentPng(photo);
+  return {
+    cleanImageCutoutFallback: preview.clean_image_cutout_fallback,
+    cleanImageVariant: preview.clean_image_variant,
+    file: await fileFromDataUrl(preview.data_url, preview.filename, preview.content_type),
+  };
+}
+
+export async function fetchImageFileFromUrl(imageUrl: string, filename?: string) {
+  const response = await fetch(imageUrl, { credentials: "include" });
+  if (!response.ok) {
+    throw new Error("Unable to load the source image for this AI action.");
+  }
+
+  const blob = await response.blob();
+  return new File([blob], filename ?? inferFilenameFromUrl(imageUrl), {
+    type: blob.type || "image/png",
+  });
+}
+
+export async function createCroppedImageFile(
+  sourceImageUrl: string,
+  cropBox: OutfitDetectionBoundingBox,
+  filename = "detected-item-crop.png",
+) {
+  const image = await loadBrowserImage(sourceImageUrl);
+  const sourceX = image.naturalWidth * cropBox.x;
+  const sourceY = image.naturalHeight * cropBox.y;
+  const sourceWidth = Math.max(1, image.naturalWidth * cropBox.width);
+  const sourceHeight = Math.max(1, image.naturalHeight * cropBox.height);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(sourceWidth));
+  canvas.height = Math.max(1, Math.round(sourceHeight));
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Unable to prepare the detected item preview.");
+  }
+
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  );
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((nextBlob) => {
+      if (!nextBlob) {
+        reject(new Error("Unable to prepare the detected item preview."));
+        return;
+      }
+
+      resolve(nextBlob);
+    }, "image/png");
+  });
+
+  return new File([blob], filename, { type: blob.type || "image/png" });
 }
 
 async function fileFromDataUrl(dataUrl: string, filename: string, contentType?: string) {
   const response = await fetch(dataUrl);
   const blob = await response.blob();
   return new File([blob], filename, { type: contentType || blob.type || "image/png" });
+}
+
+function inferFilenameFromUrl(imageUrl: string) {
+  try {
+    const url = new URL(imageUrl, window.location.origin);
+    const lastSegment = url.pathname.split("/").pop()?.trim();
+    return lastSegment && lastSegment.includes(".") ? lastSegment : "image.png";
+  } catch {
+    return "image.png";
+  }
+}
+
+function loadBrowserImage(sourceImageUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Unable to load the source image for this AI action."));
+    image.src = sourceImageUrl;
+  });
 }
 
 function normalizeTagList(rawTags: unknown): string[] {
@@ -759,7 +895,13 @@ function normalizeClothingItemPayload(item: ClothingItem): ClothingItem {
     ...item,
     category: normalizeCategoryValue(item.category) || null,
     brand: item.brand?.trim() ? item.brand.trim() : null,
+    clean_image_cutout_fallback: Boolean(item.clean_image_cutout_fallback),
+    clean_image_variant:
+      item.clean_image_variant === "cleaned" || item.clean_image_variant === "transparent"
+        ? item.clean_image_variant
+        : null,
     cleaned_image_url: normalizeAttachmentUrl(item.cleaned_image_url),
+    cleaned_working_image_url: normalizeAttachmentUrl(item.cleaned_working_image_url),
     image_url: normalizeAttachmentUrl(item.image_url),
     original_image_url: normalizeAttachmentUrl(item.original_image_url),
     tags: normalizeTagList((item as ClothingItem & { tags?: unknown }).tags),
@@ -770,7 +912,13 @@ function normalizeClothingItemPayload(item: ClothingItem): ClothingItem {
 function normalizeOutfitDetectionPayload(detection: OutfitDetection): OutfitDetection {
   return {
     ...detection,
+    clean_image_cutout_fallback: Boolean(detection.clean_image_cutout_fallback),
+    clean_image_variant:
+      detection.clean_image_variant === "cleaned" || detection.clean_image_variant === "transparent"
+        ? detection.clean_image_variant
+        : null,
     cleaned_image_url: normalizeAttachmentUrl(detection.cleaned_image_url),
+    cleaned_working_image_url: normalizeAttachmentUrl(detection.cleaned_working_image_url),
   };
 }
 
@@ -861,6 +1009,22 @@ function buildClothingItemFormData(
     formData.append("clothing_item[photo]", photoOptions.photo);
   }
 
+  if (photoOptions.cleanedPhoto) {
+    formData.append("clothing_item[cleaned_photo]", photoOptions.cleanedPhoto);
+  }
+
+  if (photoOptions.cleanedWorkingPhoto) {
+    formData.append("clothing_item[cleaned_working_photo]", photoOptions.cleanedWorkingPhoto);
+  }
+
+  if (photoOptions.cleanImageVariant) {
+    formData.append("clothing_item[clean_image_variant]", photoOptions.cleanImageVariant);
+  }
+
+  if (photoOptions.cleanImageCutoutFallback) {
+    formData.append("clothing_item[clean_image_cutout_fallback]", "true");
+  }
+
   if (photoOptions.sourceOutfitDetectionId) {
     formData.append(
       "clothing_item[source_outfit_detection_id]",
@@ -877,6 +1041,10 @@ function buildClothingItemFormData(
 
   if (photoOptions.removePhoto) {
     formData.append("clothing_item[remove_photo]", "true");
+  }
+
+  if (photoOptions.removeCleanedPhoto) {
+    formData.append("clothing_item[remove_cleaned_photo]", "true");
   }
 
   return formData;

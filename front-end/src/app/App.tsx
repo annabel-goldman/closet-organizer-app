@@ -1,6 +1,7 @@
 import { Dispatch, SetStateAction, useDeferredValue, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { ShoppingBag } from "lucide-react";
+import { Toaster, toast } from "sonner";
 import { AddItemMenu } from "./components/AddItemMenu";
 import { ClothingCard } from "./components/ClothingCard";
 import { CreateItemPage } from "./components/CreateItemPage";
@@ -358,20 +359,40 @@ export default function App() {
       return;
     }
 
+    const addedItem = clothingItems.find((item) => item.id === itemId);
     setOutfitCartStatusMessage("Added to outfit cart.");
     setOutfitCartErrorMessage("");
     setOutfitDraft((current) => ({
       ...current,
       itemIds: [itemId, ...current.itemIds],
     }));
+    toast.success(
+      addedItem ? `Added ${addedItem.name} to outfit cart.` : "Added to outfit cart.",
+    );
   }
 
   function removeItemFromOutfitDraft(itemId: number) {
+    const removedItem = clothingItems.find((item) => item.id === itemId);
     setOutfitCartStatusMessage("Removed from outfit cart.");
     setOutfitDraft((current) => ({
       ...current,
       itemIds: current.itemIds.filter((id) => id !== itemId),
     }));
+    toast.message(
+      removedItem ? `Removed ${removedItem.name} from outfit cart.` : "Removed from outfit cart.",
+      {
+        action: {
+          label: "Undo",
+          onClick: () => {
+            setOutfitDraft((current) => ({
+              ...current,
+              itemIds: current.itemIds.includes(itemId) ? current.itemIds : [itemId, ...current.itemIds],
+            }));
+            setOutfitCartStatusMessage("Restored item to outfit cart.");
+          },
+        },
+      },
+    );
   }
 
   async function handleCreateOutfitFromCart() {
@@ -531,6 +552,7 @@ export default function App() {
             ...current,
             itemIds: current.itemIds.filter((id) => id !== itemId),
           }));
+          toast.success("Item deleted.");
           navigateTo("/closet");
         }}
       />
@@ -854,6 +876,18 @@ export default function App() {
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {outfitCartStatusMessage}
       </div>
+
+      <Toaster
+        position="bottom-right"
+        closeButton
+        toastOptions={{
+          classNames: {
+            toast: "rounded-none border border-border bg-background text-foreground shadow-lg",
+            actionButton: "rounded-none border border-foreground bg-foreground text-background",
+            cancelButton: "rounded-none border border-border bg-background text-foreground",
+          },
+        }}
+      />
 
       <SiteFooter />
     </div>
