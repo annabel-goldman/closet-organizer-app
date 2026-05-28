@@ -157,13 +157,6 @@ class ProductionAccountSyncerTest < ActiveSupport::TestCase
       bytes: "source-detection-bytes"
     )
     attach_source_blob!(
-      record_type: "OutfitDetection",
-      record_id: source_detection_id,
-      name: "cleaned_working_photo",
-      filename: "detection-working.png",
-      bytes: "source-detection-working"
-    )
-    attach_source_blob!(
       record_type: "ClothingItem",
       record_id: source_item_id,
       name: "photo",
@@ -176,13 +169,6 @@ class ProductionAccountSyncerTest < ActiveSupport::TestCase
       name: "cleaned_photo",
       filename: "item-cleaned.png",
       bytes: "source-item-cleaned"
-    )
-    attach_source_blob!(
-      record_type: "ClothingItem",
-      record_id: source_item_id,
-      name: "cleaned_working_photo",
-      filename: "item-working.png",
-      bytes: "source-item-working"
     )
 
     summary = ProductionAccountSyncer.new(
@@ -212,10 +198,8 @@ class ProductionAccountSyncerTest < ActiveSupport::TestCase
     assert_equal imported_detection.id, imported_item.source_outfit_detection_id
     assert_equal "source-upload-bytes", imported_upload.source_photo.download
     assert_equal "source-detection-bytes", imported_detection.cleaned_photo.download
-    assert_equal "source-detection-working", imported_detection.cleaned_working_photo.download
     assert_equal "source-item-photo", imported_item.photo.download
     assert_equal "source-item-cleaned", imported_item.cleaned_photo.download
-    assert_equal "source-item-working", imported_item.cleaned_working_photo.download
     assert_equal "Monday Look", imported_outfit.name
     assert_equal [ "office", "spring" ], imported_outfit.tags
     assert_equal imported_item.id, imported_outfit_item.clothing_item_id

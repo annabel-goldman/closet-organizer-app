@@ -7,33 +7,27 @@ class ImageVariantsFlowTest < ActionDispatch::IntegrationTest
 
   test "can create a cleaned preview image from an uploaded file" do
     captured = {}
-    transparent_calls = []
 
     with_image_cleaner_stub(capture: captured) do
-      with_transparent_generator_stub(calls: transparent_calls) do
-        post preview_image_variants_url, params: {
-          image_variant: {
-            source_photo: item_photo_upload,
-            original_source_photo: item_photo_upload
-          },
-          ai_context: {
-            category: "shirt",
-            name: "Striped Shirt",
-            brand: "Acme",
-            size: "medium",
-            tags: [ "striped", "cotton", "shirt" ]
-          }
-        }, headers: auth_headers(@user)
-      end
+      post preview_image_variants_url, params: {
+        image_variant: {
+          source_photo: item_photo_upload,
+          original_source_photo: item_photo_upload
+        },
+        ai_context: {
+          category: "shirt",
+          name: "Striped Shirt",
+          brand: "Acme",
+          size: "medium",
+          tags: [ "striped", "cotton", "shirt" ]
+        }
+      }, headers: auth_headers(@user)
     end
 
     assert_response :success
+    assert_equal "preview-photo.png", response_json["filename"]
     assert_equal "image/png", response_json["content_type"]
     assert_match(/\Adata:image\/png;base64,/, response_json["data_url"])
-    assert_match(/\Adata:image\/png;base64,/, response_json["working_data_url"])
-    assert_equal "cleaned", response_json["clean_image_variant"]
-    assert_equal false, response_json["clean_image_cutout_fallback"]
-    assert_equal 0, transparent_calls.size
     assert_equal "Striped Shirt", captured.dig(:metadata_context, :name)
     assert_equal "Acme", captured.dig(:metadata_context, :brand)
     assert_equal [ "striped", "cotton", "shirt" ], captured.dig(:metadata_context, :tags)
@@ -51,8 +45,9 @@ class ImageVariantsFlowTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_equal "transparent", response_json["clean_image_variant"]
-    assert_equal false, response_json["clean_image_cutout_fallback"]
+    assert_equal "item-photo-transparent.png", response_json["filename"]
+    assert_equal "image/png", response_json["content_type"]
+    assert_match(/\Adata:image\/png;base64,/, response_json["data_url"])
     assert_equal 1, transparent_calls.size
     assert_equal "item-photo", transparent_calls.first[:filename_root]
   end
@@ -150,7 +145,7 @@ class ImageVariantsFlowTest < ActionDispatch::IntegrationTest
     OpenrouterMetadataSuggester.singleton_class.send(:define_method, :call, original)
   end
 
-  def with_transparent_generator_stub(calls: [], image_variant: "transparent", cutout_fallback: false)
+  def with_transparent_generator_stub(calls: [])
     original = TransparentPngVariantGenerator.method(:call)
     fixture_path = file_fixture("item-photo.png")
 
@@ -170,9 +165,7 @@ class ImageVariantsFlowTest < ActionDispatch::IntegrationTest
       {
         tempfile: tempfile,
         filename: "#{filename_root}-transparent.png",
-        content_type: "image/png",
-        image_variant: image_variant,
-        cutout_fallback: cutout_fallback
+        content_type: "image/png"
       }
     end
 

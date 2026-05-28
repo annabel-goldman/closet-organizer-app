@@ -51,7 +51,7 @@ import {
 import { useItemPhotoState } from "../lib/useItemPhotoState";
 import type { ItemPhotoStateSnapshot } from "../lib/useItemPhotoState";
 import { useUndoRedoShortcuts } from "../lib/useUndoRedoShortcuts";
-import { StagedCleanPreviewResult, useManualCreateAiFlow } from "../lib/useManualCreateAiFlow";
+import { useManualCreateAiFlow } from "../lib/useManualCreateAiFlow";
 import { useDetectionAiFlow } from "../lib/useDetectionAiFlow";
 
 interface CreateItemPageProps {
@@ -68,9 +68,7 @@ interface ManualCreateUndoSnapshot {
   formValues: ClothingItemFormValues;
   latestUploadedPhoto: File | null;
   photoState: ItemPhotoStateSnapshot;
-  stagedManualCleanImageVariant: "cleaned" | "transparent" | null;
-  stagedManualCutoutFallback: boolean;
-  stagedManualWorkingCleanPhoto: File | null;
+  stagedManualImageKind: "cleaned" | "transparent" | null;
 }
 
 export function CreateItemPage({
@@ -156,15 +154,13 @@ export function CreateItemPage({
     pendingManualCleanPromiseRef,
     resetManualCleanState,
     restoreManualCleanState,
-    stagedManualCleanImageVariant,
-    stagedManualCutoutFallback,
-    stagedManualWorkingCleanPhoto,
+    stagedManualImageKind,
   } = manualAi;
   const {
     cleanedDetectionImageUrl,
     cleaningDetectionIds,
+    detectionImageKind,
     detectionCleanErrors,
-    detectionCleanImageVariant,
     handleCleanDetectionImage,
     handleMakeDetectionTransparent,
     makingDetectionTransparentIds,
@@ -194,25 +190,18 @@ export function CreateItemPage({
   }
 
   async function autoAttachCleanedPhotoToCreatedItem({
-    cleanImageCutoutFallback,
-    cleanImageVariant,
     cleanedFilePromise,
     createdItem,
     values,
   }: {
-    cleanImageCutoutFallback: boolean;
-    cleanImageVariant: "cleaned" | "transparent";
-    cleanedFilePromise: Promise<StagedCleanPreviewResult>;
+    cleanedFilePromise: Promise<File>;
     createdItem: ClothingItem;
     values: ClothingItemFormValues;
   }) {
     try {
       const cleanedPreview = await cleanedFilePromise;
       await saveClothingItem(createdItem.id, createdItem.user_id, values, {
-        cleanedPhoto: cleanedPreview.file,
-        cleanedWorkingPhoto: cleanedPreview.workingFile ?? undefined,
-        cleanImageCutoutFallback,
-        cleanImageVariant,
+        cleanedPhoto: cleanedPreview,
       });
       toast.success(`AI-cleaned image saved to ${createdItem.name}.`);
     } catch (error) {
@@ -406,7 +395,7 @@ export function CreateItemPage({
   }
 
   function clearImageSelection() {
-    if (photoState.selectedFile || latestUploadedPhotoRef.current || stagedManualCleanImageVariant) {
+    if (photoState.selectedFile || latestUploadedPhotoRef.current || stagedManualImageKind) {
       pushManualUndoSnapshot();
     }
     detectionPollControllerRef.current?.abort();
@@ -554,19 +543,14 @@ export function CreateItemPage({
 
     try {
       const createdItem = await createClothingItem(userId, valuesSnapshot, {
-        cleanedPhoto: stagedManualCleanImageVariant ? photoState.selectedFile : undefined,
-        cleanedWorkingPhoto: stagedManualWorkingCleanPhoto ?? undefined,
-        cleanImageCutoutFallback: stagedManualCutoutFallback,
-        cleanImageVariant: stagedManualCleanImageVariant,
-        photo: stagedManualCleanImageVariant
+        cleanedPhoto: stagedManualImageKind ? photoState.selectedFile : undefined,
+        photo: stagedManualImageKind
           ? (latestUploadedPhotoRef.current ?? undefined)
           : photoState.selectedFile,
       });
 
       if (cleaningStrategy === "attach-when-ready" && cleaningPromise) {
         void autoAttachCleanedPhotoToCreatedItem({
-          cleanImageCutoutFallback: stagedManualCutoutFallback,
-          cleanImageVariant: stagedManualCleanImageVariant ?? "cleaned",
           cleanedFilePromise: cleaningPromise,
           createdItem,
           values: valuesSnapshot,
@@ -603,17 +587,12 @@ export function CreateItemPage({
 
         const createdItem = await createClothingItem(userId, draftSnapshot, {
           cleanedPhoto: stagedDetectionCleanPreviews[detection.id]?.file,
-          cleanedWorkingPhoto: stagedDetectionCleanPreviews[detection.id]?.workingFile ?? undefined,
-          cleanImageCutoutFallback: stagedDetectionCleanPreviews[detection.id]?.cleanImageCutoutFallback ?? false,
-          cleanImageVariant: stagedDetectionCleanPreviews[detection.id]?.cleanImageVariant ?? null,
           sourceOutfitDetectionId: detection.id,
         });
         createdItems.push(createdItem);
 
         if (pendingCleanPromise && cleaningStrategy === "attach-when-ready") {
           void autoAttachCleanedPhotoToCreatedItem({
-            cleanImageCutoutFallback: stagedDetectionCleanPreviews[detection.id]?.cleanImageCutoutFallback ?? false,
-            cleanImageVariant: stagedDetectionCleanPreviews[detection.id]?.cleanImageVariant ?? "cleaned",
             cleanedFilePromise: pendingCleanPromise,
             createdItem,
             values: draftSnapshot,
@@ -657,9 +636,7 @@ export function CreateItemPage({
       formValues: { ...formValues },
       latestUploadedPhoto: latestUploadedPhotoRef.current,
       photoState: photoState.getSnapshot(),
-      stagedManualCleanImageVariant,
-      stagedManualCutoutFallback,
-      stagedManualWorkingCleanPhoto,
+      stagedManualImageKind,
     };
   }
 
@@ -686,9 +663,7 @@ export function CreateItemPage({
     latestUploadedPhotoRef.current = snapshot.latestUploadedPhoto;
     photoState.restoreSnapshot(snapshot.photoState);
     restoreManualCleanState({
-      cleanImageVariant: snapshot.stagedManualCleanImageVariant,
-      cutoutFallback: snapshot.stagedManualCutoutFallback,
-      workingPhoto: snapshot.stagedManualWorkingCleanPhoto,
+      imageKind: snapshot.stagedManualImageKind,
     });
     setErrorMessage("");
   }
@@ -708,9 +683,7 @@ export function CreateItemPage({
     latestUploadedPhotoRef.current = snapshot.latestUploadedPhoto;
     photoState.restoreSnapshot(snapshot.photoState);
     restoreManualCleanState({
-      cleanImageVariant: snapshot.stagedManualCleanImageVariant,
-      cutoutFallback: snapshot.stagedManualCutoutFallback,
-      workingPhoto: snapshot.stagedManualWorkingCleanPhoto,
+      imageKind: snapshot.stagedManualImageKind,
     });
     setErrorMessage("");
   }
@@ -808,7 +781,7 @@ export function CreateItemPage({
           autofillingDetectionId={autofillingDetectionId}
           brandSuggestions={closetSuggestions.brandSuggestions}
           cleaningDetectionIds={cleaningDetectionIds}
-          detectionCleanImageVariant={detectionCleanImageVariant}
+          detectionImageKind={detectionImageKind}
           detectionCleanErrors={detectionCleanErrors}
           detections={detections}
           errorMessage={errorMessage}
@@ -823,9 +796,9 @@ export function CreateItemPage({
           onBack={onBack}
           onClearImageSelection={clearImageSelection}
           onCleanDetectionImage={(detection) => void handleCleanDetectionImage(detection)}
-          onMakeDetectionTransparent={(detection) => void handleMakeDetectionTransparent(detection)}
           onDetectItems={() => photoState.selectedFile && void detectItems(photoState.selectedFile)}
           onDraftChange={updateDetectionDraft}
+          onMakeDetectionTransparent={(detection) => void handleMakeDetectionTransparent(detection)}
           onRequestDetectionAutofill={(detection) => void handleAutofillDetectionMetadata(detection)}
           onFileChange={handleImageFileChange}
           onSaveSelectedItems={() => void handleSaveSelectedItems()}
@@ -949,7 +922,7 @@ export function CreateItemPage({
             />
             <AiCleanImageButton
               className="size-11 border border-white/75 shadow-sm bg-white/70 p-0 backdrop-blur-sm hover:bg-white/85"
-              disabled={stagedManualCleanImageVariant !== "cleaned" || isCleaningUploadedPhoto}
+              disabled={stagedManualImageKind !== "cleaned" || isCleaningUploadedPhoto}
               iconOnly
               isLoading={isMakingUploadedTransparent}
               label="Make transparent PNG"

@@ -9,9 +9,9 @@ class AccountSnapshotManifest
   VERSION = 2
 
   ATTACHMENT_ROLES = {
-    "ClothingItem" => %w[photo cleaned_photo cleaned_working_photo],
+    "ClothingItem" => %w[photo cleaned_photo],
     "OutfitUpload" => %w[source_photo],
-    "OutfitDetection" => %w[cleaned_photo cleaned_working_photo]
+    "OutfitDetection" => %w[cleaned_photo]
   }.freeze
 
   RECORD_DEFINITIONS = {
@@ -33,8 +33,6 @@ class AccountSnapshotManifest
         clean_image_provider
         clean_image_model
         clean_image_generated_at
-        clean_image_variant
-        clean_image_cutout_fallback
         created_at
         updated_at
       ],
@@ -50,8 +48,6 @@ class AccountSnapshotManifest
         clean_image_provider
         clean_image_model
         clean_image_generated_at
-        clean_image_variant
-        clean_image_cutout_fallback
         created_at
         updated_at
       ],
@@ -166,8 +162,6 @@ class AccountSnapshotManifest
         clean_image_provider
         clean_image_model
         clean_image_generated_at
-        clean_image_variant
-        clean_image_cutout_fallback
         created_at
         updated_at
       ],
@@ -203,8 +197,6 @@ class AccountSnapshotManifest
         clean_image_provider
         clean_image_model
         clean_image_generated_at
-        clean_image_variant
-        clean_image_cutout_fallback
         created_at
         updated_at
       ],

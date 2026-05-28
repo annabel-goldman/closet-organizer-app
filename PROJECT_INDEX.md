@@ -25,9 +25,9 @@ project-closet-organizer/
 ## Backend (`back-end`)
 
 - `app/models`: `user`, `clothing_item`, `outfit`, `outfit_item`, `outfit_upload`, and `outfit_detection`
-- `app/controllers`: auth/session handling, JSON CRUD controllers, outfit collage/layout-aware outfit updates, upload flows, split AI clean-image/transparent-PNG helper endpoints, and SPA fallback
+- `app/controllers`: auth/session handling, JSON CRUD controllers, outfit collage/layout-aware outfit updates, upload flows, AI clean-image and transparent-PNG helper endpoints, and SPA fallback
 - `app/presenters`: API payload shaping for users, clothing items, outfits, uploads, and detections, including saved outfit collage layout data
-- `app/services/`: OpenRouter detection, metadata suggestion, crop refinement, crop verification, split image-cleaning/background-removal logic including hidden working-image and white display-image variants, snapshot-based account mirror sync services, one-time user PNG backfill support, incremental prod-item import support, and shared tempfile/image-source helpers
+- `app/services/`: OpenRouter detection, metadata suggestion, crop refinement, crop verification, single-image catalog cleanup with backdrop selection plus transparent-background cleanup, snapshot-based account mirror sync services, one-time user PNG backfill support, incremental prod-item import support, and shared tempfile/image-source helpers
 - `config/routes.rb`: API routes plus HTML fallback routes
 - `db/seeds.rb`: demo admin user plus large-scale dev seed (~1k users, ~5k items, ~2k outfits) for pagination/perf testing
 - `lib/tasks`: maintenance tasks, including snapshot-based account mirror sync, legacy production-account sync/import helpers, incremental prod-item imports, and one-time clothing-item PNG backfills
@@ -42,7 +42,7 @@ project-closet-organizer/
 - `src/app/components/OutfitCollageLayersPanel.tsx`: focused layers sidebar for thumbnail selection plus pointer and keyboard-accessible layer reordering
 - `src/app/lib/routes.ts`: route parsing, navigation helpers, and route guards
 - `src/app/lib/api.ts`: shared request/error helpers for frontend API calls
-- `src/app/lib/closet.ts`: shared types, formatting helpers, and feature-specific API helpers, including split AI clean-image/transparent-PNG preview requests, staged working/display clean-image variants, and metadata-suggestion requests
+- `src/app/lib/closet.ts`: shared types, formatting helpers, and feature-specific API helpers, including clean-image/transparent-PNG preview and save requests plus metadata-suggestion requests
 - `src/app/lib/useAiActionState.ts`: shared AI action lifecycle state for create/edit image and metadata flows
 - `src/app/lib/useManualCreateAiFlow.ts`: focused manual create-item AI orchestration and staged preview management
 - `src/app/lib/useDetectionAiFlow.ts`: focused detection-review AI orchestration and staged preview management

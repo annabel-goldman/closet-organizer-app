@@ -166,8 +166,7 @@ export function ItemDetailPage({
     item
     && !photoState.removeExisting
     && !photoState.selectedFile
-    && item.cleaned_image_url
-    && item.clean_image_variant === "cleaned",
+    && item.cleaned_image_url,
   );
   const currentFormSignature = JSON.stringify(formValues ?? {});
 
@@ -447,18 +446,12 @@ export function ItemDetailPage({
     setSuccessMessage("");
 
     try {
-      const [photoFile, cleanedFile, cleanedWorkingFile] = await Promise.all([
+      const [photoFile, cleanedFile] = await Promise.all([
         snapshot.original_image_url
           ? fetchImageFileFromUrl(snapshot.original_image_url, `${snapshot.name || "closet-item"}-original.png`)
           : Promise.resolve<File | undefined>(undefined),
         snapshot.cleaned_image_url
           ? fetchImageFileFromUrl(snapshot.cleaned_image_url, `${snapshot.name || "closet-item"}-cleaned.png`)
-          : Promise.resolve<File | undefined>(undefined),
-        snapshot.cleaned_working_image_url
-          ? fetchImageFileFromUrl(
-              snapshot.cleaned_working_image_url,
-              `${snapshot.name || "closet-item"}-cleaned-working.png`,
-            )
           : Promise.resolve<File | undefined>(undefined),
       ]);
 
@@ -469,9 +462,6 @@ export function ItemDetailPage({
         {
           photo: photoFile,
           cleanedPhoto: cleanedFile,
-          cleanedWorkingPhoto: cleanedWorkingFile,
-          cleanImageVariant: snapshot.clean_image_variant ?? undefined,
-          cleanImageCutoutFallback: snapshot.clean_image_cutout_fallback ?? false,
           removeCleanedPhoto: !snapshot.cleaned_image_url,
           removePhoto: !snapshot.original_image_url,
         },
@@ -500,18 +490,12 @@ export function ItemDetailPage({
     setSuccessMessage("");
 
     try {
-      const [photoFile, cleanedFile, cleanedWorkingFile] = await Promise.all([
+      const [photoFile, cleanedFile] = await Promise.all([
         snapshot.original_image_url
           ? fetchImageFileFromUrl(snapshot.original_image_url, `${snapshot.name || "closet-item"}-original.png`)
           : Promise.resolve<File | undefined>(undefined),
         snapshot.cleaned_image_url
           ? fetchImageFileFromUrl(snapshot.cleaned_image_url, `${snapshot.name || "closet-item"}-cleaned.png`)
-          : Promise.resolve<File | undefined>(undefined),
-        snapshot.cleaned_working_image_url
-          ? fetchImageFileFromUrl(
-              snapshot.cleaned_working_image_url,
-              `${snapshot.name || "closet-item"}-cleaned-working.png`,
-            )
           : Promise.resolve<File | undefined>(undefined),
       ]);
 
@@ -522,9 +506,6 @@ export function ItemDetailPage({
         {
           photo: photoFile,
           cleanedPhoto: cleanedFile,
-          cleanedWorkingPhoto: cleanedWorkingFile,
-          cleanImageVariant: snapshot.clean_image_variant ?? undefined,
-          cleanImageCutoutFallback: snapshot.clean_image_cutout_fallback ?? false,
           removeCleanedPhoto: !snapshot.cleaned_image_url,
           removePhoto: !snapshot.original_image_url,
         },

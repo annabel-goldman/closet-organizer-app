@@ -38,8 +38,6 @@ class ApiPayloads
         clean_image_provider
         clean_image_model
         clean_image_generated_at
-        clean_image_variant
-        clean_image_cutout_fallback
       ]
     )
 
@@ -48,7 +46,6 @@ class ApiPayloads
     payload["image_url"] = attachment_url(clothing_item.display_photo_attachment)
     payload["original_image_url"] = attachment_url(clothing_item.photo)
     payload["cleaned_image_url"] = attachment_url(clothing_item.cleaned_photo)
-    payload["cleaned_working_image_url"] = attachment_url(clothing_item.cleaned_working_photo)
     payload["user"] = user(clothing_item.user, include_items: false) if include_user
     payload
   end
@@ -88,8 +85,6 @@ class ApiPayloads
         clean_image_provider
         clean_image_model
         clean_image_generated_at
-        clean_image_variant
-        clean_image_cutout_fallback
         created_at
         updated_at
       ]
@@ -100,7 +95,6 @@ class ApiPayloads
     payload["refined_box"] = outfit_detection.refined_box
     payload["final_box"] = outfit_detection.final_box
     payload["cleaned_image_url"] = attachment_url(outfit_detection.cleaned_photo)
-    payload["cleaned_working_image_url"] = attachment_url(outfit_detection.cleaned_working_photo)
     payload
   end
 
@@ -150,7 +144,6 @@ class ApiPayloads
         .clothing_items
         .with_attached_photo
         .with_attached_cleaned_photo
-        .with_attached_cleaned_working_photo
         .order(:name)
         .to_a
     end

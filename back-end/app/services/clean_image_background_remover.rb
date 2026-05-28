@@ -17,15 +17,14 @@ class CleanImageBackgroundRemover
 
   def call
     source_file = prepared_source_file
-    output_file = temporary_files.track(Tempfile.new([ "#{filename_root}-no-background", ".png" ]))
+    output_file = temporary_files.track(Tempfile.new([ "#{filename_root}-transparent", ".png" ]))
     output_file.binmode
     sampled_background_color = dominant_corner_background_color(source_file.path)
 
     MiniMagick::Tool.new(image_magick_command_name) do |command|
       command << source_file.path
-      # Flood-filling from the dominant corner backdrop color removes only
-      # edge-connected pixels that match the flat studio background, which
-      # preserves similar colors that belong to the item itself.
+      # Remove only edge-connected background pixels sampled from the corners
+      # so light details inside the garment remain intact.
       command.alpha "set"
       command.bordercolor sampled_background_color
       command.border "1x1"
@@ -33,8 +32,6 @@ class CleanImageBackgroundRemover
       command.fill "none"
       command.draw "color 0,0 floodfill"
       command.shave "1x1"
-      # A light sharpen pass restores some edge definition after the AI clean
-      # image generation and transparent-background conversion steps.
       command.sharpen configured_sharpen_amount
       command << output_file.path
     end
@@ -42,7 +39,7 @@ class CleanImageBackgroundRemover
 
     {
       tempfile: output_file,
-      filename: "#{filename_root}-clean.png",
+      filename: "#{filename_root}-transparent.png",
       content_type: "image/png"
     }
   end

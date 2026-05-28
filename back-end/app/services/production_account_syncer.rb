@@ -302,13 +302,10 @@ class ProductionAccountSyncer
         clean_image_error_message: source_detection.clean_image_error_message,
         clean_image_provider: source_detection.clean_image_provider,
         clean_image_model: source_detection.clean_image_model,
-        clean_image_generated_at: source_detection.clean_image_generated_at,
-        clean_image_variant: optional_source_attribute(source_detection, :clean_image_variant),
-        clean_image_cutout_fallback: optional_source_attribute(source_detection, :clean_image_cutout_fallback)
+        clean_image_generated_at: source_detection.clean_image_generated_at
       )
       target_detection.save!(validate: false)
       clone_attachment!(cleaned_photo_blobs[[ source_detection.id, "cleaned_photo" ]], target_detection.cleaned_photo)
-      clone_attachment!(cleaned_photo_blobs[[ source_detection.id, "cleaned_working_photo" ]], target_detection.cleaned_working_photo)
       preserve_timestamps!(target_detection, source_detection)
       memo[source_detection.id] = target_detection
     end
@@ -336,14 +333,11 @@ class ProductionAccountSyncer
         clean_image_error_message: source_item.clean_image_error_message,
         clean_image_provider: source_item.clean_image_provider,
         clean_image_model: source_item.clean_image_model,
-        clean_image_generated_at: source_item.clean_image_generated_at,
-        clean_image_variant: optional_source_attribute(source_item, :clean_image_variant),
-        clean_image_cutout_fallback: optional_source_attribute(source_item, :clean_image_cutout_fallback)
+        clean_image_generated_at: source_item.clean_image_generated_at
       )
       target_item.save!(validate: false)
       clone_attachment!(item_photo_blobs[[ source_item.id, "photo" ]], target_item.photo)
       clone_attachment!(item_photo_blobs[[ source_item.id, "cleaned_photo" ]], target_item.cleaned_photo)
-      clone_attachment!(item_photo_blobs[[ source_item.id, "cleaned_working_photo" ]], target_item.cleaned_working_photo)
       preserve_timestamps!(target_item, source_item)
       memo[source_item.id] = target_item
     end

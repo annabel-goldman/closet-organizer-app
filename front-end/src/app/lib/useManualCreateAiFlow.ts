@@ -10,13 +10,6 @@ import { useAiActionState } from "./useAiActionState";
 
 export type PendingCleanMode = "preview" | "ignore" | "attach";
 
-export interface StagedCleanPreviewResult {
-  cleanImageCutoutFallback: boolean;
-  cleanImageVariant: "cleaned" | "transparent";
-  file: File;
-  workingFile: File | null;
-}
-
 interface ManualAiPhotoState {
   selectedFile: File | null;
   updateSelectedFile: (file: File | null) => void;
@@ -47,14 +40,10 @@ export function useManualCreateAiFlow<UndoSnapshot>({
   const transparentAction = useAiActionState();
   const metadataAction = useAiActionState();
   const isMountedRef = useRef(true);
-  const pendingManualCleanPromiseRef = useRef<Promise<StagedCleanPreviewResult> | null>(null);
+  const pendingManualCleanPromiseRef = useRef<Promise<File> | null>(null);
   const pendingManualCleanModeRef = useRef<PendingCleanMode>("preview");
   const pendingManualCleanRequestIdRef = useRef(0);
-  const [stagedManualCleanImageVariant, setStagedManualCleanImageVariant] = useState<
-    "cleaned" | "transparent" | null
-  >(null);
-  const [stagedManualCutoutFallback, setStagedManualCutoutFallback] = useState(false);
-  const [stagedManualWorkingCleanPhoto, setStagedManualWorkingCleanPhoto] = useState<File | null>(null);
+  const [stagedManualImageKind, setStagedManualImageKind] = useState<"cleaned" | "transparent" | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -72,26 +61,15 @@ export function useManualCreateAiFlow<UndoSnapshot>({
   }
 
   function resetManualCleanState() {
-    setStagedManualCleanImageVariant(null);
-    setStagedManualCutoutFallback(false);
-    setStagedManualWorkingCleanPhoto(null);
+    setStagedManualImageKind(null);
   }
 
-  function restoreManualCleanState(snapshot: {
-    cleanImageVariant: "cleaned" | "transparent" | null;
-    cutoutFallback: boolean;
-    workingPhoto: File | null;
-  }) {
-    setStagedManualCleanImageVariant(snapshot.cleanImageVariant);
-    setStagedManualCutoutFallback(snapshot.cutoutFallback);
-    setStagedManualWorkingCleanPhoto(snapshot.workingPhoto);
+  function restoreManualCleanState(snapshot: { imageKind: "cleaned" | "transparent" | null }) {
+    setStagedManualImageKind(snapshot.imageKind);
   }
 
   async function handleCleanUploadedPhoto() {
-    const cleanSourcePhoto =
-      latestUploadedPhotoRef.current
-      ?? stagedManualWorkingCleanPhoto
-      ?? photoState.selectedFile;
+    const cleanSourcePhoto = latestUploadedPhotoRef.current ?? photoState.selectedFile;
 
     if (!cleanSourcePhoto) {
       setErrorMessage("Upload a photo before using the AI cleaner.");
@@ -124,10 +102,8 @@ export function useManualCreateAiFlow<UndoSnapshot>({
 
       pendingManualCleanPromiseRef.current = null;
       pushUndoSnapshot(undoSnapshot);
-      photoState.updateSelectedFile(cleanedPreview.file);
-      setStagedManualCleanImageVariant(cleanedPreview.cleanImageVariant);
-      setStagedManualCutoutFallback(cleanedPreview.cleanImageCutoutFallback);
-      setStagedManualWorkingCleanPhoto(cleanedPreview.workingFile);
+      photoState.updateSelectedFile(cleanedPreview);
+      setStagedManualImageKind("cleaned");
       cleanAction.succeed();
     } catch (error) {
       if (
@@ -142,8 +118,9 @@ export function useManualCreateAiFlow<UndoSnapshot>({
   }
 
   async function handleMakeUploadedTransparent() {
-    const workingSourcePhoto = stagedManualWorkingCleanPhoto ?? photoState.selectedFile;
-    if (!workingSourcePhoto || stagedManualCleanImageVariant !== "cleaned") {
+    const sourcePhoto = photoState.selectedFile;
+
+    if (!sourcePhoto || stagedManualImageKind !== "cleaned") {
       setErrorMessage("Run AI clean image before making a transparent PNG.");
       return;
     }
@@ -153,11 +130,10 @@ export function useManualCreateAiFlow<UndoSnapshot>({
     const undoSnapshot = captureUndoSnapshot();
 
     try {
-      const transparentPreview = await createTransparentPreviewFile(workingSourcePhoto);
+      const transparentPreview = await createTransparentPreviewFile(sourcePhoto);
       pushUndoSnapshot(undoSnapshot);
-      photoState.updateSelectedFile(transparentPreview.file);
-      setStagedManualCleanImageVariant(transparentPreview.cleanImageVariant);
-      setStagedManualCutoutFallback(transparentPreview.cleanImageCutoutFallback);
+      photoState.updateSelectedFile(transparentPreview);
+      setStagedManualImageKind("transparent");
       transparentAction.succeed();
     } catch (error) {
       transparentAction.fail(
@@ -205,8 +181,6 @@ export function useManualCreateAiFlow<UndoSnapshot>({
     pendingManualCleanRequestIdRef,
     resetManualCleanState,
     restoreManualCleanState,
-    stagedManualCleanImageVariant,
-    stagedManualCutoutFallback,
-    stagedManualWorkingCleanPhoto,
+    stagedManualImageKind,
   };
 }

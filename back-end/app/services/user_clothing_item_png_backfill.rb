@@ -100,9 +100,7 @@ class UserClothingItemPngBackfill
       clean_image_error_message: nil,
       clean_image_provider: nil,
       clean_image_model: nil,
-      clean_image_generated_at: nil,
-      clean_image_variant: nil,
-      clean_image_cutout_fallback: false
+      clean_image_generated_at: nil
     )
   end
 end

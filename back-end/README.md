@@ -22,7 +22,7 @@ Rails 8 JSON backend for Curated Closet.
 - admin-only user directory access
 - saved outfit CRUD with owned-item validation
 - outfit photo upload, detection persistence, crop refinement, and review support
-- AI-assisted image cleanup and metadata suggestion flows for clothing items and outfit detections, including separate clean-image and transparent-PNG steps, cutout-fallback tracking, and a two-variant clean-image pipeline that stores a hidden high-contrast working image plus a white-background display image
+- AI-assisted image cleanup and metadata suggestion flows for clothing items and outfit detections, including a visible clean-image step followed by optional transparent-PNG cleanup from that same cleaned image
 - HTML fallback routes for the SPA frontend
 
 ## Local Setup
@@ -100,7 +100,7 @@ Notes:
 - `/` resolves to `clothing_items#index` inside the JSON scope.
 - HTML browser requests for SPA routes fall back to the frontend shell.
 - `ApplicationController` returns `404` JSON for missing records and `422` JSON for validation failures.
-- Clothing item create/update requests can include `clothing_item[photo]`, `clothing_item[cleaned_photo]`, and `clothing_item[cleaned_working_photo]` in the same multipart payload so the frontend can stage an AI image variant, keep the original attached photo, show a white-background cleaned preview, and still preserve the hidden high-contrast working image used later for transparent-PNG generation. The payload can also include `clothing_item[clean_image_variant]`, `clothing_item[clean_image_cutout_fallback]`, and `clothing_item[remove_cleaned_photo]`.
+- Clothing item create/update requests can include `clothing_item[photo]` and `clothing_item[cleaned_photo]` in the same multipart payload so the frontend can keep the original attached photo while also staging or saving a single AI-cleaned catalog image. The payload can also include `clothing_item[remove_cleaned_photo]`.
 - Text input length is capped at every layer: `app/models/concerns/input_length_policy.rb` exposes the limits (username 60, email 254, item name 120, brand 80, category 60, outfit name 120, notes 2_000, tag 40 chars × 30 per record); the `User`/`ClothingItem`/`Outfit` models validate against the same constants and surface friendly errors; the `AddInputLengthConstraints` migration enforces matching `limit:` and `null: false` constraints at the database. SQL injection is mitigated by ActiveRecord's parameterized queries — the only raw SQL fragment in the app (`where("lower(email) = ?", ...)` in `User`) uses bound placeholders.
 - `GET /users` is paginated via Kaminari. It accepts `page` and `per_page` query params (default 24, max 100) and returns `{ users: [...], meta: { page, per_page, total_pages, total_count } }`. The index payload omits each user's `clothing_items` array and only includes a `clothing_items_count` field; per-user `GET /users/:id` still returns the full items array.
 - Outfit payloads now preserve per-piece collage presentation through `outfit_items`: each embedded outfit item can include `outfit_item_id`, `layer_order`, and `collage_layout` (`x`, `y`, `width`, `height`, `rotation`) so the frontend can reopen and edit saved collages faithfully. The outfit integration suite also covers the round-trip contract that the collage layout returned by `PATCH /outfits/:id` matches the subsequent `GET /outfits/:id` payload used by the saved gallery.
@@ -110,23 +110,17 @@ Notes:
 - `app/presenters/api_payloads.rb`
   Centralizes JSON payload shaping for users, clothing items, outfits, uploads, and detections
 - `app/controllers/clothing_items_controller.rb`
-  Handles clothing item CRUD, photo attachment and cropping, split clean-image/transparent-PNG actions, and metadata suggestions
+  Handles clothing item CRUD, photo attachment and cropping, clean-image actions, transparent-PNG cleanup, and metadata suggestions
 - `app/controllers/outfit_detections_controller.rb`
-  Handles detection-based clean-image, transparent-PNG, and metadata suggestion requests
+  Handles detection-based clean-image, transparent-PNG cleanup, and metadata suggestion requests
 - `app/controllers/image_variants_controller.rb`
   Handles temporary clean-image previews, transparent-PNG previews, and metadata suggestions for uploaded but unsaved images
 - `app/services/openrouter_image_cleaner.rb`
-  Calls OpenRouter image generation for the hidden working clean-image source on a contrast-selected flat backdrop with explicit edge margin and no shadows
-- `app/services/image_clean_backdrop_selector.rb`
-  Chooses a small curated safety palette of high-contrast working backdrops from prompt, metadata, and sampled image colors so garments are less likely to land near the backdrop hue
-- `app/services/clean_image_variant_set_generator.rb`
-  Builds the full clean-image result set by generating the hidden working image first and then deriving the white-background display image
-- `app/services/white_backdrop_clean_image_generator.rb`
-  Converts the hidden working clean-image source into the user-facing white-background display image by recoloring the flat studio backdrop, without invoking the transparent-PNG generator
+  Calls OpenRouter image generation for the final saved clean-image output, asking the model itself to choose a white or deep-charcoal studio backdrop based on garment contrast while keeping explicit edge margin and no shadows
 - `app/services/clean_image_background_remover.rb`
-  Performs the ImageMagick-based background-removal pass used by the transparent-PNG step by sampling the dominant corner backdrop color
+  Performs the ImageMagick-based transparent-background cleanup pass by sampling the dominant corner backdrop color from the cleaned image
 - `app/services/transparent_png_variant_generator.rb`
-  Wraps the background-removal pass and returns the resulting transparent PNG variant for preview/save flows
+  Wraps the background-removal pass and returns the resulting transparent PNG for preview/save flows
 - `app/services/account_snapshot_exporter.rb`
   Serializes one user's owned records plus attachment payloads into a portable snapshot archive
 - `app/services/account_snapshot_previewer.rb`
@@ -146,10 +140,10 @@ Notes:
 
 ## AI Flow Architecture
 
-- `ClothingItem` and `OutfitDetection` define the source-photo policy for AI cleanup and transparent-PNG generation so controllers do not have to rebuild source precedence inline.
-- `ImageVariantsController` remains the preview-only entrypoint for unsaved images and uses the same generator services as the saved-record flows.
-- `CleanImageAttachmentGenerator` and `TransparentPngAttachmentGenerator` are still the persistence boundary for saved `ClothingItem` and `OutfitDetection` image actions.
-- Account snapshot and sync flows stay outside the AI orchestration path. They can copy `cleaned_photo` and `cleaned_working_photo`, but they do not invoke the AI generator services.
+- `ClothingItem` and `OutfitDetection` define the source-photo policy for AI cleanup so controllers do not have to rebuild source precedence inline.
+- `ImageVariantsController` remains the preview-only entrypoint for unsaved images and uses the same clean-image and transparent-background generator services as the saved-record flows.
+- `CleanImageAttachmentGenerator` is the persistence boundary for saved clean-image actions, while `TransparentPngAttachmentGenerator` overwrites the saved cleaned image with the transparent result when requested.
+- Account snapshot and sync flows stay outside the AI orchestration path. They can copy `cleaned_photo`, but they do not invoke the AI generator services.
 
 ## One-Time Maintenance Tasks
 
@@ -180,7 +174,7 @@ Notes:
 
 - The snapshot scope is `ClothingItem`, `Outfit`, `OutfitItem`, `OutfitUpload`, `OutfitDetection`, and the related Active Storage image attachments.
 - Apply hard-replaces only the matched target user's owned records. It does not overwrite the target user's auth/account identity fields.
-- `ClothingItem.photo`, `ClothingItem.cleaned_photo`, `ClothingItem.cleaned_working_photo`, `OutfitUpload.source_photo`, `OutfitDetection.cleaned_photo`, and `OutfitDetection.cleaned_working_photo` are copied exactly from the source archive. The mirror flow does not regenerate images.
+- `ClothingItem.photo`, `ClothingItem.cleaned_photo`, `OutfitUpload.source_photo`, and `OutfitDetection.cleaned_photo` are copied exactly from the source archive. The mirror flow does not regenerate images.
 - Set `ACCOUNT_SNAPSHOT_PATH` to read or write a `.tar.gz` snapshot file. If you omit it, the export task writes the archive to stdout and the preview/apply tasks read it from stdin.
 - Production applies require the confirmation token printed by the preview step.
 - `ACCOUNT_SNAPSHOT_STORAGE_SERVICE` optionally overrides which Active Storage service the target environment writes into. Otherwise the current environment default is used.
@@ -240,7 +234,6 @@ Notes:
 - `source_outfit_detection_id`
 - `photo` via Active Storage
 - `cleaned_photo` via Active Storage
-- `cleaned_working_photo` via Active Storage
 - clean-image status metadata plus variant/cutout-result flags
 
 Supported `size` enum values:
@@ -310,8 +303,6 @@ See [back-end/.env.example](./.env.example) for expected variables.
 - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` enable Google sign-in.
 - `OPENROUTER_API_KEY` is required for outfit detection, metadata suggestion, and image-cleaning features.
 - `OPENROUTER_MODEL` defaults to `openai/gpt-4.1-mini`.
-- `AI_CLEAN_BACKGROUND_FUZZ` optionally adjusts how aggressively edge-connected backdrop pixels are removed from AI-cleaned images.
-- `AI_CLEAN_SHARPEN` optionally adjusts the sharpen pass that restores edge definition on the final transparent PNG.
 - `OPENROUTER_METADATA_MODEL` can override the metadata suggestion model independently.
 - `AI_CLEAN_BACKGROUND_FUZZ` optionally tunes how aggressively the clean-image post-process removes the sampled edge backdrop color. It defaults to `12%`.
 - `AI_CLEAN_SHARPEN` optionally adds a light sharpen pass after background removal to recover edge crispness in the final transparent PNG. It defaults to `0x0.8`.

@@ -27,15 +27,13 @@ class AccountSnapshotWorkflowTest < ActiveSupport::TestCase
     assert_equal 1, manifest.dig("record_counts", "outfit_items")
     assert_equal 1, manifest.dig("record_counts", "outfit_uploads")
     assert_equal 1, manifest.dig("record_counts", "outfit_detections")
-    assert_equal 6, manifest["attachments"].size
+    assert_equal 4, manifest["attachments"].size
 
     roles = manifest["attachments"].map { |entry| [ entry["record_type"], entry["attachment_role"] ] }
     assert_includes roles, [ "ClothingItem", "photo" ]
     assert_includes roles, [ "ClothingItem", "cleaned_photo" ]
-    assert_includes roles, [ "ClothingItem", "cleaned_working_photo" ]
     assert_includes roles, [ "OutfitUpload", "source_photo" ]
     assert_includes roles, [ "OutfitDetection", "cleaned_photo" ]
-    assert_includes roles, [ "OutfitDetection", "cleaned_working_photo" ]
 
     item_entry = manifest.dig("records", "clothing_items").sole
     assert_equal records[:outfit_upload].id, item_entry["source_outfit_upload_source_id"]
@@ -61,7 +59,7 @@ class AccountSnapshotWorkflowTest < ActiveSupport::TestCase
     assert_equal 1, summary.dig(:record_counts, :target, "clothing_items")
     assert_equal 1, summary.dig(:record_counts, :will_delete, "outfit_uploads")
     assert_equal 1, summary.dig(:record_counts, :will_create, "outfit_detections")
-    assert_equal 6, summary[:attachment_count]
+    assert_equal 4, summary[:attachment_count]
     assert_equal true, summary[:requires_confirmation]
     assert_match(/\A[A-F0-9]{12}\z/, summary[:confirmation_token])
   end
@@ -109,14 +107,8 @@ class AccountSnapshotWorkflowTest < ActiveSupport::TestCase
     assert_equal imported_detection.id, imported_item.source_outfit_detection_id
     assert_equal "source-upload-photo", imported_upload.source_photo.download
     assert_equal "source-detection-cleaned", imported_detection.cleaned_photo.download
-    assert_equal "source-detection-working", imported_detection.cleaned_working_photo.download
     assert_equal "source-item-photo", imported_item.photo.download
     assert_equal "source-item-cleaned", imported_item.cleaned_photo.download
-    assert_equal "source-item-working", imported_item.cleaned_working_photo.download
-    assert_equal "cleaned", imported_detection.clean_image_variant
-    assert_equal false, imported_detection.clean_image_cutout_fallback
-    assert_equal "cleaned", imported_item.clean_image_variant
-    assert_equal false, imported_item.clean_image_cutout_fallback
     assert_equal "Source Look", imported_outfit.name
     assert_equal imported_item.id, imported_outfit_item.clothing_item_id
     assert_equal 11.5, imported_outfit_item.collage_x
@@ -288,19 +280,12 @@ class AccountSnapshotWorkflowTest < ActiveSupport::TestCase
       clean_image_error_message: nil,
       clean_image_provider: "openrouter",
       clean_image_model: "clean-v1",
-      clean_image_generated_at: Time.zone.parse("2026-05-20 10:15:00"),
-      clean_image_variant: "cleaned",
-      clean_image_cutout_fallback: false
+      clean_image_generated_at: Time.zone.parse("2026-05-20 10:15:00")
     )
     detection.save!(validate: false)
     detection.cleaned_photo.attach(
       io: StringIO.new("source-detection-cleaned"),
       filename: "detection.png",
-      content_type: "image/png"
-    )
-    detection.cleaned_working_photo.attach(
-      io: StringIO.new("source-detection-working"),
-      filename: "detection-working.png",
       content_type: "image/png"
     )
 
@@ -317,9 +302,7 @@ class AccountSnapshotWorkflowTest < ActiveSupport::TestCase
       clean_image_error_message: nil,
       clean_image_provider: "openrouter",
       clean_image_model: "clean-v1",
-      clean_image_generated_at: Time.zone.parse("2026-05-20 10:20:00"),
-      clean_image_variant: "cleaned",
-      clean_image_cutout_fallback: false
+      clean_image_generated_at: Time.zone.parse("2026-05-20 10:20:00")
     )
     item.photo.attach(
       io: StringIO.new("source-item-photo"),
@@ -329,11 +312,6 @@ class AccountSnapshotWorkflowTest < ActiveSupport::TestCase
     item.cleaned_photo.attach(
       io: StringIO.new("source-item-cleaned"),
       filename: "item-cleaned.png",
-      content_type: "image/png"
-    )
-    item.cleaned_working_photo.attach(
-      io: StringIO.new("source-item-working"),
-      filename: "item-working.png",
       content_type: "image/png"
     )
 

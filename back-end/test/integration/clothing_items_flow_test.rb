@@ -102,8 +102,6 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_equal "preview-clean-source.png", created_item.photo.blob.filename.to_s
     assert_equal "preview-clean-result.png", created_item.cleaned_photo.blob.filename.to_s
     assert_equal "succeeded", response_json["clean_image_status"]
-    assert_equal "cleaned", response_json["clean_image_variant"]
-    assert_equal false, response_json["clean_image_cutout_fallback"]
     assert_match %r{/rails/active_storage/}, response_json["original_image_url"]
     assert_equal response_json["cleaned_image_url"], response_json["image_url"]
   end
@@ -229,8 +227,6 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_match(/crop\.png\z/, created_item.photo.blob.filename.to_s)
     assert_equal "verified-shirt-clean.png", created_item.cleaned_photo.blob.filename.to_s
     assert_equal "succeeded", response_json["clean_image_status"]
-    assert_equal "cleaned", response_json["clean_image_variant"]
-    assert_equal false, response_json["clean_image_cutout_fallback"]
     assert_equal response_json["cleaned_image_url"], response_json["image_url"]
     assert_equal upload.id, created_item.source_outfit_upload_id
     assert_equal detection.id, created_item.source_outfit_detection_id
@@ -345,12 +341,8 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
 
     @clothing_item.reload
     assert_predicate @clothing_item.cleaned_photo, :attached?
-    assert_predicate @clothing_item.cleaned_working_photo, :attached?
     assert_equal "succeeded", response_json["clean_image_status"]
-    assert_equal "cleaned", response_json["clean_image_variant"]
-    assert_equal false, response_json["clean_image_cutout_fallback"]
     assert_equal response_json["cleaned_image_url"], response_json["image_url"]
-    assert_not_nil response_json["cleaned_working_image_url"]
     assert_equal "Ivory Silk Blouse", captured.dig(:metadata_context, :name)
     assert_equal "Maison North", captured.dig(:metadata_context, :brand)
   end
@@ -383,10 +375,8 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
   test "can generate a transparent png for an existing cleaned clothing item" do
     @clothing_item.photo.attach(item_photo_upload_png)
     @clothing_item.cleaned_photo.attach(item_photo_upload_png(original_filename: "already-cleaned.png"))
-    @clothing_item.cleaned_working_photo.attach(item_photo_upload_png(original_filename: "already-cleaned-working.png"))
     @clothing_item.update!(
       clean_image_status: :succeeded,
-      clean_image_variant: "cleaned",
       clean_image_generated_at: Time.current
     )
 
@@ -398,11 +388,9 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
 
     @clothing_item.reload
     assert_predicate @clothing_item.cleaned_photo, :attached?
-    assert_predicate @clothing_item.cleaned_working_photo, :attached?
     assert_equal "succeeded", response_json["clean_image_status"]
-    assert_equal "transparent", response_json["clean_image_variant"]
-    assert_equal false, response_json["clean_image_cutout_fallback"]
     assert_equal response_json["cleaned_image_url"], response_json["image_url"]
+    assert_match(/transparent\.png\z/, @clothing_item.cleaned_photo.blob.filename.to_s)
   end
 
   test "can save a staged cleaned photo without removing the original item photo" do
@@ -425,7 +413,6 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_predicate @clothing_item.photo, :attached?
     assert_predicate @clothing_item.cleaned_photo, :attached?
     assert_equal "succeeded", response_json["clean_image_status"]
-    assert_equal "cleaned", response_json["clean_image_variant"]
     assert_equal response_json["cleaned_image_url"], response_json["image_url"]
   end
 
@@ -509,7 +496,7 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     OpenrouterImageCleaner.singleton_class.send(:define_method, :call, original)
   end
 
-  def with_transparent_generator_stub(image_variant: "transparent", cutout_fallback: false)
+  def with_transparent_generator_stub
     original = TransparentPngVariantGenerator.method(:call)
     fixture_path = file_fixture("item-photo.png")
 
@@ -524,9 +511,7 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
       {
         tempfile: tempfile,
         filename: "#{filename_root}-transparent.png",
-        content_type: "image/png",
-        image_variant: image_variant,
-        cutout_fallback: cutout_fallback
+        content_type: "image/png"
       }
     end
 

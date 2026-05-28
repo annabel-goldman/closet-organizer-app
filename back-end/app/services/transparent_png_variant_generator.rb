@@ -1,6 +1,6 @@
 require "tempfile"
-class TransparentPngVariantGenerator
 
+class TransparentPngVariantGenerator
   def self.call(image_source, filename_root:, temporary_files: [])
     new(image_source, filename_root: filename_root, temporary_files: temporary_files).call
   end
@@ -23,9 +23,7 @@ class TransparentPngVariantGenerator
       {
         tempfile: transparent_file,
         filename: transparent_result.fetch(:filename),
-        content_type: transparent_result.fetch(:content_type),
-        image_variant: "transparent",
-        cutout_fallback: false
+        content_type: transparent_result.fetch(:content_type)
       }
     end
   end

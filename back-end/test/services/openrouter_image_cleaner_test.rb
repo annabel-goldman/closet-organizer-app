@@ -1,7 +1,7 @@
 require "test_helper"
 
 class OpenrouterImageCleanerTest < ActiveSupport::TestCase
-  test "generation prompt requests an exact high-contrast removable studio backdrop" do
+  test "generation prompt tells the model to choose white or charcoal based on garment contrast" do
     cleaner = OpenrouterImageCleaner.new(
       Rack::Test::UploadedFile.new(file_fixture("item-photo.png"), "image/png"),
       metadata_context: {
@@ -10,69 +10,18 @@ class OpenrouterImageCleanerTest < ActiveSupport::TestCase
       }
     )
 
-    backdrop = cleaner.send(:selected_backdrop, file_fixture("item-photo.png").to_s)
-    prompt = cleaner.send(:generation_prompt, backdrop)
+    prompt = cleaner.send(:generation_prompt)
 
-    assert_includes prompt, "uniform solid chroma-style studio backdrop in exactly"
-    assert_includes prompt, "flat matte color from edge to edge"
-    assert_includes prompt, "all four image corners contain only the backdrop color"
-    assert_includes prompt, "Do not substitute a different backdrop color"
+    assert_includes prompt, "only one of these two options: paper white or deep charcoal"
+    assert_includes prompt, "If the garment is light-colored, close to white"
+    assert_includes prompt, "Otherwise choose a paper-white background"
+    assert_includes prompt, "flat and uniform from edge to edge"
+    assert_includes prompt, "Leave a clear visible margin of background"
+    assert_includes prompt, "Do not substitute a different background color"
     assert_includes prompt, "Do not add any cast shadow"
-    assert_includes prompt, "no shadow silhouette"
+    assert_includes prompt, "Minimize harsh shadows, deep shading, and strong contrast on the garment itself"
+    assert_includes prompt, "avoid dark shadowed regions on the garment that could blend into the background"
+    assert_includes prompt, "no gradient, texture, wrinkles, floor line"
     assert_includes prompt, "Category: shirt"
-  end
-
-  test "backdrop selector uses the uploaded image colors when metadata is sparse" do
-    source = Tempfile.new([ "blue-garment-source", ".png" ])
-    source.binmode
-
-    MiniMagick::Tool.new(image_magick_command_name) do |command|
-      command.size "48x48"
-      command.xc "white"
-      command.fill "#315fae"
-      command.draw "rectangle 10,6 37,41"
-      command << source.path
-    end
-    source.rewind
-
-    backdrop = ImageCleanBackdropSelector.call(
-      prompt_context: {},
-      metadata_context: {},
-      source_path: source.path
-    )
-
-    assert_equal "sunflower yellow", backdrop.fetch(:name)
-  ensure
-    source&.close!
-  end
-
-  test "backdrop selector avoids the green safety backdrop for green garments" do
-    source = Tempfile.new([ "green-garment-source", ".png" ])
-    source.binmode
-
-    MiniMagick::Tool.new(image_magick_command_name) do |command|
-      command.size "48x48"
-      command.xc "white"
-      command.fill "#4f8d45"
-      command.draw "rectangle 10,6 37,41"
-      command << source.path
-    end
-    source.rewind
-
-    backdrop = ImageCleanBackdropSelector.call(
-      prompt_context: {},
-      metadata_context: {},
-      source_path: source.path
-    )
-
-    assert_includes [ "raspberry red", "sunflower yellow" ], backdrop.fetch(:name)
-  ensure
-    source&.close!
-  end
-
-  private
-
-  def image_magick_command_name
-    MiniMagick.imagemagick7? ? "magick" : "convert"
   end
 end

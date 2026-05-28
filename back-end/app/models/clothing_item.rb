@@ -4,9 +4,6 @@ class ClothingItem < ApplicationRecord
   has_many :outfits, through: :outfit_items
   has_one_attached :photo
   has_one_attached :cleaned_photo
-  has_one_attached :cleaned_working_photo
-  attribute :clean_image_cutout_fallback, :boolean, default: false
-  after_initialize :set_clean_image_defaults
   before_validation :apply_defaults, on: :create
   before_validation :normalize_category
   before_validation :normalize_tags
@@ -41,14 +38,12 @@ class ClothingItem < ApplicationRecord
 
   def source_photo_for_cleaning
     return photo if photo.attached?
-    return cleaned_working_photo if cleaned_working_photo.attached?
+    return cleaned_photo if cleaned_photo.attached?
 
-    display_photo_attachment
+    nil
   end
 
   def source_photo_for_transparent_png
-    return cleaned_working_photo if cleaned_working_photo.attached?
-
     cleaned_photo.attached? ? cleaned_photo : nil
   end
 
@@ -86,10 +81,5 @@ class ClothingItem < ApplicationRecord
 
   def normalize_category
     self.category = category.to_s.strip.downcase.presence
-  end
-
-  def set_clean_image_defaults
-    self[:clean_image_status] = self.class.clean_image_statuses[:idle] if self[:clean_image_status].nil?
-    self[:clean_image_cutout_fallback] = false if self[:clean_image_cutout_fallback].nil?
   end
 end

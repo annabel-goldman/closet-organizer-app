@@ -1,4 +1,4 @@
-import { MutableRefObject, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ClothingItemFormValues,
   createCleanPreviewFile,
@@ -7,9 +7,11 @@ import {
   fetchImageFileFromUrl,
   OutfitDetection,
 } from "./closet";
-import { PendingCleanMode, StagedCleanPreviewResult } from "./useManualCreateAiFlow";
+import { PendingCleanMode } from "./useManualCreateAiFlow";
 
-export interface StagedDetectionCleanPreview extends StagedCleanPreviewResult {
+export interface StagedDetectionCleanPreview {
+  file: File;
+  imageKind: "cleaned" | "transparent";
   previewUrl: string;
 }
 
@@ -32,7 +34,7 @@ export function useDetectionAiFlow({
     Record<number, StagedDetectionCleanPreview>
   >({});
   const stagedDetectionCleanPreviewsRef = useRef<Record<number, StagedDetectionCleanPreview>>({});
-  const pendingDetectionCleanPromisesRef = useRef<Record<number, Promise<StagedCleanPreviewResult>>>({});
+  const pendingDetectionCleanPromisesRef = useRef<Record<number, Promise<File>>>({});
   const pendingDetectionCleanModesRef = useRef<Record<number, PendingCleanMode>>({});
 
   useEffect(() => {
@@ -69,11 +71,7 @@ export function useDetectionAiFlow({
     clearAllStagedDetectionCleanPreviews();
   }
 
-  function setStagedDetectionCleanPreviewWithDetails(
-    detectionId: number,
-    file: File | null,
-    details: Pick<StagedDetectionCleanPreview, "cleanImageCutoutFallback" | "cleanImageVariant" | "workingFile"> | null,
-  ) {
+  function setStagedDetectionCleanPreview(detectionId: number, file: File | null) {
     setStagedDetectionCleanPreviews((current) => {
       const previousPreview = current[detectionId];
       if (previousPreview) {
@@ -89,11 +87,9 @@ export function useDetectionAiFlow({
       return {
         ...current,
         [detectionId]: {
-          cleanImageCutoutFallback: details?.cleanImageCutoutFallback ?? false,
-          cleanImageVariant: details?.cleanImageVariant ?? "cleaned",
           file,
+          imageKind: "cleaned",
           previewUrl: URL.createObjectURL(file),
-          workingFile: details?.workingFile ?? null,
         },
       };
     });
@@ -103,8 +99,8 @@ export function useDetectionAiFlow({
     return stagedDetectionCleanPreviews[detection.id]?.previewUrl ?? detection.cleaned_image_url ?? null;
   }
 
-  function detectionCleanImageVariant(detection: OutfitDetection) {
-    return stagedDetectionCleanPreviews[detection.id]?.cleanImageVariant ?? detection.clean_image_variant ?? null;
+  function detectionImageKind(detection: OutfitDetection) {
+    return stagedDetectionCleanPreviews[detection.id]?.imageKind ?? (detection.cleaned_image_url ? "cleaned" : null);
   }
 
   async function handleCleanDetectionImage(detection: OutfitDetection) {
@@ -122,12 +118,7 @@ export function useDetectionAiFlow({
       const stagedPreview = stagedDetectionCleanPreviewsRef.current[detectionId];
 
       if (stagedPreview) {
-        sourcePhoto = stagedPreview.workingFile ?? stagedPreview.file;
-      } else if (detection.cleaned_working_image_url) {
-        sourcePhoto = await fetchImageFileFromUrl(
-          detection.cleaned_working_image_url,
-          `${detection.suggested_name || detection.category}-cleaned-working.png`,
-        );
+        sourcePhoto = stagedPreview.file;
       } else if (detection.cleaned_image_url) {
         sourcePhoto = await fetchImageFileFromUrl(
           detection.cleaned_image_url,
@@ -163,10 +154,20 @@ export function useDetectionAiFlow({
 
       delete pendingDetectionCleanPromisesRef.current[detectionId];
       delete pendingDetectionCleanModesRef.current[detectionId];
-      setStagedDetectionCleanPreviewWithDetails(detectionId, cleanedPreview.file, {
-        cleanImageCutoutFallback: cleanedPreview.cleanImageCutoutFallback,
-        cleanImageVariant: cleanedPreview.cleanImageVariant,
-        workingFile: cleanedPreview.workingFile,
+      setStagedDetectionCleanPreviews((current) => {
+        const previousPreview = current[detectionId];
+        if (previousPreview) {
+          URL.revokeObjectURL(previousPreview.previewUrl);
+        }
+
+        return {
+          ...current,
+          [detectionId]: {
+            file: cleanedPreview,
+            imageKind: "cleaned",
+            previewUrl: URL.createObjectURL(cleanedPreview),
+          },
+        };
       });
     } catch (error) {
       delete pendingDetectionCleanPromisesRef.current[detectionId];
@@ -197,17 +198,11 @@ export function useDetectionAiFlow({
 
     try {
       let sourcePhoto: File | null = null;
+      const stagedPreview = stagedDetectionCleanPreviewsRef.current[detectionId];
 
-      if (stagedDetectionCleanPreviewsRef.current[detectionId]?.cleanImageVariant === "cleaned") {
-        sourcePhoto =
-          stagedDetectionCleanPreviewsRef.current[detectionId].workingFile
-          ?? stagedDetectionCleanPreviewsRef.current[detectionId].file;
-      } else if (detection.cleaned_working_image_url && detection.clean_image_variant === "cleaned") {
-        sourcePhoto = await fetchImageFileFromUrl(
-          detection.cleaned_working_image_url,
-          `${detection.suggested_name || detection.category}-cleaned-working.png`,
-        );
-      } else if (detection.cleaned_image_url && detection.clean_image_variant === "cleaned") {
+      if (stagedPreview?.imageKind === "cleaned") {
+        sourcePhoto = stagedPreview.file;
+      } else if (detection.cleaned_image_url) {
         sourcePhoto = await fetchImageFileFromUrl(
           detection.cleaned_image_url,
           `${detection.suggested_name || detection.category}-cleaned.png`,
@@ -219,10 +214,21 @@ export function useDetectionAiFlow({
       }
 
       const transparentPreview = await createTransparentPreviewFile(sourcePhoto);
-      setStagedDetectionCleanPreviewWithDetails(detectionId, transparentPreview.file, {
-        cleanImageCutoutFallback: transparentPreview.cleanImageCutoutFallback,
-        cleanImageVariant: transparentPreview.cleanImageVariant,
-        workingFile: stagedDetectionCleanPreviewsRef.current[detectionId]?.workingFile ?? sourcePhoto,
+
+      setStagedDetectionCleanPreviews((current) => {
+        const previousPreview = current[detectionId];
+        if (previousPreview) {
+          URL.revokeObjectURL(previousPreview.previewUrl);
+        }
+
+        return {
+          ...current,
+          [detectionId]: {
+            file: transparentPreview,
+            imageKind: "transparent",
+            previewUrl: URL.createObjectURL(transparentPreview),
+          },
+        };
       });
     } catch (error) {
       setDetectionCleanErrors((current) => ({
@@ -242,15 +248,15 @@ export function useDetectionAiFlow({
     cleanedDetectionImageUrl,
     cleaningDetectionIds,
     clearAllStagedDetectionCleanPreviews,
+    detectionImageKind,
     detectionCleanErrors,
-    detectionCleanImageVariant,
     handleCleanDetectionImage,
     handleMakeDetectionTransparent,
     makingDetectionTransparentIds,
     pendingDetectionCleanModesRef,
     pendingDetectionCleanPromisesRef,
     resetDetectionAiState,
-    setStagedDetectionCleanPreviewWithDetails,
+    setStagedDetectionCleanPreview,
     stagedDetectionCleanPreviews,
   };
 }

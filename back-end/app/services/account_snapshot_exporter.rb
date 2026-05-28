@@ -44,10 +44,10 @@ class AccountSnapshotExporter
   attr_reader :email, :output_path, :output_io, :attachment_copier
 
   def serialized_records_for(user, attachment_payloads:)
-    clothing_items = user.clothing_items.with_attached_photo.with_attached_cleaned_photo.with_attached_cleaned_working_photo.order(:id).to_a
+    clothing_items = user.clothing_items.with_attached_photo.with_attached_cleaned_photo.order(:id).to_a
     outfits = user.outfits.includes(:outfit_items).order(:id).to_a
     outfit_uploads = user.outfit_uploads.with_attached_source_photo.order(:id).to_a
-    outfit_detections = OutfitDetection.where(outfit_upload_id: outfit_uploads.map(&:id)).with_attached_cleaned_photo.with_attached_cleaned_working_photo.order(:id).to_a
+    outfit_detections = OutfitDetection.where(outfit_upload_id: outfit_uploads.map(&:id)).with_attached_cleaned_photo.order(:id).to_a
 
     attachments = []
 
@@ -66,13 +66,6 @@ class AccountSnapshotExporter
             record_source_id: item.id,
             attachment_role: "cleaned_photo",
             attachment: item.cleaned_photo,
-            attachment_payloads: attachment_payloads
-          ),
-          attachment_copier.export_attachment(
-            record_type: "ClothingItem",
-            record_source_id: item.id,
-            attachment_role: "cleaned_working_photo",
-            attachment: item.cleaned_working_photo,
             attachment_payloads: attachment_payloads
           )
         ].compact)
@@ -93,8 +86,6 @@ class AccountSnapshotExporter
             "clean_image_provider" => item.clean_image_provider,
             "clean_image_model" => item.clean_image_model,
             "clean_image_generated_at" => serialized_time(item.clean_image_generated_at),
-            "clean_image_variant" => item.clean_image_variant,
-            "clean_image_cutout_fallback" => item.clean_image_cutout_fallback,
             "created_at" => serialized_time(item.created_at),
             "updated_at" => serialized_time(item.updated_at)
           }
@@ -162,13 +153,6 @@ class AccountSnapshotExporter
           attachment: detection.cleaned_photo,
           attachment_payloads: attachment_payloads
         )
-        attachments << attachment_copier.export_attachment(
-          record_type: "OutfitDetection",
-          record_source_id: detection.id,
-          attachment_role: "cleaned_working_photo",
-          attachment: detection.cleaned_working_photo,
-          attachment_payloads: attachment_payloads
-        )
 
         {
           "source_record_id" => detection.id,
@@ -205,8 +189,6 @@ class AccountSnapshotExporter
             "clean_image_provider" => detection.clean_image_provider,
             "clean_image_model" => detection.clean_image_model,
             "clean_image_generated_at" => serialized_time(detection.clean_image_generated_at),
-            "clean_image_variant" => detection.clean_image_variant,
-            "clean_image_cutout_fallback" => detection.clean_image_cutout_fallback,
             "created_at" => serialized_time(detection.created_at),
             "updated_at" => serialized_time(detection.updated_at)
           }

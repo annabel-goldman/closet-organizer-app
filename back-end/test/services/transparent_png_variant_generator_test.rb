@@ -1,7 +1,7 @@
 require "test_helper"
 
 class TransparentPngVariantGeneratorTest < ActiveSupport::TestCase
-  test "returns the generated transparent png even when the cutout would have been considered suspicious before" do
+  test "returns the generated transparent png" do
     original = CleanImageBackgroundRemover.method(:call)
     source_file = Tempfile.new([ "cleaned-item", ".png" ])
     source_file.binmode
@@ -32,9 +32,8 @@ class TransparentPngVariantGeneratorTest < ActiveSupport::TestCase
       filename_root: "cleaned-item"
     )
 
-    assert_equal "transparent", result[:image_variant]
-    assert_equal false, result[:cutout_fallback]
     assert_equal "cleaned-item-transparent.png", result[:filename]
+    assert_equal "image/png", result[:content_type]
   ensure
     CleanImageBackgroundRemover.singleton_class.send(:define_method, :call, original)
     source_file.close!
@@ -76,7 +75,6 @@ class TransparentPngVariantGeneratorTest < ActiveSupport::TestCase
       filename_root: "attachment-item"
     )
 
-    assert_equal "transparent", result[:image_variant]
     assert_equal "attachment-item-transparent.png", result[:filename]
     assert_predicate seen_source_path, :present?
   ensure

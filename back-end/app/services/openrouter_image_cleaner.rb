@@ -32,10 +32,9 @@ class OpenrouterImageCleaner
     png_tempfile = nil
 
     with_source_file do |file_path, filename_root, content_type|
-      backdrop = selected_backdrop(file_path)
       response = perform_request(
         model: configured_model,
-        prompt: generation_prompt(backdrop),
+        prompt: generation_prompt,
         data_url: source_photo_data_url(file_path, content_type)
       )
       raw_image_tempfile = tempfile_from_data_url(extract_generated_image_data_url(response), filename_root)
@@ -43,7 +42,7 @@ class OpenrouterImageCleaner
 
       {
         tempfile: png_tempfile,
-        filename: "#{filename_root}-clean-working.png",
+        filename: "#{filename_root}-clean.png",
         filename_root: filename_root,
         content_type: "image/png",
         provider: "openrouter",
@@ -102,7 +101,7 @@ class OpenrouterImageCleaner
     }
   end
 
-  def generation_prompt(backdrop)
+  def generation_prompt
     details = []
     details << "Item name: #{prompt_context[:name]}" if prompt_context[:name].present?
     details << "Category: #{prompt_context[:category]}" if prompt_context[:category].present?
@@ -123,13 +122,17 @@ class OpenrouterImageCleaner
       - Preserve the exact garment identity, including category, silhouette, fit, color, graphics, logos, trim, neckline, sleeve length, and material cues.
       - The output may look like a newly photographed studio product image, but it must still clearly be the same item.
       - Show only one item centered in frame.
-      - Use one single uniform solid chroma-style studio backdrop in exactly #{backdrop.fetch(:name)} (#{backdrop.fetch(:hex)}) so it strongly contrasts with the garment and is easy to isolate later.
-      - The background must be a flat matte color from edge to edge with no gradient, texture, wrinkles, floor line, spotlight, vignette, or lighting falloff.
-      - Leave a clear visible margin of backdrop around the entire garment so all four image corners contain only the backdrop color.
-      - Do not substitute a different backdrop color. Do not use a white, cream, beige, gray, black, or near-garment-colored background.
-      - Remove people, body parts, hangers, background clutter, extra garments, props, and any shadow or reflection around the item.
-      - Do not add any cast shadow, floor shadow, contact shadow, drop shadow, glow, vignette, or halo behind or underneath the garment.
-      - The garment should appear evenly lit and isolated, with crisp edges and no shadow silhouette that would interfere with later background removal.
+      - Use a single clean plain studio background with only one of these two options: paper white or deep charcoal.
+      - If the garment is light-colored, close to white, or needs darker contrast to stay clearly visible, choose a deep charcoal background.
+      - Otherwise choose a paper-white background.
+      - The background must be flat and uniform from edge to edge with no gradient, texture, wrinkles, floor line, spotlight, vignette, or lighting falloff.
+      - Leave a clear visible margin of background around the entire garment so the item remains easy to read on a closet card.
+      - Do not substitute a different background color.
+      - Remove people, body parts, hangers, background clutter, extra garments, and props.
+      - Do not add any cast shadow, floor shadow, contact shadow, drop shadow, glow, vignette, reflection, or halo behind or underneath the garment.
+      - The garment should appear evenly lit and isolated with crisp edges.
+      - Minimize harsh shadows, deep shading, and strong contrast on the garment itself.
+      - Preserve natural seam definition and texture, but avoid dark shadowed regions on the garment that could blend into the background.
       - Keep the style photorealistic and suitable for an ecommerce product card.
       - Do not invent a different garment or change the dominant color/pattern.
       - Treat the structured fields and description below as identity constraints from an earlier identification pass.
@@ -171,14 +174,6 @@ class OpenrouterImageCleaner
     end
 
     content
-  end
-
-  def selected_backdrop(source_path)
-    @selected_backdrop ||= ImageCleanBackdropSelector.call(
-      prompt_context: prompt_context,
-      metadata_context: metadata_context,
-      source_path: source_path
-    )
   end
 
   def extract_generated_image_data_url(response)

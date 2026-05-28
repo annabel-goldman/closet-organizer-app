@@ -12,8 +12,7 @@ class TransparentPngAttachmentGenerator
   def call
     record.update!(
       clean_image_status: :processing,
-      clean_image_error_message: nil,
-      clean_image_cutout_fallback: false
+      clean_image_error_message: nil
     )
 
     filename_root = source_filename_root
@@ -32,9 +31,7 @@ class TransparentPngAttachmentGenerator
     record.update!(
       clean_image_status: :succeeded,
       clean_image_error_message: nil,
-      clean_image_generated_at: Time.current,
-      clean_image_variant: variant.fetch(:image_variant),
-      clean_image_cutout_fallback: variant.fetch(:cutout_fallback)
+      clean_image_generated_at: Time.current
     )
   rescue StandardError => error
     record.update(

@@ -26,7 +26,7 @@ interface CreateItemImageModeProps {
   autofillingDetectionId: number | null;
   brandSuggestions?: string[];
   cleaningDetectionIds: number[];
-  detectionCleanImageVariant: (detection: OutfitDetection) => "cleaned" | "transparent" | null;
+  detectionImageKind: (detection: OutfitDetection) => "cleaned" | "transparent" | null;
   detectionCleanErrors: Record<number, string>;
   detections: OutfitDetection[];
   errorMessage: string;
@@ -41,10 +41,10 @@ interface CreateItemImageModeProps {
   onBack: () => void;
   onClearImageSelection: () => void;
   onCleanDetectionImage: (detection: OutfitDetection) => void;
-  onMakeDetectionTransparent: (detection: OutfitDetection) => void;
   onDetectItems: () => void;
   onDraftChange: (detectionId: number, nextValues: ClothingItemFormValues) => void;
   onFileChange: (file: File | null) => void;
+  onMakeDetectionTransparent: (detection: OutfitDetection) => void;
   onRequestDetectionAutofill: (detection: OutfitDetection) => void;
   onSaveSelectedItems: () => void;
   onToggleSelection: (detection: OutfitDetection) => void;
@@ -61,7 +61,7 @@ export function CreateItemImageMode({
   autofillingDetectionId,
   brandSuggestions = [],
   cleaningDetectionIds,
-  detectionCleanImageVariant,
+  detectionImageKind,
   detectionCleanErrors,
   detections,
   errorMessage,
@@ -76,10 +76,10 @@ export function CreateItemImageMode({
   onBack,
   onClearImageSelection,
   onCleanDetectionImage,
-  onMakeDetectionTransparent,
   onDetectItems,
   onDraftChange,
   onFileChange,
+  onMakeDetectionTransparent,
   onRequestDetectionAutofill,
   onSaveSelectedItems,
   onToggleSelection,
@@ -155,9 +155,6 @@ export function CreateItemImageMode({
   const previewDetectionCleanedImageUrl = previewDetection
     ? getDetectionCleanedImageUrl(previewDetection)
     : null;
-  const previewDetectionCleanVariant = previewDetection
-    ? detectionCleanImageVariant(previewDetection)
-    : null;
   const detailsDetectionCleanedImageUrl = detailsDetection
     ? getDetectionCleanedImageUrl(detailsDetection)
     : null;
@@ -167,6 +164,9 @@ export function CreateItemImageMode({
   const focusedIsMakingTransparent = detailsDetection
     ? makingDetectionTransparentIds.includes(detailsDetection.id)
     : false;
+  const previewDetectionImageKind = previewDetection
+    ? detectionImageKind(previewDetection)
+    : null;
   const focusedIsAutofilling = detailsDetection
     ? autofillingDetectionId === detailsDetection.id
     : false;
@@ -232,7 +232,7 @@ export function CreateItemImageMode({
       <UploadWorkspace
         expandedPreview={expandedPreview}
         imageUrl={previewDetectionCleanedImageUrl ?? (isSourceFocused ? sourceImageUrl : null)}
-        isPreviewProcessing={focusedIsCleaning}
+        isPreviewProcessing={focusedIsCleaning || focusedIsMakingTransparent}
         onPreviewClick={() => inputRef.current?.click()}
         onPreviewClear={selectedFileName ? onClearImageSelection : undefined}
         onPreviewEdit={selectedFileName ? () => inputRef.current?.click() : undefined}
@@ -259,7 +259,7 @@ export function CreateItemImageMode({
               />
               <AiCleanImageButton
                 className="size-11 border border-white/75 bg-white/70 p-0 shadow-sm backdrop-blur-sm hover:bg-white/85"
-                disabled={focusedIsCleaning || previewDetectionCleanVariant !== "cleaned"}
+                disabled={focusedIsCleaning || previewDetectionImageKind !== "cleaned"}
                 iconOnly
                 isLoading={focusedIsMakingTransparent}
                 label="Make transparent PNG"

@@ -149,9 +149,7 @@ class AccountSnapshotApplier
         clean_image_error_message: attributes["clean_image_error_message"],
         clean_image_provider: attributes["clean_image_provider"],
         clean_image_model: attributes["clean_image_model"],
-        clean_image_generated_at: attributes["clean_image_generated_at"],
-        clean_image_variant: attributes["clean_image_variant"],
-        clean_image_cutout_fallback: attributes["clean_image_cutout_fallback"]
+        clean_image_generated_at: attributes["clean_image_generated_at"]
       )
       target_detection.save!(validate: false)
       attach_record_attachments!(
@@ -182,9 +180,7 @@ class AccountSnapshotApplier
         clean_image_error_message: attributes["clean_image_error_message"],
         clean_image_provider: attributes["clean_image_provider"],
         clean_image_model: attributes["clean_image_model"],
-        clean_image_generated_at: attributes["clean_image_generated_at"],
-        clean_image_variant: attributes["clean_image_variant"],
-        clean_image_cutout_fallback: attributes["clean_image_cutout_fallback"]
+        clean_image_generated_at: attributes["clean_image_generated_at"]
       )
       target_item.save!(validate: false)
       attach_record_attachments!(
