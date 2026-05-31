@@ -100,6 +100,7 @@ Notes:
 - `/` resolves to `clothing_items#index` inside the JSON scope.
 - HTML browser requests for SPA routes fall back to the frontend shell.
 - `ApplicationController` returns `404` JSON for missing records and `422` JSON for validation failures.
+- In development and test only, `ApplicationController` also accepts `X-Test-User-Id` so local browser QA can impersonate an existing user without going through Google OAuth on every run.
 - Clothing item create/update requests can include `clothing_item[photo]` and `clothing_item[cleaned_photo]` in the same multipart payload so the frontend can keep the original attached photo while also staging or saving a single AI-cleaned catalog image. The payload can also include `clothing_item[remove_cleaned_photo]`.
 - Text input length is capped at every layer: `app/models/concerns/input_length_policy.rb` exposes the limits (username 60, email 254, item name 120, brand 80, category 60, outfit name 120, notes 2_000, tag 40 chars × 30 per record); the `User`/`ClothingItem`/`Outfit` models validate against the same constants and surface friendly errors; the `AddInputLengthConstraints` migration enforces matching `limit:` and `null: false` constraints at the database. SQL injection is mitigated by ActiveRecord's parameterized queries — the only raw SQL fragment in the app (`where("lower(email) = ?", ...)` in `User`) uses bound placeholders.
 - `GET /users` is paginated via Kaminari. It accepts `page` and `per_page` query params (default 24, max 100) and returns `{ users: [...], meta: { page, per_page, total_pages, total_count } }`. The index payload omits each user's `clothing_items` array and only includes a `clothing_items_count` field; per-user `GET /users/:id` still returns the full items array.
@@ -304,6 +305,9 @@ See [back-end/.env.example](./.env.example) for expected variables.
 - `OPENROUTER_API_KEY` is required for outfit detection, metadata suggestion, and image-cleaning features.
 - `OPENROUTER_MODEL` defaults to `openai/gpt-4.1-mini`.
 - `OPENROUTER_METADATA_MODEL` can override the metadata suggestion model independently.
+- `OPENROUTER_VISION_MAX_TOKENS` defaults to `500` for structured detection and crop-analysis requests.
+- `OPENROUTER_METADATA_MAX_TOKENS` defaults to `300` for item metadata suggestion requests.
+- `OPENROUTER_IMAGE_CLEAN_MAX_TOKENS` defaults to `300` for AI clean-image generation requests.
 - `AI_CLEAN_BACKGROUND_FUZZ` optionally tunes how aggressively the clean-image post-process removes the sampled edge backdrop color. It defaults to `12%`.
 - `AI_CLEAN_SHARPEN` optionally adds a light sharpen pass after background removal to recover edge crispness in the final transparent PNG. It defaults to `0x0.8`.
 - `OUTFIT_CROP_CYCLE_LIMIT` controls refinement and verification retries.

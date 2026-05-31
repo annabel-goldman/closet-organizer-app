@@ -36,6 +36,14 @@ Default dev URL:
 http://127.0.0.1:5173
 ```
 
+If the default OAuth flow is inconvenient during local browser QA, development also supports a local test-user override by visiting a route like:
+
+```text
+http://127.0.0.1:5173/items/new?userId=1&mode=manual&test_user_id=1
+```
+
+The frontend stores that `test_user_id` value in development and sends it as `X-Test-User-Id` on subsequent API and local Active Storage requests.
+
 To run the frontend and backend together, use [start.sh](../start.sh) from the repository root.
 
 ## UI Architecture
@@ -83,6 +91,8 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
 - Item create and edit flows send multipart form data so photos can be uploaded, cropped, removed, or sourced from detected outfit-photo regions.
 - The item editor can request AI metadata suggestions for type, name, brand, and tags, and can request cleaned item imagery for catalog-style presentation; the backend now strips the generated white studio background before returning the final cleaned PNG.
 - A staged AI-cleaned result can be submitted as a single `cleaned_photo` attachment while the original uploaded photo remains available separately.
+- Clicking an image preview now opens a larger editor modal where users can crop to freeform or preset aspect ratios, rotate the image left/right/180 degrees, and use a magic-wand erase tool to remove connected background regions before saving that edited file back into the current flow.
+- The expanded image editor now owns its own local image history: crop, wand erase, and in-modal AI actions can be undone/redone inside the modal, while the larger page-level Undo/Redo controls only represent the final saved image change after `Apply edited image`.
 - Existing item editing is now save-less: metadata fields autosave after a short debounce, metadata blur/selection commits save immediately for smaller history steps, direct image changes save immediately, and the metadata header keeps persistent `Undo` / `Redo` controls for reversing persisted changes.
 - The item image workflow is now two clear steps without a hidden working image. `AI clean image` generates the visible catalog-style image shown to the user directly, and the model chooses either a white or dark-charcoal studio background based on the garment in the uploaded image; `Make transparent PNG` then removes that visible backdrop from the cleaned image when the user wants a transparent result.
 - The AI request lifecycle now uses a shared frontend state model (`idle`, `running`, `succeeded`, `failed`, `invalidated`) instead of each editor screen inventing its own booleans. `closet.ts` remains the only wire-aware API layer, while the editor flows use focused hooks to coordinate local AI preview state.

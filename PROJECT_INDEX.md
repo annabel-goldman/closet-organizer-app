@@ -1,6 +1,6 @@
 # Project Structure Index
 
-Last updated: 2026-05-27
+Last updated: 2026-05-29
 
 This file is intentionally concise and focused on repository structure.
 For the product purpose and problem statement, see `wiki.md`.
@@ -25,7 +25,7 @@ project-closet-organizer/
 ## Backend (`back-end`)
 
 - `app/models`: `user`, `clothing_item`, `outfit`, `outfit_item`, `outfit_upload`, and `outfit_detection`
-- `app/controllers`: auth/session handling, JSON CRUD controllers, outfit collage/layout-aware outfit updates, upload flows, AI clean-image and transparent-PNG helper endpoints, and SPA fallback
+- `app/controllers`: auth/session handling, JSON CRUD controllers, outfit collage/layout-aware outfit updates, upload flows, AI clean-image and transparent-PNG helper endpoints, SPA fallback, and the development/test `X-Test-User-Id` QA auth override in `ApplicationController`
 - `app/presenters`: API payload shaping for users, clothing items, outfits, uploads, and detections, including saved outfit collage layout data
 - `app/services/`: OpenRouter detection, metadata suggestion, crop refinement, crop verification, single-image catalog cleanup with backdrop selection plus transparent-background cleanup, snapshot-based account mirror sync services, one-time user PNG backfill support, incremental prod-item import support, and shared tempfile/image-source helpers
 - `config/routes.rb`: API routes plus HTML fallback routes
@@ -37,11 +37,11 @@ project-closet-organizer/
 
 - `src/app/App.tsx`: route handling, auth-aware layout, and top-level page composition
 - `src/app/components/primitives/`: shared button, select, dropdown, and typography primitives that frontend work should reuse first
-- `src/app/components/`: routed pages, the closet outfit-cart tray, autosaving item editor flows with persistent Undo/Redo, extracted create-item/restricted-state components, and supporting UI
+- `src/app/components/`: routed pages, the closet outfit-cart tray, autosaving item editor flows with persistent Undo/Redo, expanded preview image editing tools, extracted create-item/restricted-state components, and supporting UI
 - `src/app/components/OutfitCollageCanvas.tsx`: saved-outfit collage renderer plus the `react-moveable`-backed edit-modal move/resize/rotate interactions and the shared normalized-layout/stage-aspect contract used by both saved and editable outfit previews
 - `src/app/components/OutfitCollageLayersPanel.tsx`: focused layers sidebar for thumbnail selection plus pointer and keyboard-accessible layer reordering
 - `src/app/lib/routes.ts`: route parsing, navigation helpers, and route guards
-- `src/app/lib/api.ts`: shared request/error helpers for frontend API calls
+- `src/app/lib/api.ts`: shared request/error helpers for frontend API calls, including the development-only `test_user_id` auth override used for local browser QA
 - `src/app/lib/closet.ts`: shared types, formatting helpers, and feature-specific API helpers, including clean-image/transparent-PNG preview and save requests plus metadata-suggestion requests
 - `src/app/lib/useAiActionState.ts`: shared AI action lifecycle state for create/edit image and metadata flows
 - `src/app/lib/useManualCreateAiFlow.ts`: focused manual create-item AI orchestration and staged preview management
