@@ -8,6 +8,7 @@ require "uri"
 class OpenrouterImageCleaner
   DEFAULT_BASE_URL = "https://openrouter.ai/api/v1".freeze
   DEFAULT_MODEL = "google/gemini-2.5-flash-image".freeze
+  DEFAULT_MAX_TOKENS = 300
 
   def self.call(source_photo, prompt_context: {}, reference_photos: [], metadata_context: {})
     new(
@@ -87,6 +88,7 @@ class OpenrouterImageCleaner
     {
       model: model,
       stream: false,
+      max_tokens: configured_max_tokens,
       modalities: %w[image text],
       messages: [
         {
@@ -283,5 +285,15 @@ class OpenrouterImageCleaner
 
   def configured_model
     ENV.fetch("OPENROUTER_IMAGE_CLEAN_MODEL", DEFAULT_MODEL)
+  end
+
+  def configured_max_tokens
+    integer_env("OPENROUTER_IMAGE_CLEAN_MAX_TOKENS", DEFAULT_MAX_TOKENS)
+  end
+
+  def integer_env(name, default)
+    Integer(ENV.fetch(name, default))
+  rescue ArgumentError, TypeError
+    default
   end
 end

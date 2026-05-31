@@ -6,6 +6,7 @@ require "uri"
 class OpenrouterMetadataSuggester
   DEFAULT_BASE_URL = "https://openrouter.ai/api/v1".freeze
   DEFAULT_MODEL = "openai/gpt-4.1-mini".freeze
+  DEFAULT_MAX_TOKENS = 300
 
   def self.call(source_photo, category_hint: nil, reference_photos: [], metadata_context: {})
     new(
@@ -71,7 +72,7 @@ class OpenrouterMetadataSuggester
     {
       model: configured_model,
       temperature: 0.1,
-      max_tokens: 500,
+      max_tokens: configured_max_tokens,
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -248,6 +249,16 @@ class OpenrouterMetadataSuggester
 
   def configured_model
     ENV.fetch("OPENROUTER_METADATA_MODEL", ENV.fetch("OPENROUTER_MODEL", DEFAULT_MODEL))
+  end
+
+  def configured_max_tokens
+    integer_env("OPENROUTER_METADATA_MAX_TOKENS", DEFAULT_MAX_TOKENS)
+  end
+
+  def integer_env(name, default)
+    Integer(ENV.fetch(name, default))
+  rescue ArgumentError, TypeError
+    default
   end
 
   def normalize_category(value)

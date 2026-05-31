@@ -1,6 +1,33 @@
 const DEFAULT_HEADERS = {
   Accept: "application/json",
 };
+const DEV_TEST_USER_STORAGE_KEY = "curated-closet.dev-test-user-id";
+
+function developmentTestUserId() {
+  if (!import.meta.env.DEV || typeof window === "undefined") {
+    return null;
+  }
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const queryUserId = searchParams.get("test_user_id")?.trim();
+  if (queryUserId) {
+    window.localStorage.setItem(DEV_TEST_USER_STORAGE_KEY, queryUserId);
+    return queryUserId;
+  }
+
+  return window.localStorage.getItem(DEV_TEST_USER_STORAGE_KEY)?.trim() || null;
+}
+
+export function localDevAuthHeaders() {
+  const headers = new Headers();
+  const devTestUserId = developmentTestUserId();
+
+  if (devTestUserId) {
+    headers.set("X-Test-User-Id", devTestUserId);
+  }
+
+  return headers;
+}
 
 async function buildApiError(response: Response) {
   try {
@@ -14,6 +41,7 @@ async function buildApiError(response: Response) {
 
 async function apiRequest(path: string, init: RequestInit = {}) {
   const headers = new Headers(DEFAULT_HEADERS);
+  localDevAuthHeaders().forEach((value, key) => headers.set(key, value));
 
   if (init.headers) {
     new Headers(init.headers).forEach((value, key) => headers.set(key, value));

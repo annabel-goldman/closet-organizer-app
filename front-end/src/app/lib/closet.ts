@@ -1,4 +1,4 @@
-import { requestJson, requestJsonOrNull, requestVoid } from "./api";
+import { localDevAuthHeaders, requestJson, requestJsonOrNull, requestVoid } from "./api";
 import { OutfitCollageLayout } from "./outfitCollage";
 
 const LOCAL_BACKEND_BASE_URL = "http://127.0.0.1:3000";
@@ -736,7 +736,10 @@ export async function createTransparentPreviewFile(photo: File) {
 }
 
 export async function fetchImageFileFromUrl(imageUrl: string, filename?: string) {
-  const response = await fetch(imageUrl, { credentials: "include" });
+  const response = await fetch(imageUrl, {
+    credentials: "include",
+    headers: localDevAuthHeaders(),
+  });
   if (!response.ok) {
     throw new Error("Unable to load the source image for this AI action.");
   }

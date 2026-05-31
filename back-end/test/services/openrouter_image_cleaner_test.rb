@@ -24,4 +24,39 @@ class OpenrouterImageCleanerTest < ActiveSupport::TestCase
     assert_includes prompt, "no gradient, texture, wrinkles, floor line"
     assert_includes prompt, "Category: shirt"
   end
+
+  test "request body applies a conservative default max tokens cap" do
+    cleaner = OpenrouterImageCleaner.new(
+      Rack::Test::UploadedFile.new(file_fixture("item-photo.png"), "image/png")
+    )
+
+    body = cleaner.send(
+      :request_body,
+      model: "google/gemini-2.5-flash-image",
+      prompt: "Clean this image.",
+      data_url: "data:image/png;base64,abc123"
+    )
+
+    assert_equal 300, body[:max_tokens]
+  end
+
+  test "request body honors the image cleaner max tokens override" do
+    original = ENV["OPENROUTER_IMAGE_CLEAN_MAX_TOKENS"]
+    ENV["OPENROUTER_IMAGE_CLEAN_MAX_TOKENS"] = "180"
+
+    cleaner = OpenrouterImageCleaner.new(
+      Rack::Test::UploadedFile.new(file_fixture("item-photo.png"), "image/png")
+    )
+
+    body = cleaner.send(
+      :request_body,
+      model: "google/gemini-2.5-flash-image",
+      prompt: "Clean this image.",
+      data_url: "data:image/png;base64,abc123"
+    )
+
+    assert_equal 180, body[:max_tokens]
+  ensure
+    ENV["OPENROUTER_IMAGE_CLEAN_MAX_TOKENS"] = original
+  end
 end

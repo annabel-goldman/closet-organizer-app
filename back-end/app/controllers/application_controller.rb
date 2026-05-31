@@ -123,7 +123,7 @@ class ApplicationController < ActionController::API
   end
 
   def test_user_id
-    return unless Rails.env.test?
+    return unless Rails.env.test? || Rails.env.development?
 
     request.headers["X-Test-User-Id"].presence
   end

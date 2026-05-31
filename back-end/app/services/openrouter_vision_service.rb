@@ -5,6 +5,7 @@ require "uri"
 
 class OpenrouterVisionService
   DEFAULT_BASE_URL = "https://openrouter.ai/api/v1".freeze
+  DEFAULT_MAX_TOKENS = 500
 
   def initialize(outfit_upload)
     @outfit_upload = outfit_upload
@@ -29,7 +30,7 @@ class OpenrouterVisionService
     {
       model: model,
       temperature: 0.1,
-      max_tokens: 900,
+      max_tokens: configured_max_tokens,
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -181,5 +182,15 @@ class OpenrouterVisionService
 
   def base_url
     ENV.fetch("OPENROUTER_BASE_URL", DEFAULT_BASE_URL)
+  end
+
+  def configured_max_tokens
+    integer_env("OPENROUTER_VISION_MAX_TOKENS", DEFAULT_MAX_TOKENS)
+  end
+
+  def integer_env(name, default)
+    Integer(ENV.fetch(name, default))
+  rescue ArgumentError, TypeError
+    default
   end
 end
