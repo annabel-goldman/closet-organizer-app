@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
+import type {
+  ExpandedImageEditorApplyContext,
+  ExpandedImageEditorImageActions,
+} from "./ExpandedImageEditor";
 import { ItemHeroPreview } from "./ItemHeroPreview";
 
 interface UploadWorkspaceProps {
@@ -12,6 +16,11 @@ interface UploadWorkspaceProps {
   previewAriaLabel?: string;
   previewBackgroundDecoration?: ReactNode;
   previewMedia?: ReactNode;
+  previewEditor?: {
+    getEditableFile: () => Promise<File | null>;
+    imageActions?: ExpandedImageEditorImageActions;
+    onApply: (file: File, context: ExpandedImageEditorApplyContext) => Promise<void> | void;
+  };
   isPreviewProcessing?: boolean;
   previewTopAction?: ReactNode;
   previewLabel: string;
@@ -30,6 +39,7 @@ export function UploadWorkspace({
   previewAriaLabel,
   previewBackgroundDecoration,
   previewMedia,
+  previewEditor,
   isPreviewProcessing,
   previewTopAction,
   previewLabel,
@@ -50,6 +60,7 @@ export function UploadWorkspace({
           previewAriaLabel={previewAriaLabel}
           previewBackgroundDecoration={previewBackgroundDecoration}
           previewMedia={previewMedia}
+          previewEditor={previewEditor}
           isPreviewProcessing={isPreviewProcessing}
           previewTopAction={previewTopAction}
           primaryDetail={previewPrimaryDetail}

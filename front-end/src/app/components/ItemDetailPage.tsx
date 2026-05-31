@@ -5,12 +5,12 @@ import {
   buildItemPreviewMetadata,
   ClothingItem,
   ClothingItemFormValues,
+  createCleanPreviewFile,
+  createTransparentPreviewFile,
   destroyClothingItem,
   fetchImageFileFromUrl,
   fetchClothingItem,
-  generateClothingItemCleanImage,
   generateClothingItemMetadataSuggestions,
-  generateClothingItemTransparentPng,
   mergeMetadataSuggestion,
   parseTagInput,
   previewMetadataSuggestions,
@@ -23,7 +23,6 @@ import {
   hasClothingItemFormErrors,
 } from "../lib/itemFormValidation";
 import { usePageData } from "../lib/usePageData";
-import { AiCleanImageButton } from "./AiCleanImageButton";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import { ItemEditorWorkspace } from "./ItemEditorWorkspace";
 import { ItemMetadataFields } from "./ItemMetadataFields";
@@ -44,6 +43,7 @@ import {
 import { useItemPhotoState } from "../lib/useItemPhotoState";
 import { useUndoRedoShortcuts } from "../lib/useUndoRedoShortcuts";
 import { useAiActionState } from "../lib/useAiActionState";
+import type { ExpandedImageEditorApplyContext } from "./ExpandedImageEditor";
 
 const AUTOSAVE_DELAY_MS = 700;
 
@@ -97,8 +97,6 @@ export function ItemDetailPage({
     load: (signal) => fetchClothingItem(itemId, signal),
     shouldUseInitialData: shouldUseInitialItem,
   });
-  const cleanImageAction = useAiActionState();
-  const transparentPngAction = useAiActionState();
   const metadataAutofillAction = useAiActionState();
 
   useEffect(() => {
@@ -145,8 +143,6 @@ export function ItemDetailPage({
   const hasPendingImageChange = Boolean(photoState.selectedFile) || photoState.removeExisting;
   const isBusy =
     isSaving
-    || cleanImageAction.isRunning
-    || transparentPngAction.isRunning
     || metadataAutofillAction.isRunning
     || isUndoing;
   const previewName = formValues?.name.trim() || item?.name?.trim() || "Untitled Item";
@@ -162,12 +158,6 @@ export function ItemDetailPage({
           ? "Changes pending..."
           : "All changes saved");
   const canRunAiActions = Boolean(item && !photoState.removeExisting && !photoState.selectedFile && item.image_url);
-  const canMakeTransparent = Boolean(
-    item
-    && !photoState.removeExisting
-    && !photoState.selectedFile
-    && item.cleaned_image_url,
-  );
   const currentFormSignature = JSON.stringify(formValues ?? {});
 
   useEffect(() => {
@@ -324,19 +314,53 @@ export function ItemDetailPage({
     }
   }
 
-  async function handleEditImageFileChange(file: File | null) {
+  async function handleEditImageFileChange(
+    file: File | null,
+    context: ExpandedImageEditorApplyContext = { imageKind: "base" },
+  ) {
     if (!file || !item) {
       return;
     }
 
     photoState.updateSelectedFile(file);
+    const photoOptions =
+      context.imageKind === "base"
+        ? { photo: file, removeCleanedPhoto: Boolean(item.cleaned_image_url) }
+        : { cleanedPhoto: file };
+
     void persistImageChange(
-      { photo: file },
+      photoOptions,
       {
         revertLocalPreview: () => photoState.reset(),
         successMessage: "Image saved.",
       },
     );
+  }
+
+  async function getPreviewEditorFile() {
+    if (photoState.selectedFile) {
+      return photoState.selectedFile;
+    }
+
+    const sourceUrl = photoState.imageUrl ?? itemRef.current?.image_url;
+    if (!sourceUrl) {
+      return null;
+    }
+
+    return fetchImageFileFromUrl(
+      sourceUrl,
+      `${(formValuesRef.current?.name || itemRef.current?.name || "closet-item").trim() || "closet-item"}-edit-source.png`,
+    );
+  }
+
+  async function createItemEditorCleanImage(file: File) {
+    return createCleanPreviewFile(file, {
+      metadata: formValuesRef.current ?? undefined,
+    });
+  }
+
+  async function createItemEditorTransparentPng(file: File) {
+    return createTransparentPreviewFile(file);
   }
 
   function handlePreviewClear() {
@@ -352,53 +376,6 @@ export function ItemDetailPage({
         successMessage: "Image removed.",
       },
     );
-  }
-
-  async function handleCleanImage() {
-    const currentItem = itemRef.current;
-    const nextValues = formValuesRef.current;
-    if (!currentItem || !nextValues) {
-      return;
-    }
-
-    cleanImageAction.start();
-    setErrorMessage("");
-    setSuccessMessage("");
-
-    try {
-      const updatedItem = await generateClothingItemCleanImage(currentItem.id, nextValues);
-      applyPersistedItem(updatedItem, currentItem, true);
-      setSuccessMessage("AI clean image saved.");
-      cleanImageAction.succeed();
-    } catch (error) {
-      cleanImageAction.fail(
-        error instanceof Error ? error.message : "Unable to create an AI-cleaned item image.",
-      );
-      showRequestError(error, "Unable to create an AI-cleaned item image.");
-    }
-  }
-
-  async function handleMakeTransparent() {
-    const currentItem = itemRef.current;
-    if (!currentItem) {
-      return;
-    }
-
-    transparentPngAction.start();
-    setErrorMessage("");
-    setSuccessMessage("");
-
-    try {
-      const updatedItem = await generateClothingItemTransparentPng(currentItem.id);
-      applyPersistedItem(updatedItem, currentItem, true);
-      setSuccessMessage("Transparent PNG saved.");
-      transparentPngAction.succeed();
-    } catch (error) {
-      transparentPngAction.fail(
-        error instanceof Error ? error.message : "Unable to make a transparent PNG for this item.",
-      );
-      showRequestError(error, "Unable to make a transparent PNG for this item.");
-    }
   }
 
   async function handleAutofillMetadata() {
@@ -639,6 +616,15 @@ export function ItemDetailPage({
       onPreviewClick={() => photoState.inputRef.current?.click()}
       onPreviewClear={handlePreviewClear}
       onPreviewEdit={() => photoState.inputRef.current?.click()}
+      previewEditor={{
+        getEditableFile: getPreviewEditorFile,
+        imageActions: {
+          initialKind: "base",
+          onClean: createItemEditorCleanImage,
+          onMakeTransparent: createItemEditorTransparentPng,
+        },
+        onApply: handleEditImageFileChange,
+      }}
       onSubmit={handleSubmit}
       previewAriaLabel={photoState.imageUrl ? "Preview image" : "Upload photo"}
       previewBackgroundDecoration={
@@ -647,27 +633,7 @@ export function ItemDetailPage({
           strokeWidth={1.1}
         />
       }
-      isPreviewProcessing={cleanImageAction.isRunning || transparentPngAction.isRunning}
-      previewTopAction={
-        <div className="flex flex-col gap-2">
-          <AiCleanImageButton
-            className="size-11 border border-white/75 shadow-sm bg-white/70 p-0 backdrop-blur-sm hover:bg-white/85"
-            disabled={!canRunAiActions || transparentPngAction.isRunning}
-            iconOnly
-            isLoading={cleanImageAction.isRunning}
-            label="AI clean image"
-            onClick={() => void handleCleanImage()}
-          />
-          <AiCleanImageButton
-            className="size-11 border border-white/75 shadow-sm bg-white/70 p-0 backdrop-blur-sm hover:bg-white/85"
-            disabled={!canMakeTransparent || cleanImageAction.isRunning}
-            iconOnly
-            isLoading={transparentPngAction.isRunning}
-            label="Make transparent PNG"
-            onClick={() => void handleMakeTransparent()}
-          />
-        </div>
-      }
+      isPreviewProcessing={false}
       previewLabel="Clothing Item"
       previewPrimaryDetail={previewMetadata}
       previewTitle={previewName}

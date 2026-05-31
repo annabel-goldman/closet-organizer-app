@@ -5,10 +5,13 @@ import {
   buildItemPreviewMetadata,
   ClothingItem,
   ClothingItemFormValues,
+  createCleanPreviewFile,
   createClothingItem,
   createOutfitUpload,
+  createTransparentPreviewFile,
   CreateItemMode,
   emptyClothingItemFormValues,
+  fetchImageFileFromUrl,
   fetchOutfitUpload,
   fetchUser,
   generateOutfitDetectionMetadataSuggestions,
@@ -29,7 +32,6 @@ import {
   validateClothingItemForm,
 } from "../lib/itemFormValidation";
 import { usePageData } from "../lib/usePageData";
-import { AiCleanImageButton } from "./AiCleanImageButton";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import { CreateItemImageMode } from "./create-item/CreateItemImageMode";
 import { ItemEditorWorkspace } from "./ItemEditorWorkspace";
@@ -53,6 +55,7 @@ import type { ItemPhotoStateSnapshot } from "../lib/useItemPhotoState";
 import { useUndoRedoShortcuts } from "../lib/useUndoRedoShortcuts";
 import { useManualCreateAiFlow } from "../lib/useManualCreateAiFlow";
 import { useDetectionAiFlow } from "../lib/useDetectionAiFlow";
+import type { ExpandedImageEditorApplyContext } from "./ExpandedImageEditor";
 
 interface CreateItemPageProps {
   userId: number | null;
@@ -145,8 +148,6 @@ export function CreateItemPage({
   const {
     cancelPendingManualCleanPreview,
     handleAutofillManualMetadata,
-    handleCleanUploadedPhoto,
-    handleMakeUploadedTransparent,
     isAutofillingMetadata,
     isCleaningUploadedPhoto,
     isMakingUploadedTransparent,
@@ -276,15 +277,51 @@ export function CreateItemPage({
     return sessionSnapshot;
   }
 
-  function applyImageFileSelection(file: File) {
+  function applyImageFileSelection(
+    file: File,
+    imageKind: ExpandedImageEditorApplyContext["imageKind"] = "base",
+  ) {
     pushManualUndoSnapshot();
     detectionPollControllerRef.current?.abort();
     manualAi.cancelPendingManualCleanPreview();
-    latestUploadedPhotoRef.current = file;
+    if (imageKind === "base") {
+      latestUploadedPhotoRef.current = file;
+    } else if (!latestUploadedPhotoRef.current) {
+      latestUploadedPhotoRef.current = file;
+    }
     photoState.updateSelectedFile(file);
-    manualAi.resetManualCleanState();
+    manualAi.restoreManualCleanState({
+      imageKind: imageKind === "base" ? null : imageKind,
+    });
     resetDetectionState();
     setErrorMessage("");
+  }
+
+  async function getManualPreviewEditorFile() {
+    return photoState.selectedFile;
+  }
+
+  async function getSourceImageEditorFile() {
+    if (latestUploadedPhotoRef.current) {
+      return latestUploadedPhotoRef.current;
+    }
+
+    if (!sourceImageUrl) {
+      return null;
+    }
+
+    return fetchImageFileFromUrl(sourceImageUrl, photoState.selectedFile?.name ?? "source-image.png");
+  }
+
+  async function createManualEditorCleanImage(file: File) {
+    return createCleanPreviewFile(file, {
+      metadata: formValuesRef.current,
+      originalSourcePhoto: latestUploadedPhotoRef.current,
+    });
+  }
+
+  async function createManualEditorTransparentPng(file: File) {
+    return createTransparentPreviewFile(file);
   }
 
   function closeReplaceImageWarning(open: boolean) {
@@ -793,6 +830,9 @@ export function CreateItemPage({
           isCreating={isCreating}
           isDetecting={isDetecting}
           makingDetectionTransparentIds={makingDetectionTransparentIds}
+          onApplySourceImageEdits={async (file) => {
+            handleImageFileChange(file);
+          }}
           onBack={onBack}
           onClearImageSelection={clearImageSelection}
           onCleanDetectionImage={(detection) => void handleCleanDetectionImage(detection)}
@@ -801,6 +841,7 @@ export function CreateItemPage({
           onMakeDetectionTransparent={(detection) => void handleMakeDetectionTransparent(detection)}
           onRequestDetectionAutofill={(detection) => void handleAutofillDetectionMetadata(detection)}
           onFileChange={handleImageFileChange}
+          onGetSourceImageEditorFile={getSourceImageEditorFile}
           onSaveSelectedItems={() => void handleSaveSelectedItems()}
           onToggleSelection={toggleDetectionSelection}
           outfitUpload={outfitUpload}
@@ -901,6 +942,17 @@ export function CreateItemPage({
         onPreviewClick={() => photoState.inputRef.current?.click()}
         onPreviewClear={clearImageSelection}
         onPreviewEdit={() => photoState.inputRef.current?.click()}
+        previewEditor={photoState.selectedFile ? {
+          getEditableFile: getManualPreviewEditorFile,
+          imageActions: {
+            initialKind: stagedManualImageKind ?? "base",
+            onClean: createManualEditorCleanImage,
+            onMakeTransparent: createManualEditorTransparentPng,
+          },
+          onApply: async (file, context) => {
+            applyImageFileSelection(file, context.imageKind);
+          },
+        } : undefined}
         onSubmit={handleManualSubmit}
         previewAriaLabel={photoState.selectedFile ? "Preview image" : "Upload photo"}
         previewBackgroundDecoration={
@@ -909,27 +961,7 @@ export function CreateItemPage({
             strokeWidth={1.1}
           />
         }
-        isPreviewProcessing={isCleaningUploadedPhoto || isMakingUploadedTransparent}
-        previewTopAction={
-          <div className="flex flex-col gap-2">
-            <AiCleanImageButton
-              className="size-11 border border-white/75 shadow-sm bg-white/70 p-0 backdrop-blur-sm hover:bg-white/85"
-              disabled={!photoState.selectedFile || isMakingUploadedTransparent}
-              iconOnly
-              isLoading={isCleaningUploadedPhoto}
-              label="AI clean image"
-              onClick={() => void handleCleanUploadedPhoto()}
-            />
-            <AiCleanImageButton
-              className="size-11 border border-white/75 shadow-sm bg-white/70 p-0 backdrop-blur-sm hover:bg-white/85"
-              disabled={stagedManualImageKind !== "cleaned" || isCleaningUploadedPhoto}
-              iconOnly
-              isLoading={isMakingUploadedTransparent}
-              label="Make transparent PNG"
-              onClick={() => void handleMakeUploadedTransparent()}
-            />
-          </div>
-        }
+        isPreviewProcessing={false}
         previewLabel="New Clothing Item"
         previewPrimaryDetail={previewMetadata}
         previewTitle={previewName}

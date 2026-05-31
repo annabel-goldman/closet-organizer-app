@@ -1,6 +1,12 @@
 import { ReactNode, useState } from "react";
 import { motion } from "motion/react";
-import { LoaderCircle, Trash2, Upload } from "lucide-react";
+import { LoaderCircle, SquarePen, Trash2, Upload } from "lucide-react";
+import { AiCleanImageButton } from "./AiCleanImageButton";
+import {
+  ExpandedImageEditor,
+  type ExpandedImageEditorApplyContext,
+  type ExpandedImageEditorImageActions,
+} from "./ExpandedImageEditor";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +32,11 @@ interface ItemHeroPreviewProps {
   previewTopAction?: ReactNode;
   secondaryDetail?: string | null;
   title: string;
+  previewEditor?: {
+    getEditableFile: () => Promise<File | null>;
+    imageActions?: ExpandedImageEditorImageActions;
+    onApply: (file: File, context: ExpandedImageEditorApplyContext) => Promise<void> | void;
+  };
 }
 
 export function ItemHeroPreview({
@@ -42,18 +53,22 @@ export function ItemHeroPreview({
   previewMedia,
   isPreviewProcessing = false,
   previewTopAction,
+  previewEditor,
   secondaryDetail,
   title,
 }: ItemHeroPreviewProps) {
   const [isImageExpanded, setIsImageExpanded] = useState(false);
+  const [isApplyingEditedImage, setIsApplyingEditedImage] = useState(false);
   const canExpand = Boolean(
     (imageUrl || expandedPreview) && (allowExpand || onPreviewEdit || onPreviewClear),
   );
   const isInteractive = canExpand || Boolean(onPreviewClick);
   const hasPreviewVisual = Boolean(imageUrl || previewMedia);
+  const showPreviewEditorAction = Boolean(previewEditor || (!hasPreviewVisual && (onPreviewEdit || onPreviewClick)));
   const baseBackgroundClass = hasPreviewVisual
     ? "bg-gradient-to-br from-stone-100 via-neutral-50 to-stone-200"
     : "bg-stone-300";
+  const previewActionButtonClass = "size-11 border border-white/75 bg-white/70 p-0 shadow-sm backdrop-blur-sm hover:bg-white/85";
 
   function deferPreviewAction(action?: () => void) {
     if (!action) {
@@ -64,6 +79,20 @@ export function ItemHeroPreview({
     window.setTimeout(() => {
       action();
     }, 0);
+  }
+
+  async function handleApplyEditedImage(file: File, context: ExpandedImageEditorApplyContext) {
+    if (!previewEditor) {
+      return;
+    }
+
+    setIsApplyingEditedImage(true);
+    try {
+      await previewEditor.onApply(file, context);
+      setIsImageExpanded(false);
+    } finally {
+      setIsApplyingEditedImage(false);
+    }
   }
 
   return (
@@ -106,13 +135,31 @@ export function ItemHeroPreview({
         aria-label={isInteractive ? (previewAriaLabel ?? `Expand image for ${title}`) : undefined}
         className={`relative aspect-[4/5] w-full overflow-hidden border border-border p-8 flex flex-col justify-between lg:h-full lg:aspect-auto ${baseBackgroundClass} ${canExpand ? "cursor-zoom-in" : ""} ${onPreviewClick ? "cursor-pointer" : ""}`}
       >
-        {previewTopAction ? (
+        {showPreviewEditorAction || previewTopAction ? (
           <div
             className="absolute top-6 right-6 z-30"
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => event.stopPropagation()}
           >
-            {previewTopAction}
+            <div className="flex flex-col gap-2">
+              {showPreviewEditorAction ? (
+                <AiCleanImageButton
+                  className={previewActionButtonClass}
+                  disabled={!previewEditor}
+                  icon={SquarePen}
+                  iconOnly
+                  label="Edit image"
+                  onClick={() => {
+                    if (!previewEditor) {
+                      return;
+                    }
+
+                    setIsImageExpanded(true);
+                  }}
+                />
+              ) : null}
+              {previewTopAction}
+            </div>
           </div>
         ) : null}
 
@@ -203,24 +250,34 @@ export function ItemHeroPreview({
 
       {canExpand && (
         <Dialog open={isImageExpanded} onOpenChange={setIsImageExpanded}>
-          <DialogContent className="max-w-[min(88vw,56rem)] border-none bg-black/95 p-4 shadow-2xl sm:p-6">
+          <DialogContent className="h-[calc(100vh-4rem)] w-[calc(100vw-4rem)] max-w-none overflow-hidden border-none bg-black/95 p-3 shadow-2xl outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 sm:h-[calc(100vh-5rem)] sm:w-[calc(100vw-5rem)] sm:max-w-none sm:p-5 lg:p-6">
             <DialogTitle className="sr-only">{title}</DialogTitle>
             <DialogDescription className="sr-only">
               Larger preview for {title} with options to update or clear the image.
             </DialogDescription>
-            <div className="flex max-h-[72vh] items-center justify-center overflow-hidden">
-              {expandedPreview ? (
-                <div className="max-h-[72vh] w-full overflow-hidden">
-                  {expandedPreview}
-                </div>
-              ) : imageUrl ? (
-                <img
-                  src={imageUrl}
-                  alt={title}
-                  className="max-h-[72vh] w-auto max-w-full object-contain"
-                />
-              ) : null}
-            </div>
+            {previewEditor ? (
+              <ExpandedImageEditor
+                getEditableFile={previewEditor.getEditableFile}
+                imageActions={previewEditor.imageActions}
+                isApplying={isApplyingEditedImage}
+                onApply={handleApplyEditedImage}
+                title={title}
+              />
+            ) : (
+              <div className="flex max-h-[72vh] items-center justify-center overflow-hidden">
+                {expandedPreview ? (
+                  <div className="max-h-[72vh] w-full overflow-hidden">
+                    {expandedPreview}
+                  </div>
+                ) : imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt={title}
+                    className="max-h-[72vh] w-auto max-w-full object-contain"
+                  />
+                ) : null}
+              </div>
+            )}
             {(onPreviewEdit || onPreviewClear) && (
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">

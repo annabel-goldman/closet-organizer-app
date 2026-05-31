@@ -1,5 +1,5 @@
 import { RefObject, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, LoaderCircle, RotateCcw, Sparkles, Upload } from "lucide-react";
+import { ArrowLeft, Check, LoaderCircle, RotateCcw, Scissors, Sparkles, Upload } from "lucide-react";
 import {
   buildItemPreviewMetadata,
   ClothingItemFormValues,
@@ -19,6 +19,7 @@ import { PrimitiveButton } from "../primitives/PrimitiveButton";
 import { PrimitiveConfirmationDialog } from "../primitives/PrimitiveConfirmationDialog";
 import { AiActionLoadingNotice } from "../shared/AiActionLoadingNotice";
 import { UploadWorkspace } from "../UploadWorkspace";
+import type { ExpandedImageEditorApplyContext } from "../ExpandedImageEditor";
 import { DetectionPreviewImage } from "./DetectionPreview";
 import { DetectionThumbnailStrip } from "./DetectionThumbnailStrip";
 
@@ -39,11 +40,16 @@ interface CreateItemImageModeProps {
   inputRef: RefObject<HTMLInputElement | null>;
   makingDetectionTransparentIds: number[];
   onBack: () => void;
+  onApplySourceImageEdits?: (
+    file: File,
+    context: ExpandedImageEditorApplyContext,
+  ) => Promise<void> | void;
   onClearImageSelection: () => void;
   onCleanDetectionImage: (detection: OutfitDetection) => void;
   onDetectItems: () => void;
   onDraftChange: (detectionId: number, nextValues: ClothingItemFormValues) => void;
   onFileChange: (file: File | null) => void;
+  onGetSourceImageEditorFile?: () => Promise<File | null>;
   onMakeDetectionTransparent: (detection: OutfitDetection) => void;
   onRequestDetectionAutofill: (detection: OutfitDetection) => void;
   onSaveSelectedItems: () => void;
@@ -74,11 +80,13 @@ export function CreateItemImageMode({
   inputRef,
   makingDetectionTransparentIds,
   onBack,
+  onApplySourceImageEdits,
   onClearImageSelection,
   onCleanDetectionImage,
   onDetectItems,
   onDraftChange,
   onFileChange,
+  onGetSourceImageEditorFile,
   onMakeDetectionTransparent,
   onRequestDetectionAutofill,
   onSaveSelectedItems,
@@ -236,6 +244,14 @@ export function CreateItemImageMode({
         onPreviewClick={() => inputRef.current?.click()}
         onPreviewClear={selectedFileName ? onClearImageSelection : undefined}
         onPreviewEdit={selectedFileName ? () => inputRef.current?.click() : undefined}
+        previewEditor={
+          isSourceFocused && selectedFileName && onGetSourceImageEditorFile && onApplySourceImageEdits
+            ? {
+                getEditableFile: onGetSourceImageEditorFile,
+                onApply: onApplySourceImageEdits,
+              }
+            : undefined
+        }
         previewAriaLabel={selectedFileName ? "Change upload image" : "Upload photo"}
         previewBackgroundDecoration={
           isSourceFocused ? (
@@ -248,7 +264,7 @@ export function CreateItemImageMode({
         previewMedia={previewDetection ? previewMedia : undefined}
         previewTopAction={
           previewDetection ? (
-            <div className="flex flex-col gap-2">
+            <>
               <AiCleanImageButton
                 className="size-11 border border-white/75 bg-white/70 p-0 shadow-sm backdrop-blur-sm hover:bg-white/85"
                 disabled={focusedIsMakingTransparent || (!previewDetectionCleanedImageUrl && !previewDetectionBox)}
@@ -260,12 +276,13 @@ export function CreateItemImageMode({
               <AiCleanImageButton
                 className="size-11 border border-white/75 bg-white/70 p-0 shadow-sm backdrop-blur-sm hover:bg-white/85"
                 disabled={focusedIsCleaning || previewDetectionImageKind !== "cleaned"}
+                icon={Scissors}
                 iconOnly
                 isLoading={focusedIsMakingTransparent}
                 label="Make transparent PNG"
                 onClick={() => onMakeDetectionTransparent(previewDetection)}
               />
-            </div>
+            </>
           ) : undefined
         }
         previewLabel={previewDetection ? "Detected Item" : "Original Image"}
