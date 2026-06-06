@@ -5,7 +5,8 @@ require "uri"
 
 class OpenrouterVisionService
   DEFAULT_BASE_URL = "https://openrouter.ai/api/v1".freeze
-  DEFAULT_MAX_TOKENS = 500
+  DEFAULT_MAX_TOKENS = 900
+  MAX_RETRY_TOKENS = 1800
 
   def initialize(outfit_upload)
     @outfit_upload = outfit_upload
@@ -19,18 +20,36 @@ class OpenrouterVisionService
   def perform_structured_request(model:, prompt:, schema_name:, schema:)
     ensure_configuration!
 
-    body = request_body(model: model, prompt: prompt, schema_name: schema_name, schema: schema)
-    response = perform_request(body)
-    @last_raw_response = response
-    content = extract_message_content(response)
-    parse_json_payload(content)
+    max_tokens = configured_max_tokens
+
+    loop do
+      body = request_body(
+        model: model,
+        prompt: prompt,
+        schema_name: schema_name,
+        schema: schema,
+        max_tokens: max_tokens
+      )
+      response = perform_request(body)
+      @last_raw_response = response
+      content = extract_message_content(response)
+
+      return parse_json_payload(content)
+    rescue JSON::ParserError, RuntimeError => error
+      raise unless retryable_json_parse_error?(error)
+
+      retry_tokens = retry_max_tokens(max_tokens)
+      raise if retry_tokens == max_tokens
+
+      max_tokens = retry_tokens
+    end
   end
 
-  def request_body(model:, prompt:, schema_name:, schema:)
+  def request_body(model:, prompt:, schema_name:, schema:, max_tokens: configured_max_tokens)
     {
       model: model,
       temperature: 0.1,
-      max_tokens: configured_max_tokens,
+      max_tokens: max_tokens,
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -186,6 +205,15 @@ class OpenrouterVisionService
 
   def configured_max_tokens
     integer_env("OPENROUTER_VISION_MAX_TOKENS", DEFAULT_MAX_TOKENS)
+  end
+
+  def retry_max_tokens(current_max_tokens)
+    next_max_tokens = [ current_max_tokens * 2, MAX_RETRY_TOKENS ].min
+    [ next_max_tokens, current_max_tokens ].max
+  end
+
+  def retryable_json_parse_error?(error)
+    error.is_a?(JSON::ParserError) || error.message == "OpenRouter returned data that was not valid JSON."
   end
 
   def integer_env(name, default)

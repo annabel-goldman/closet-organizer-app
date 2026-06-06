@@ -1,4 +1,5 @@
 import { localDevAuthHeaders, requestJson, requestJsonOrNull, requestVoid } from "./api";
+import { fetchAttachmentResponse, normalizeAttachmentUrl } from "./attachmentUrls";
 import { OutfitCollageLayout } from "./outfitCollage";
 
 const LOCAL_BACKEND_BASE_URL = "http://127.0.0.1:3000";
@@ -141,38 +142,6 @@ export interface Outfit {
   items: ClothingItem[];
   created_at?: string;
   updated_at?: string;
-}
-
-function normalizeAttachmentUrl(rawUrl: unknown) {
-  if (typeof rawUrl !== "string" || rawUrl.trim().length === 0) {
-    return null;
-  }
-
-  const trimmed = rawUrl.trim();
-
-  if (typeof window === "undefined") {
-    return trimmed;
-  }
-
-  if (!isLocalDevelopmentHost(window.location.hostname) || window.location.port === "3000") {
-    return trimmed;
-  }
-
-  try {
-    const normalizedBackendOrigin = new URL(BACKEND_BASE_URL, window.location.origin).origin;
-    const parsed = new URL(trimmed, normalizedBackendOrigin);
-
-    if (
-      parsed.origin === normalizedBackendOrigin
-      && parsed.pathname.startsWith("/rails/active_storage/")
-    ) {
-      return `${parsed.pathname}${parsed.search}`;
-    }
-  } catch {
-    return trimmed;
-  }
-
-  return trimmed;
 }
 
 export type CreateItemMode = "manual" | "image";
@@ -736,18 +705,25 @@ export async function createTransparentPreviewFile(photo: File) {
 }
 
 export async function fetchImageFileFromUrl(imageUrl: string, filename?: string) {
-  const response = await fetch(imageUrl, {
-    credentials: "include",
-    headers: localDevAuthHeaders(),
-  });
-  if (!response.ok) {
-    throw new Error("Unable to load the source image for this AI action.");
-  }
+  try {
+    const response = await fetchAttachmentResponse(imageUrl, {
+      credentials: "include",
+      headers: localDevAuthHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error("Unable to load the source image for this AI action.");
+    }
 
-  const blob = await response.blob();
-  return new File([blob], filename ?? inferFilenameFromUrl(imageUrl), {
-    type: blob.type || "image/png",
-  });
+    const blob = await response.blob();
+    return new File([blob], filename ?? inferFilenameFromUrl(imageUrl), {
+      type: blob.type || "image/png",
+    });
+  } catch {
+    return createImageFileFromRenderableUrl(
+      imageUrl,
+      filename ?? inferFilenameFromUrl(imageUrl),
+    );
+  }
 }
 
 export async function createCroppedImageFile(
@@ -819,6 +795,49 @@ function loadBrowserImage(sourceImageUrl: string) {
     image.onerror = () => reject(new Error("Unable to load the source image for this AI action."));
     image.src = sourceImageUrl;
   });
+}
+
+async function createImageFileFromRenderableUrl(sourceImageUrl: string, filename: string) {
+  const image = await loadBrowserImage(sourceImageUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, image.naturalWidth);
+  canvas.height = Math.max(1, image.naturalHeight);
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Unable to load the source image for this AI action.");
+  }
+
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((nextBlob) => {
+      if (!nextBlob) {
+        reject(new Error("Unable to load the source image for this AI action."));
+        return;
+      }
+
+      resolve(nextBlob);
+    }, inferCanvasContentType(filename));
+  });
+
+  return new File([blob], filename, {
+    type: blob.type || inferCanvasContentType(filename),
+  });
+}
+
+function inferCanvasContentType(filename: string) {
+  const lowerName = filename.trim().toLowerCase();
+
+  if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
+    return "image/jpeg";
+  }
+
+  if (lowerName.endsWith(".webp")) {
+    return "image/webp";
+  }
+
+  return "image/png";
 }
 
 function normalizeTagList(rawTags: unknown): string[] {
@@ -909,6 +928,7 @@ function normalizeMetadataSuggestionPayload(
     tags: normalizeTagList((suggestion as ClothingItemMetadataSuggestion & { tags?: unknown }).tags),
   };
 }
+
 
 function normalizeUserPayload(user: User): User {
   const clothing_items = (user.clothing_items ?? []).map(normalizeClothingItemPayload);

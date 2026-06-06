@@ -26,6 +26,7 @@ interface UploadWorkspaceProps {
   previewLabel: string;
   previewPrimaryDetail: string;
   previewSecondaryDetail?: string | null;
+  previewFooter?: ReactNode;
   previewTitle: string;
 }
 
@@ -45,11 +46,12 @@ export function UploadWorkspace({
   previewLabel,
   previewPrimaryDetail,
   previewSecondaryDetail,
+  previewFooter,
   previewTitle,
 }: UploadWorkspaceProps) {
   return (
-    <div className="grid gap-10 lg:min-h-[min(46rem,calc(100vh-8rem))] lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:items-stretch">
-      <div className="lg:h-full">
+    <div className="grid gap-10 lg:min-h-[min(46rem,calc(100vh-8rem))] lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:items-start">
+      <div className="space-y-4 lg:self-start">
         <ItemHeroPreview
           expandedPreview={expandedPreview}
           imageUrl={imageUrl}
@@ -67,6 +69,7 @@ export function UploadWorkspace({
           secondaryDetail={previewSecondaryDetail}
           title={previewTitle}
         />
+        {previewFooter}
       </div>
 
       <motion.div

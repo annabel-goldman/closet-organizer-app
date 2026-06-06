@@ -14,7 +14,6 @@ interface ClothingCardProps {
   size: string;
   tags: string[];
   image_url?: string | null;
-  index: number;
   isInOutfit?: boolean;
   onSelect?: (id: number) => void;
   onAddToOutfit?: (id: number) => void;
@@ -27,7 +26,6 @@ export function ClothingCard({
   size,
   tags,
   image_url,
-  index,
   isInOutfit,
   onSelect,
   onAddToOutfit,
@@ -38,10 +36,7 @@ export function ClothingCard({
   const handleSelect = () => onSelect?.(id);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, delay: index * 0.08 }}
+    <div
       className="group relative cursor-pointer"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -137,6 +132,6 @@ export function ClothingCard({
           </PrimitiveButton>
         </motion.div>
       </div>
-    </motion.div>
+    </div>
   );
 }

@@ -11,7 +11,7 @@ import { PendingCleanMode } from "./useManualCreateAiFlow";
 
 export interface StagedDetectionCleanPreview {
   file: File;
-  imageKind: "cleaned" | "transparent";
+  imageKind: "base" | "cleaned" | "transparent";
   previewUrl: string;
 }
 
@@ -71,7 +71,11 @@ export function useDetectionAiFlow({
     clearAllStagedDetectionCleanPreviews();
   }
 
-  function setStagedDetectionCleanPreview(detectionId: number, file: File | null) {
+  function setStagedDetectionCleanPreview(
+    detectionId: number,
+    file: File | null,
+    imageKind: "base" | "cleaned" | "transparent" = "cleaned",
+  ) {
     setStagedDetectionCleanPreviews((current) => {
       const previousPreview = current[detectionId];
       if (previousPreview) {
@@ -88,7 +92,7 @@ export function useDetectionAiFlow({
         ...current,
         [detectionId]: {
           file,
-          imageKind: "cleaned",
+          imageKind,
           previewUrl: URL.createObjectURL(file),
         },
       };

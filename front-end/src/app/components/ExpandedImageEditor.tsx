@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import ReactCrop, {
-  centerCrop,
   convertToPixelCrop,
-  makeAspectCrop,
   type Crop,
   type PixelCrop,
 } from "react-image-crop";
@@ -23,7 +21,6 @@ import { PrimitiveText } from "./primitives/PrimitiveText";
 import { cn } from "./ui/utils";
 
 type EditorTool = "crop" | "wand";
-type AspectPreset = "free" | "square" | "portrait" | "classic";
 export type ExpandedImageEditorImageKind = "base" | "cleaned" | "transparent";
 
 interface WandDragState {
@@ -61,13 +58,6 @@ interface ExpandedImageEditorProps {
   title: string;
 }
 
-const ASPECT_OPTIONS: Array<{ label: string; value: AspectPreset }> = [
-  { label: "Free", value: "free" },
-  { label: "1:1", value: "square" },
-  { label: "4:5", value: "portrait" },
-  { label: "3:4", value: "classic" },
-];
-
 export function ExpandedImageEditor({
   getEditableFile,
   imageActions,
@@ -78,7 +68,6 @@ export function ExpandedImageEditor({
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [tool, setTool] = useState<EditorTool>("crop");
-  const [aspectPreset, setAspectPreset] = useState<AspectPreset>("free");
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   const [currentImageKind, setCurrentImageKind] = useState<ExpandedImageEditorImageKind>(
     imageActions?.initialKind ?? "base",
@@ -334,44 +323,6 @@ export function ExpandedImageEditor({
       height: event.currentTarget.naturalHeight,
       width: event.currentTarget.naturalWidth,
     });
-
-    if (aspectPreset === "free") {
-      return;
-    }
-
-    const { width, height } = event.currentTarget;
-    const aspect = aspectRatioForPreset(aspectPreset);
-    if (!aspect) {
-      return;
-    }
-
-    const nextCrop = centerAspectCrop(width, height, aspect);
-    setCrop(nextCrop);
-    setCompletedCrop(convertToPixelCrop(nextCrop, width, height));
-  }
-
-  function handleAspectChange(nextPreset: AspectPreset) {
-    setAspectPreset(nextPreset);
-
-    if (nextPreset === "free") {
-      setCrop(undefined);
-      setCompletedCrop(null);
-      return;
-    }
-
-    const image = imageRef.current;
-    if (!image) {
-      return;
-    }
-
-    const nextAspect = aspectRatioForPreset(nextPreset);
-    if (!nextAspect) {
-      return;
-    }
-
-    const nextCrop = centerAspectCrop(image.width, image.height, nextAspect);
-    setCrop(nextCrop);
-    setCompletedCrop(convertToPixelCrop(nextCrop, image.width, image.height));
   }
 
   async function handleApplyCrop() {
@@ -613,8 +564,8 @@ export function ExpandedImageEditor({
   const fittedMediaSize = containSize(mediaNaturalSize, viewportSize);
   const editorMediaBoxStyle = fittedMediaSize
     ? ({
-        height: `${Math.max(1, Math.floor(fittedMediaSize.height))}px`,
-        width: `${Math.max(1, Math.floor(fittedMediaSize.width))}px`,
+        height: `${Math.max(1, fittedMediaSize.height)}px`,
+        width: `${Math.max(1, fittedMediaSize.width)}px`,
       } as const)
     : undefined;
 
@@ -642,7 +593,6 @@ export function ExpandedImageEditor({
                     setCrop(nextPercentCrop);
                   }}
                   onComplete={(nextCrop) => setCompletedCrop(nextCrop)}
-                  aspect={aspectRatioForPreset(aspectPreset) ?? undefined}
                   className="expanded-image-editor-crop"
                   style={editorMediaBoxStyle}
                 >
@@ -650,7 +600,7 @@ export function ExpandedImageEditor({
                     ref={imageRef}
                     src={imageUrl}
                     alt={title}
-                    className="block h-full w-full"
+                    className="block max-h-full max-w-full"
                     onLoad={handleCropImageLoad}
                   />
                 </ReactCrop>
@@ -683,17 +633,9 @@ export function ExpandedImageEditor({
       </div>
 
       <div className="flex h-full max-h-full w-full shrink-0 flex-col gap-5 overflow-y-auto border border-white/12 bg-black/45 p-5 text-white lg:w-[24rem] xl:w-[26rem] xl:p-6">
-        <div className="space-y-2">
-          <PrimitiveText variant="overline" className="text-white/60">
-            Image Tools
-          </PrimitiveText>
-          <PrimitiveText as="h2" variant="title" className="text-white">
-            Adjust {title}
-          </PrimitiveText>
-          <PrimitiveText variant="bodySm" className="text-white/72">
-            Crop the frame or remove background regions manually before saving the edited image back into the flow.
-          </PrimitiveText>
-        </div>
+        <PrimitiveText as="h2" variant="title" className="text-white">
+          {title}
+        </PrimitiveText>
 
         {imageActions?.onClean || imageActions?.onMakeTransparent ? (
           <div className="space-y-3">
@@ -804,26 +746,6 @@ export function ExpandedImageEditor({
 
         {tool === "crop" ? (
           <div className="space-y-3">
-            <PrimitiveText variant="overline" className="text-white/60">
-              Crop Ratio
-            </PrimitiveText>
-            <div className="flex flex-wrap gap-2">
-              {ASPECT_OPTIONS.map((option) => (
-                <PrimitiveButton
-                  key={option.value}
-                  type="button"
-                  variant="outline"
-                  className={cn(toolbarButtonClass)}
-                  data-active={aspectPreset === option.value}
-                  onClick={() => handleAspectChange(option.value)}
-                >
-                  {option.label}
-                </PrimitiveButton>
-              ))}
-            </div>
-            <PrimitiveText variant="bodySm" className="text-white/72">
-              Drag the crop frame to choose a new image size. Free mode lets you crop without a fixed ratio.
-            </PrimitiveText>
             <PrimitiveButton
               type="button"
               variant="outline"
@@ -837,17 +759,6 @@ export function ExpandedImageEditor({
           </div>
         ) : (
           <div className="space-y-3">
-            <PrimitiveText variant="overline" className="text-white/60">
-              Instant Alpha
-            </PrimitiveText>
-            <PrimitiveText variant="bodySm" className="text-white/72">
-              Click the background, then drag to grow the red preview selection. Release when the highlighted area matches what you want to delete.
-            </PrimitiveText>
-            <div className="border border-white/10 bg-white/5 px-3 py-2">
-              <PrimitiveText variant="bodySm" className="text-white/72">
-                Current tolerance: {tolerance}
-              </PrimitiveText>
-            </div>
             <div className="flex gap-2">
               <PrimitiveButton
                 type="button"
@@ -910,35 +821,6 @@ export function ExpandedImageEditor({
   );
 }
 
-function aspectRatioForPreset(preset: AspectPreset) {
-  switch (preset) {
-    case "square":
-      return 1;
-    case "portrait":
-      return 4 / 5;
-    case "classic":
-      return 3 / 4;
-    default:
-      return null;
-  }
-}
-
-function centerAspectCrop(width: number, height: number, aspect: number) {
-  return centerCrop(
-    makeAspectCrop(
-      {
-        unit: "%",
-        width: 82,
-      },
-      aspect,
-      width,
-      height,
-    ),
-    width,
-    height,
-  );
-}
-
 function containSize(
   naturalSize: { height: number; width: number },
   viewportSize: { height: number; width: number },
@@ -958,8 +840,8 @@ function containSize(
   );
 
   return {
-    height: Math.max(1, Math.floor(naturalSize.height * scale)),
-    width: Math.max(1, Math.floor(naturalSize.width * scale)),
+    height: Math.max(1, naturalSize.height * scale),
+    width: Math.max(1, naturalSize.width * scale),
   };
 }
 

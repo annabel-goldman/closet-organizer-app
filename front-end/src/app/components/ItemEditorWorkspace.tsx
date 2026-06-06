@@ -12,7 +12,7 @@ import { UploadWorkspace } from "./UploadWorkspace";
 interface ItemEditorWorkspaceProps {
   backLabel?: string;
   children: ReactNode;
-  footer: ReactNode;
+  footer?: ReactNode;
   formLabel: string;
   formTopAction?: ReactNode;
   imageUrl?: string | null;
@@ -32,6 +32,7 @@ interface ItemEditorWorkspaceProps {
   previewLabel: string;
   previewPrimaryDetail: string;
   previewSecondaryDetail?: string | null;
+  previewFooter?: ReactNode;
   previewTitle: string;
   previewTopAction?: ReactNode;
 }
@@ -55,6 +56,7 @@ export function ItemEditorWorkspace({
   previewLabel,
   previewPrimaryDetail,
   previewSecondaryDetail,
+  previewFooter,
   previewTitle,
   previewTopAction,
 }: ItemEditorWorkspaceProps) {
@@ -104,6 +106,7 @@ export function ItemEditorWorkspace({
           previewLabel={previewLabel}
           previewPrimaryDetail={previewPrimaryDetail}
           previewSecondaryDetail={previewSecondaryDetail}
+          previewFooter={previewFooter}
           previewTitle={previewTitle}
         >
           {children}

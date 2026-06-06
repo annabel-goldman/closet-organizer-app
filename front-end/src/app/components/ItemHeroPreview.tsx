@@ -133,7 +133,7 @@ export function ItemHeroPreview({
         role={isInteractive ? "button" : undefined}
         tabIndex={isInteractive ? 0 : undefined}
         aria-label={isInteractive ? (previewAriaLabel ?? `Expand image for ${title}`) : undefined}
-        className={`relative aspect-[4/5] w-full overflow-hidden border border-border p-8 flex flex-col justify-between lg:h-full lg:aspect-auto ${baseBackgroundClass} ${canExpand ? "cursor-zoom-in" : ""} ${onPreviewClick ? "cursor-pointer" : ""}`}
+        className={`relative aspect-[4/5] w-full overflow-hidden border border-border p-8 flex flex-col justify-between ${baseBackgroundClass} ${canExpand ? "cursor-zoom-in" : ""} ${onPreviewClick ? "cursor-pointer" : ""}`}
       >
         {showPreviewEditorAction || previewTopAction ? (
           <div

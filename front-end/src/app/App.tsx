@@ -1,4 +1,4 @@
-import { Dispatch, SetStateAction, useDeferredValue, useEffect, useState } from "react";
+import { Dispatch, SetStateAction, useDeferredValue, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { ShoppingBag } from "lucide-react";
 import { Toaster, toast } from "sonner";
@@ -200,6 +200,7 @@ export default function App() {
   const [outfitCartName, setOutfitCartName] = useState("");
   const [outfitCartStatusMessage, setOutfitCartStatusMessage] = useState("");
   const [outfitDraft, setOutfitDraft] = useOutfitDraftState(user);
+  const hasResolvedSessionRef = useRef(false);
 
   useEffect(() => {
     const handlePopState = () => setRoute(getRouteFromLocation());
@@ -224,14 +225,25 @@ export default function App() {
 
   useEffect(() => {
     const shouldLoadSession = route.kind === "home" || isProtectedRoute(route);
+    const unauthorizedMessage = "You do not have permission to view this page. Please log in.";
 
     if (!shouldLoadSession) {
       setIsLoading(false);
       return;
     }
 
+    if (hasResolvedSessionRef.current) {
+      setIsLoading(false);
+
+      if (!user && isProtectedRoute(route)) {
+        setHomeMessage({ kind: "error", text: unauthorizedMessage });
+        navigateTo("/");
+      }
+
+      return;
+    }
+
     const controller = new AbortController();
-    const unauthorizedMessage = "You do not have permission to view this page. Please log in.";
 
     void (async () => {
       setIsLoading(true);
@@ -239,6 +251,7 @@ export default function App() {
 
       try {
         const nextUser = await fetchCurrentUser(controller.signal);
+        hasResolvedSessionRef.current = true;
         if (!nextUser) {
           setUser(null);
           if (isProtectedRoute(route)) {
@@ -252,6 +265,7 @@ export default function App() {
         setUser(nextUser);
       } catch (error) {
         if (!controller.signal.aborted) {
+          hasResolvedSessionRef.current = true;
           setErrorMessage(
             error instanceof Error ? error.message : "Unable to load closet data from the backend.",
           );
@@ -265,7 +279,7 @@ export default function App() {
     })();
 
     return () => controller.abort();
-  }, [route.kind]);
+  }, [route.kind, user]);
 
   useEffect(() => {
     if (!outfitCartStatusMessage) {
@@ -773,11 +787,10 @@ export default function App() {
 
             {user && filteredClothingItems.length > 0 ? (
               <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-12 lg:grid-cols-4">
-                {filteredClothingItems.map((item, index) => (
+                {filteredClothingItems.map((item) => (
                   <ClothingCard
                     key={item.id}
                     {...item}
-                    index={index}
                     onSelect={(itemId) => navigateTo(`/items/${itemId}`)}
                     isInOutfit={outfitDraft.itemIds.includes(item.id)}
                     onAddToOutfit={addItemToOutfitDraft}

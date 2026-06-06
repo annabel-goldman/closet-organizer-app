@@ -636,23 +636,22 @@ export function ItemDetailPage({
       isPreviewProcessing={false}
       previewLabel="Clothing Item"
       previewPrimaryDetail={previewMetadata}
-      previewTitle={previewName}
-      footer={
-        <div className="mt-auto pt-2 flex items-center justify-between gap-4">
-          <PrimitiveText
-            as="div"
-            variant="bodySm"
-            tone={successMessage ? "default" : "muted"}
-            role="status"
-            aria-live="polite"
-            className={cn(
-              successMessage && "rounded-none border border-emerald-300/40 bg-emerald-50 px-4 py-2 text-emerald-900",
-            )}
-          >
-            {footerStatusMessage}
-          </PrimitiveText>
-        </div>
+      previewFooter={
+        <PrimitiveText
+          as="div"
+          variant="bodySm"
+          tone={successMessage ? "default" : "muted"}
+          role="status"
+          aria-live="polite"
+          className={cn(
+            "px-1",
+            successMessage && "rounded-none border border-emerald-300/40 bg-emerald-50 px-4 py-2 text-emerald-900",
+          )}
+        >
+          {footerStatusMessage}
+        </PrimitiveText>
       }
+      previewTitle={previewName}
     >
       <input
         ref={photoState.inputRef}
@@ -673,24 +672,22 @@ export function ItemDetailPage({
             <PrimitiveButton
               type="button"
               variant="outline"
-              size="sm"
+              size="icon"
               disabled={!canUndoSavedChange || persistedHistoryDisabled}
               onClick={() => void handleUndo()}
               aria-label="Undo last saved change"
             >
               <RotateCcw className="h-4 w-4" />
-              Undo
             </PrimitiveButton>
             <PrimitiveButton
               type="button"
               variant="outline"
-              size="sm"
+              size="icon"
               disabled={!canRedoSavedChange || persistedHistoryDisabled}
               onClick={() => void handleRedo()}
               aria-label="Redo last saved change"
             >
               <RotateCw className="h-4 w-4" />
-              Redo
             </PrimitiveButton>
             <AiMetadataAutofillButton
               className="mt-0 h-9 w-9 shrink-0"
@@ -704,7 +701,7 @@ export function ItemDetailPage({
         category={formValues.category}
         title={previewName}
       >
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-5 sm:grid-cols-3">
             <ItemMetadataFields
               brandSuggestions={brandSuggestions}
               errors={fieldErrors}

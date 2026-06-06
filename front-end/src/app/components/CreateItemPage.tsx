@@ -7,6 +7,7 @@ import {
   ClothingItemFormValues,
   createCleanPreviewFile,
   createClothingItem,
+  createCroppedImageFile,
   createOutfitUpload,
   createTransparentPreviewFile,
   CreateItemMode,
@@ -19,6 +20,7 @@ import {
   OutfitDetection,
   OutfitUpload,
   parseTagInput,
+  preferredDetectionBox,
   saveClothingItem,
   toClothingItemFormValuesFromDetection,
   User,
@@ -74,6 +76,8 @@ interface ManualCreateUndoSnapshot {
   stagedManualImageKind: "cleaned" | "transparent" | null;
 }
 
+type DetectionDraftHistory = Record<number, ClothingItemFormValues[]>;
+
 export function CreateItemPage({
   userId,
   initialMode = "manual",
@@ -98,6 +102,8 @@ export function CreateItemPage({
   const [isDetectedCreateWhileCleaningDialogOpen, setIsDetectedCreateWhileCleaningDialogOpen] = useState(false);
   const [manualUndoHistory, setManualUndoHistory] = useState<ManualCreateUndoSnapshot[]>([]);
   const [manualRedoHistory, setManualRedoHistory] = useState<ManualCreateUndoSnapshot[]>([]);
+  const [detectionUndoHistory, setDetectionUndoHistory] = useState<DetectionDraftHistory>({});
+  const [detectionRedoHistory, setDetectionRedoHistory] = useState<DetectionDraftHistory>({});
   const [outfitUpload, setOutfitUpload] = useState<OutfitUpload | null>(null);
   const [pendingReplacementFile, setPendingReplacementFile] = useState<File | null>(null);
   const [selectedDetectionIds, setSelectedDetectionIds] = useState<number[]>([]);
@@ -162,8 +168,6 @@ export function CreateItemPage({
     cleaningDetectionIds,
     detectionImageKind,
     detectionCleanErrors,
-    handleCleanDetectionImage,
-    handleMakeDetectionTransparent,
     makingDetectionTransparentIds,
     pendingDetectionCleanModesRef,
     pendingDetectionCleanPromisesRef,
@@ -222,6 +226,8 @@ export function CreateItemPage({
     setSelectedDetectionIds([]);
     detectionAi.resetDetectionAiState();
     setEditedDetections({});
+    setDetectionUndoHistory({});
+    setDetectionRedoHistory({});
     setAutofillingDetectionId(null);
     setIsPreparingDetectedMetadata(false);
   }
@@ -313,6 +319,31 @@ export function CreateItemPage({
     return fetchImageFileFromUrl(sourceImageUrl, photoState.selectedFile?.name ?? "source-image.png");
   }
 
+  async function getDetectionImageEditorFile(detection: OutfitDetection) {
+    const stagedPreview = stagedDetectionCleanPreviews[detection.id];
+    if (stagedPreview) {
+      return stagedPreview.file;
+    }
+
+    if (detection.cleaned_image_url) {
+      return fetchImageFileFromUrl(
+        detection.cleaned_image_url,
+        `${detection.suggested_name || detection.category}-cleaned.png`,
+      );
+    }
+
+    const previewBox = preferredDetectionBox(detection);
+    if (!sourceImageUrl || !previewBox) {
+      return null;
+    }
+
+    return createCroppedImageFile(
+      sourceImageUrl,
+      previewBox,
+      `${detection.suggested_name || detection.category}-crop.png`,
+    );
+  }
+
   async function createManualEditorCleanImage(file: File) {
     return createCleanPreviewFile(file, {
       metadata: formValuesRef.current,
@@ -322,6 +353,24 @@ export function CreateItemPage({
 
   async function createManualEditorTransparentPng(file: File) {
     return createTransparentPreviewFile(file);
+  }
+
+  async function createDetectionEditorCleanImage(detection: OutfitDetection, file: File) {
+    return createCleanPreviewFile(file, {
+      metadata: getDetectionDraft(detection),
+    });
+  }
+
+  async function createDetectionEditorTransparentPng(file: File) {
+    return createTransparentPreviewFile(file);
+  }
+
+  async function applyDetectionImageFileEdits(
+    detection: OutfitDetection,
+    file: File,
+    context: ExpandedImageEditorApplyContext,
+  ) {
+    detectionAi.setStagedDetectionCleanPreview(detection.id, file, context.imageKind);
   }
 
   function closeReplaceImageWarning(open: boolean) {
@@ -464,11 +513,74 @@ export function CreateItemPage({
     return Boolean(editedDetections[detectionId]);
   }
 
-  function updateDetectionDraft(detectionId: number, nextValues: ClothingItemFormValues) {
-    setEditedDetections((current) => ({
+  function setDetectionDraftValues(detection: OutfitDetection, nextValues: ClothingItemFormValues) {
+    const baseValues = toClothingItemFormValuesFromDetection(detection);
+
+    setEditedDetections((current) => {
+      if (JSON.stringify(nextValues) === JSON.stringify(baseValues)) {
+        const next = { ...current };
+        delete next[detection.id];
+        return next;
+      }
+
+      return {
+        ...current,
+        [detection.id]: nextValues,
+      };
+    });
+  }
+
+  function updateDetectionDraft(detection: OutfitDetection, nextValues: ClothingItemFormValues) {
+    const previousValues = getDetectionDraft(detection);
+    if (JSON.stringify(previousValues) === JSON.stringify(nextValues)) {
+      return;
+    }
+
+    setDetectionUndoHistory((current) => ({
       ...current,
-      [detectionId]: nextValues,
+      [detection.id]: [...(current[detection.id] ?? []), previousValues],
     }));
+    setDetectionRedoHistory((current) => ({
+      ...current,
+      [detection.id]: [],
+    }));
+    setDetectionDraftValues(detection, nextValues);
+  }
+
+  function handleDetectionUndo(detection: OutfitDetection) {
+    const previousValues = detectionUndoHistory[detection.id]?.[detectionUndoHistory[detection.id].length - 1];
+    if (!previousValues) {
+      return;
+    }
+
+    const currentValues = getDetectionDraft(detection);
+    setDetectionUndoHistory((current) => ({
+      ...current,
+      [detection.id]: (current[detection.id] ?? []).slice(0, -1),
+    }));
+    setDetectionRedoHistory((current) => ({
+      ...current,
+      [detection.id]: [...(current[detection.id] ?? []), currentValues],
+    }));
+    setDetectionDraftValues(detection, previousValues);
+  }
+
+  function handleDetectionRedo(detection: OutfitDetection) {
+    const nextValues = detectionRedoHistory[detection.id]?.[detectionRedoHistory[detection.id].length - 1];
+    if (!nextValues) {
+      return;
+    }
+
+    const currentValues = getDetectionDraft(detection);
+    setDetectionRedoHistory((current) => ({
+      ...current,
+      [detection.id]: (current[detection.id] ?? []).slice(0, -1),
+    }));
+    setDetectionUndoHistory((current) => ({
+      ...current,
+      [detection.id]: [...(current[detection.id] ?? []), currentValues],
+    }));
+    setDetectionDraftValues(detection, nextValues);
   }
 
   async function handleAutofillDetectionMetadata(detection: OutfitDetection) {
@@ -481,7 +593,7 @@ export function CreateItemPage({
         getDetectionDraft(detection),
       );
       updateDetectionDraft(
-        detection.id,
+        detection,
         mergeMetadataSuggestion(getDetectionDraft(detection), suggestion),
       );
       toast.success("AI autofilled detected item details.");
@@ -527,13 +639,10 @@ export function CreateItemPage({
             return;
           }
 
-          setEditedDetections((current) => ({
-            ...current,
-            [detection.id]: mergeMetadataSuggestion(
-              current[detection.id] ?? toClothingItemFormValuesFromDetection(detection),
-              suggestion,
-            ),
-          }));
+          setDetectionDraftValues(
+            detection,
+            mergeMetadataSuggestion(getDetectionDraft(detection), suggestion),
+          );
         } catch {
           if (detectionMetadataRunRef.current !== runId) {
             return;
@@ -623,7 +732,12 @@ export function CreateItemPage({
         }
 
         const createdItem = await createClothingItem(userId, draftSnapshot, {
-          cleanedPhoto: stagedDetectionCleanPreviews[detection.id]?.file,
+          photo: stagedDetectionCleanPreviews[detection.id]?.imageKind === "base"
+            ? stagedDetectionCleanPreviews[detection.id]?.file
+            : undefined,
+          cleanedPhoto: stagedDetectionCleanPreviews[detection.id]?.imageKind === "base"
+            ? undefined
+            : stagedDetectionCleanPreviews[detection.id]?.file,
           sourceOutfitDetectionId: detection.id,
         });
         createdItems.push(createdItem);
@@ -817,6 +931,8 @@ export function CreateItemPage({
         <CreateItemImageMode
           autofillingDetectionId={autofillingDetectionId}
           brandSuggestions={closetSuggestions.brandSuggestions}
+          canRedoDetectionDraft={(detectionId) => (detectionRedoHistory[detectionId]?.length ?? 0) > 0}
+          canUndoDetectionDraft={(detectionId) => (detectionUndoHistory[detectionId]?.length ?? 0) > 0}
           cleaningDetectionIds={cleaningDetectionIds}
           detectionImageKind={detectionImageKind}
           detectionCleanErrors={detectionCleanErrors}
@@ -830,20 +946,26 @@ export function CreateItemPage({
           isCreating={isCreating}
           isDetecting={isDetecting}
           makingDetectionTransparentIds={makingDetectionTransparentIds}
+          onApplyDetectionImageEdits={(detection, file, context) => {
+            void applyDetectionImageFileEdits(detection, file, context);
+          }}
           onApplySourceImageEdits={async (file) => {
             handleImageFileChange(file);
           }}
           onBack={onBack}
           onClearImageSelection={clearImageSelection}
-          onCleanDetectionImage={(detection) => void handleCleanDetectionImage(detection)}
+          onCreateDetectionEditorCleanImage={(detection, file) => createDetectionEditorCleanImage(detection, file)}
+          onCreateDetectionEditorTransparentPng={createDetectionEditorTransparentPng}
           onDetectItems={() => photoState.selectedFile && void detectItems(photoState.selectedFile)}
           onDraftChange={updateDetectionDraft}
-          onMakeDetectionTransparent={(detection) => void handleMakeDetectionTransparent(detection)}
           onRequestDetectionAutofill={(detection) => void handleAutofillDetectionMetadata(detection)}
+          onRedoDetectionDraft={handleDetectionRedo}
           onFileChange={handleImageFileChange}
+          onGetDetectionImageEditorFile={getDetectionImageEditorFile}
           onGetSourceImageEditorFile={getSourceImageEditorFile}
           onSaveSelectedItems={() => void handleSaveSelectedItems()}
           onToggleSelection={toggleDetectionSelection}
+          onUndoDetectionDraft={handleDetectionUndo}
           outfitUpload={outfitUpload}
           selectedCount={selectedCount}
           selectedDetectionIds={selectedDetectionIds}
@@ -1005,7 +1127,7 @@ export function CreateItemPage({
           category={formValues.category}
           title={previewName}
         >
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid gap-5 sm:grid-cols-3">
             <ItemMetadataFields
               brandSuggestions={closetSuggestions.brandSuggestions}
               errors={fieldErrors}

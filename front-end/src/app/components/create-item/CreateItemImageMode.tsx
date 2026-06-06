@@ -1,5 +1,5 @@
 import { RefObject, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, LoaderCircle, RotateCcw, Scissors, Sparkles, Upload } from "lucide-react";
+import { ArrowLeft, Check, LoaderCircle, RotateCcw, RotateCw, Sparkles, Upload } from "lucide-react";
 import {
   buildItemPreviewMetadata,
   ClothingItemFormValues,
@@ -11,7 +11,6 @@ import {
   titleize,
   User,
 } from "../../lib/closet";
-import { AiCleanImageButton } from "../AiCleanImageButton";
 import { AiMetadataAutofillButton } from "../AiMetadataAutofillButton";
 import { ItemMetadataFields } from "../ItemMetadataFields";
 import { ItemMetadataPanel } from "../ItemMetadataPanel";
@@ -26,6 +25,8 @@ import { DetectionThumbnailStrip } from "./DetectionThumbnailStrip";
 interface CreateItemImageModeProps {
   autofillingDetectionId: number | null;
   brandSuggestions?: string[];
+  canRedoDetectionDraft: (detectionId: number) => boolean;
+  canUndoDetectionDraft: (detectionId: number) => boolean;
   cleaningDetectionIds: number[];
   detectionImageKind: (detection: OutfitDetection) => "cleaned" | "transparent" | null;
   detectionCleanErrors: Record<number, string>;
@@ -44,16 +45,24 @@ interface CreateItemImageModeProps {
     file: File,
     context: ExpandedImageEditorApplyContext,
   ) => Promise<void> | void;
+  onApplyDetectionImageEdits?: (
+    detection: OutfitDetection,
+    file: File,
+    context: ExpandedImageEditorApplyContext,
+  ) => Promise<void> | void;
   onClearImageSelection: () => void;
-  onCleanDetectionImage: (detection: OutfitDetection) => void;
+  onCreateDetectionEditorCleanImage?: (detection: OutfitDetection, file: File) => Promise<File>;
+  onCreateDetectionEditorTransparentPng?: (file: File) => Promise<File>;
   onDetectItems: () => void;
-  onDraftChange: (detectionId: number, nextValues: ClothingItemFormValues) => void;
+  onDraftChange: (detection: OutfitDetection, nextValues: ClothingItemFormValues) => void;
   onFileChange: (file: File | null) => void;
+  onGetDetectionImageEditorFile?: (detection: OutfitDetection) => Promise<File | null>;
   onGetSourceImageEditorFile?: () => Promise<File | null>;
-  onMakeDetectionTransparent: (detection: OutfitDetection) => void;
   onRequestDetectionAutofill: (detection: OutfitDetection) => void;
+  onRedoDetectionDraft: (detection: OutfitDetection) => void;
   onSaveSelectedItems: () => void;
   onToggleSelection: (detection: OutfitDetection) => void;
+  onUndoDetectionDraft: (detection: OutfitDetection) => void;
   outfitUpload: OutfitUpload | null;
   selectedCount: number;
   selectedDetectionIds: number[];
@@ -66,6 +75,8 @@ interface CreateItemImageModeProps {
 export function CreateItemImageMode({
   autofillingDetectionId,
   brandSuggestions = [],
+  canRedoDetectionDraft,
+  canUndoDetectionDraft,
   cleaningDetectionIds,
   detectionImageKind,
   detectionCleanErrors,
@@ -80,17 +91,21 @@ export function CreateItemImageMode({
   inputRef,
   makingDetectionTransparentIds,
   onBack,
+  onApplyDetectionImageEdits,
   onApplySourceImageEdits,
   onClearImageSelection,
-  onCleanDetectionImage,
+  onCreateDetectionEditorCleanImage,
+  onCreateDetectionEditorTransparentPng,
   onDetectItems,
   onDraftChange,
   onFileChange,
+  onGetDetectionImageEditorFile,
   onGetSourceImageEditorFile,
-  onMakeDetectionTransparent,
   onRequestDetectionAutofill,
+  onRedoDetectionDraft,
   onSaveSelectedItems,
   onToggleSelection,
+  onUndoDetectionDraft,
   outfitUpload,
   selectedCount,
   selectedDetectionIds,
@@ -178,6 +193,7 @@ export function CreateItemImageMode({
   const focusedIsAutofilling = detailsDetection
     ? autofillingDetectionId === detailsDetection.id
     : false;
+  const detectionHistoryDisabled = isCreating || focusedIsAutofilling || isPreparingDetectedMetadata;
   const previewMedia = useMemo(() => {
     if (!previewDetection || !sourceImageUrl || !previewDetectionBox || previewDetectionCleanedImageUrl) {
       return undefined;
@@ -250,6 +266,20 @@ export function CreateItemImageMode({
                 getEditableFile: onGetSourceImageEditorFile,
                 onApply: onApplySourceImageEdits,
               }
+            : previewDetection
+              && onGetDetectionImageEditorFile
+              && onApplyDetectionImageEdits
+              ? {
+                  getEditableFile: () => onGetDetectionImageEditorFile(previewDetection),
+                  imageActions: {
+                    initialKind: previewDetectionImageKind ?? "base",
+                    onClean: onCreateDetectionEditorCleanImage
+                      ? (file) => onCreateDetectionEditorCleanImage(previewDetection, file)
+                      : undefined,
+                    onMakeTransparent: onCreateDetectionEditorTransparentPng,
+                  },
+                  onApply: (file, context) => onApplyDetectionImageEdits(previewDetection, file, context),
+                }
             : undefined
         }
         previewAriaLabel={selectedFileName ? "Change upload image" : "Upload photo"}
@@ -262,29 +292,6 @@ export function CreateItemImageMode({
           ) : undefined
         }
         previewMedia={previewDetection ? previewMedia : undefined}
-        previewTopAction={
-          previewDetection ? (
-            <>
-              <AiCleanImageButton
-                className="size-11 border border-white/75 bg-white/70 p-0 shadow-sm backdrop-blur-sm hover:bg-white/85"
-                disabled={focusedIsMakingTransparent || (!previewDetectionCleanedImageUrl && !previewDetectionBox)}
-                iconOnly
-                isLoading={focusedIsCleaning}
-                label="AI clean image"
-                onClick={() => onCleanDetectionImage(previewDetection)}
-              />
-              <AiCleanImageButton
-                className="size-11 border border-white/75 bg-white/70 p-0 shadow-sm backdrop-blur-sm hover:bg-white/85"
-                disabled={focusedIsCleaning || previewDetectionImageKind !== "cleaned"}
-                icon={Scissors}
-                iconOnly
-                isLoading={focusedIsMakingTransparent}
-                label="Make transparent PNG"
-                onClick={() => onMakeDetectionTransparent(previewDetection)}
-              />
-            </>
-          ) : undefined
-        }
         previewLabel={previewDetection ? "Detected Item" : "Original Image"}
         previewPrimaryDetail={
           previewDetection
@@ -309,6 +316,7 @@ export function CreateItemImageMode({
         <DetectionThumbnailStrip
           detections={detections}
           focusedTarget={previewTarget}
+          getDetectionPreviewImageUrl={getDetectionCleanedImageUrl}
           isDetecting={isDetecting}
           onSelectDetection={(detectionId) => {
             setPreviewTarget(detectionId);
@@ -402,13 +410,35 @@ export function CreateItemImageMode({
         {!hasStartedDetectionFlow || isDetecting || !outfitUpload || detectionCount === 0 || !detailsDetection || !focusedDraft || !detailsDraftReady || isSourceFocused ? null : (
           <ItemMetadataPanel
             action={
-              <AiMetadataAutofillButton
-                className="mt-0.5 h-9 w-9 shrink-0 self-start"
-                disabled={!detailsPreviewBox && !detailsDetectionCleanedImageUrl}
-                isLoading={focusedIsAutofilling}
-                label="AI autofill type, name, brand, and tags"
-                onClick={() => onRequestDetectionAutofill(detailsDetection)}
-              />
+              <div className="mt-0.5 flex items-center gap-2 self-start">
+                <PrimitiveButton
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={!canUndoDetectionDraft(detailsDetection.id) || detectionHistoryDisabled}
+                  onClick={() => onUndoDetectionDraft(detailsDetection)}
+                  aria-label="Undo detected item detail change"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </PrimitiveButton>
+                <PrimitiveButton
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={!canRedoDetectionDraft(detailsDetection.id) || detectionHistoryDisabled}
+                  onClick={() => onRedoDetectionDraft(detailsDetection)}
+                  aria-label="Redo detected item detail change"
+                >
+                  <RotateCw className="h-4 w-4" />
+                </PrimitiveButton>
+                <AiMetadataAutofillButton
+                  className="mt-0 h-9 w-9 shrink-0"
+                  disabled={!detailsPreviewBox && !detailsDetectionCleanedImageUrl}
+                  isLoading={focusedIsAutofilling}
+                  label="AI autofill type, name, brand, and tags"
+                  onClick={() => onRequestDetectionAutofill(detailsDetection)}
+                />
+              </div>
             }
             category={focusedDraft.category || detailsDetection.category}
             title={focusedSuggestedName}
@@ -423,7 +453,7 @@ export function CreateItemImageMode({
               </div>
             )}
 
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-3">
               <ItemMetadataFields
                 autofillDisabled={!detailsPreviewBox && !detailsDetectionCleanedImageUrl}
                 brandSuggestions={brandSuggestions}
@@ -432,7 +462,7 @@ export function CreateItemImageMode({
                 showAutofillButton={false}
                 tagSuggestions={tagSuggestions}
                 values={focusedDraft}
-                onChange={(nextValues) => onDraftChange(detailsDetection.id, nextValues)}
+                onChange={(nextValues) => onDraftChange(detailsDetection, nextValues)}
               />
             </div>
 

@@ -305,7 +305,7 @@ See [back-end/.env.example](./.env.example) for expected variables.
 - `OPENROUTER_API_KEY` is required for outfit detection, metadata suggestion, and image-cleaning features.
 - `OPENROUTER_MODEL` defaults to `openai/gpt-4.1-mini`.
 - `OPENROUTER_METADATA_MODEL` can override the metadata suggestion model independently.
-- `OPENROUTER_VISION_MAX_TOKENS` defaults to `500` for structured detection and crop-analysis requests.
+- `OPENROUTER_VISION_MAX_TOKENS` defaults to `900` for structured detection and crop-analysis requests, and the vision service will retry once with a larger token budget if OpenRouter truncates the structured JSON response.
 - `OPENROUTER_METADATA_MAX_TOKENS` defaults to `300` for item metadata suggestion requests.
 - `OPENROUTER_IMAGE_CLEAN_MAX_TOKENS` defaults to `300` for AI clean-image generation requests.
 - `AI_CLEAN_BACKGROUND_FUZZ` optionally tunes how aggressively the clean-image post-process removes the sampled edge backdrop color. It defaults to `12%`.

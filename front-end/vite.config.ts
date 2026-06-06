@@ -20,6 +20,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const backendHost = env.BACKEND_HOST || '127.0.0.1'
   const backendPort = env.BACKEND_PORT || '3000'
+  const backendOrigin = `http://${backendHost}:${backendPort}`
 
   return {
     plugins: [
@@ -43,8 +44,25 @@ export default defineConfig(({ mode }) => {
           rewrite: (requestPath) => requestPath.replace(/^\/api/, ''),
         },
         '/rails/active_storage': {
-          target: `http://${backendHost}:${backendPort}`,
+          target: backendOrigin,
           changeOrigin: true,
+          configure: (proxy) => {
+            proxy.on('proxyRes', (proxyRes) => {
+              const location = proxyRes.headers.location
+              if (!location) {
+                return
+              }
+
+              try {
+                const parsed = new URL(location, backendOrigin)
+                if (parsed.pathname.startsWith('/rails/active_storage/')) {
+                  proxyRes.headers.location = `${parsed.pathname}${parsed.search}`
+                }
+              } catch {
+                // Leave non-URL Location headers untouched.
+              }
+            })
+          },
         },
       },
     },

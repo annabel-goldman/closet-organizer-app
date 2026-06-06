@@ -425,7 +425,7 @@ export function ItemMetadataFields({
                 onKeyDown={handleTagInputKeyDown}
                 list={tagSuggestions.length > 0 ? tagListId : undefined}
                 placeholder="Add tag"
-                className="h-9 w-32 border border-border bg-background px-3 py-1"
+                className="h-9 w-32 border border-border bg-background px-3 py-1 text-sm leading-relaxed [font-family:Outfit,sans-serif]"
                 autoFocus
                 maxLength={MAX_TAG_LENGTH}
               />
