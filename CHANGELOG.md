@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Patched audited backend dependencies by upgrading `puma` to `8.0.2`, `erb` to `6.0.4`, `faraday` to `2.14.2`, `jwt` to `3.2.0`, and the transitive OAuth stack to `oauth2 2.0.22` so the branch clears the current `bundler-audit` CVEs for the Rails server and Google sign-in path.
 - Added filter-aware closet search suggestions with fuzzy typo matching: typing in the closet search field now opens an item dropdown that respects active tag, color, and brand filters, click fills the search query, and Enter opens the highlighted item.
 - Added explicit OpenRouter completion-token caps for structured vision, metadata suggestion, and AI clean-image requests, with backend env overrides, so per-key spend limits are less likely to reject a single request for asking for too large a completion budget.
 - Stabilized the expanded image editor modal so the left image viewport stays fixed while crop results resize inside it, preset crop ratios become immediately actionable without an extra drag, and modal-local undo/redo stays separate from the larger page-level saved-image history.
