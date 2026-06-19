@@ -37,5 +37,8 @@
 /front-end/node_modules/
 /front-end/dist/
 
+# Production backup exports
+/prod-backups/
+
 # macOS filesystem metadata
 .DS_Store
