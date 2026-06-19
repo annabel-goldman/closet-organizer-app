@@ -12,6 +12,7 @@ import {
   createTransparentPreviewFile,
   CreateItemMode,
   emptyClothingItemFormValues,
+  ensureImageFileWithinUploadLimit,
   fetchImageFileFromUrl,
   fetchOutfitUpload,
   fetchUser,
@@ -104,6 +105,7 @@ export function CreateItemPage({
   const [manualRedoHistory, setManualRedoHistory] = useState<ManualCreateUndoSnapshot[]>([]);
   const [detectionUndoHistory, setDetectionUndoHistory] = useState<DetectionDraftHistory>({});
   const [detectionRedoHistory, setDetectionRedoHistory] = useState<DetectionDraftHistory>({});
+  const [detectionDraftReadyIds, setDetectionDraftReadyIds] = useState<Record<number, true>>({});
   const [outfitUpload, setOutfitUpload] = useState<OutfitUpload | null>(null);
   const [pendingReplacementFile, setPendingReplacementFile] = useState<File | null>(null);
   const [selectedDetectionIds, setSelectedDetectionIds] = useState<number[]>([]);
@@ -226,6 +228,7 @@ export function CreateItemPage({
     setSelectedDetectionIds([]);
     detectionAi.resetDetectionAiState();
     setEditedDetections({});
+    setDetectionDraftReadyIds({});
     setDetectionUndoHistory({});
     setDetectionRedoHistory({});
     setAutofillingDetectionId(null);
@@ -373,6 +376,15 @@ export function CreateItemPage({
     detectionAi.setStagedDetectionCleanPreview(detection.id, file, context.imageKind);
   }
 
+  async function replaceDetectionImage(
+    detection: OutfitDetection,
+    file: File,
+  ) {
+    const nextFile = await ensureImageFileWithinUploadLimit(file);
+    detectionAi.setStagedDetectionCleanPreview(detection.id, nextFile, "base");
+    setErrorMessage("");
+  }
+
   function closeReplaceImageWarning(open: boolean) {
     setIsReplaceImageWarningOpen(open);
 
@@ -510,7 +522,7 @@ export function CreateItemPage({
   }
 
   function hasDetectionDraft(detectionId: number) {
-    return Boolean(editedDetections[detectionId]);
+    return Boolean(detectionDraftReadyIds[detectionId]);
   }
 
   function setDetectionDraftValues(detection: OutfitDetection, nextValues: ClothingItemFormValues) {
@@ -605,6 +617,11 @@ export function CreateItemPage({
   }
 
   async function autofillDetectedMetadata(nextDetections: OutfitDetection[]) {
+    setDetectionDraftReadyIds((current) => ({
+      ...current,
+      ...Object.fromEntries(nextDetections.map((detection) => [detection.id, true] as const)),
+    }));
+
     const detectionIdsToAutofill = nextDetections
       .filter(
         (detection) =>
@@ -963,6 +980,9 @@ export function CreateItemPage({
           onFileChange={handleImageFileChange}
           onGetDetectionImageEditorFile={getDetectionImageEditorFile}
           onGetSourceImageEditorFile={getSourceImageEditorFile}
+          onReplaceDetectionImage={(detection, file) => {
+            void replaceDetectionImage(detection, file);
+          }}
           onSaveSelectedItems={() => void handleSaveSelectedItems()}
           onToggleSelection={toggleDetectionSelection}
           onUndoDetectionDraft={handleDetectionUndo}

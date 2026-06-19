@@ -37,11 +37,11 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :created
-    assert_equal "coat", response_json["category"]
+    assert_equal "outerwear", response_json["category"]
     assert_equal "Camel Coat", response_json["name"]
     assert_equal "large", response_json["size"]
     assert_equal "Studio North", response_json["brand"]
-    assert_equal [ "wool", "camel", "tailored", "studio north" ], response_json["tags"]
+    assert_equal [ "wool", "camel", "tailored", "studio north", "coat" ], response_json["tags"]
   end
 
   test "defaults size to na when omitted" do
@@ -175,7 +175,8 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_predicate created_item.photo, :attached?
     assert_equal "image/png", created_item.photo.blob.content_type
     assert_match(/crop\.png\z/, created_item.photo.blob.filename.to_s)
-    assert_equal "shirt", created_item.category
+    assert_equal "top", created_item.category
+    assert_includes created_item.tags, "shirt"
     assert_equal upload.id, created_item.source_outfit_upload_id
     assert_equal detection.id, created_item.source_outfit_detection_id
   end
@@ -295,11 +296,11 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     @clothing_item.reload
-    assert_equal "blouse", @clothing_item.category
+    assert_equal "top", @clothing_item.category
     assert_equal "Ivory Silk Blouse", @clothing_item.name
     assert_equal "small", @clothing_item.size
-    assert_equal [ "silk", "ivory", "dressy", "maison" ], @clothing_item.tags
-    assert_equal [ "silk", "ivory", "dressy", "maison" ], response_json["tags"]
+    assert_equal [ "silk", "ivory", "dressy", "maison", "blouse" ], @clothing_item.tags
+    assert_equal [ "silk", "ivory", "dressy", "maison", "blouse" ], response_json["tags"]
   end
 
   test "can remove a clothing item photo" do

@@ -102,6 +102,7 @@ Notes:
 - `ApplicationController` returns `404` JSON for missing records and `422` JSON for validation failures.
 - In development and test only, `ApplicationController` also accepts `X-Test-User-Id` so local browser QA can impersonate an existing user without going through Google OAuth on every run.
 - Clothing item create/update requests can include `clothing_item[photo]` and `clothing_item[cleaned_photo]` in the same multipart payload so the frontend can keep the original attached photo while also staging or saving a single AI-cleaned catalog image. The payload can also include `clothing_item[remove_cleaned_photo]`.
+- Clothing item `category` is normalized through the broad wardrobe taxonomy (`top`, `bottom`, `dress`, `outerwear`, `shoes`, `bag`, `intimates`). Legacy or AI-provided aliases such as `sweater`, `skirt`, `boots`, or `bra` collapse to the broad type, while the useful specific subtype is preserved in tags.
 - Text input length is capped at every layer: `app/models/concerns/input_length_policy.rb` exposes the limits (username 60, email 254, item name 120, brand 80, category 60, outfit name 120, notes 2_000, tag 40 chars × 30 per record); the `User`/`ClothingItem`/`Outfit` models validate against the same constants and surface friendly errors; the `AddInputLengthConstraints` migration enforces matching `limit:` and `null: false` constraints at the database. SQL injection is mitigated by ActiveRecord's parameterized queries — the only raw SQL fragment in the app (`where("lower(email) = ?", ...)` in `User`) uses bound placeholders.
 - `GET /users` is paginated via Kaminari. It accepts `page` and `per_page` query params (default 24, max 100) and returns `{ users: [...], meta: { page, per_page, total_pages, total_count } }`. The index payload omits each user's `clothing_items` array and only includes a `clothing_items_count` field; per-user `GET /users/:id` still returns the full items array.
 - Outfit payloads now preserve per-piece collage presentation through `outfit_items`: each embedded outfit item can include `outfit_item_id`, `layer_order`, and `collage_layout` (`x`, `y`, `width`, `height`, `rotation`) so the frontend can reopen and edit saved collages faithfully. The outfit integration suite also covers the round-trip contract that the collage layout returned by `PATCH /outfits/:id` matches the subsequent `GET /outfits/:id` payload used by the saved gallery.
@@ -132,6 +133,10 @@ Notes:
   Runs a one-time per-user backfill that sends existing `ClothingItem.photo` attachments through the clean-image PNG pipeline
 - `app/services/openrouter_metadata_suggester.rb`
   Calls OpenRouter structured vision responses for item metadata suggestions
+- `app/services/wardrobe_taxonomy.rb`
+  Owns canonical clothing type, tag alias, category cleanup, brand typo, and obvious item-name cleanup rules
+- `app/services/closet_data_standardizer.rb`
+  Audits and optionally applies the local Annabel closet taxonomy cleanup, including automatic SQLite backup creation before apply
 - `app/services/outfit_upload_analyzer.rb`
   Coordinates upload analysis, detection creation, and crop refinement workflow
 - `app/services/managed_tempfiles.rb`
@@ -193,6 +198,26 @@ Notes:
 - It skips items that already have a `cleaned_photo` by default.
 - Set `FORCE=true` to rerun items that already have cleaned PNG output while still using the original attached item photo as the cleaner input.
 
+Standardize Annabel's local development closet data against the wardrobe taxonomy:
+
+```bash
+bin/rails closet_data:standardize_annabel
+```
+
+Apply the audited changes:
+
+```bash
+APPLY=1 bin/rails closet_data:standardize_annabel
+```
+
+Notes:
+
+- The task is limited to development/test and defaults to `annabelgoldman2025@u.northwestern.edu`.
+- Dry-run prints the before/after category counts, changed item audit rows, and duplicate-looking name warnings without writing records.
+- Apply mode creates a timestamped SQLite backup under `tmp/closet_data_backups/` before changing any records.
+- The task updates item metadata only; saved outfits and Active Storage attachments are left untouched.
+- To restore a backup locally, stop Rails and copy the desired backup over `storage/development.sqlite3`.
+
 Import only the production clothing items missing locally for one user, then backfill cleaned PNGs for just those imported originals:
 
 ```bash
@@ -226,6 +251,7 @@ Notes:
 
 - `name`
 - `category`
+  Broad wardrobe taxonomy value: `top`, `bottom`, `dress`, `outerwear`, `shoes`, `bag`, or `intimates`
 - `brand`
 - `size`
 - `date`

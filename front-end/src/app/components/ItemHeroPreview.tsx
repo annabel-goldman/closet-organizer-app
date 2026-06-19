@@ -250,21 +250,23 @@ export function ItemHeroPreview({
 
       {canExpand && (
         <Dialog open={isImageExpanded} onOpenChange={setIsImageExpanded}>
-          <DialogContent className="h-[calc(100vh-4rem)] w-[calc(100vw-4rem)] max-w-none overflow-hidden border-none bg-black/95 p-3 shadow-2xl outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 sm:h-[calc(100vh-5rem)] sm:w-[calc(100vw-5rem)] sm:max-w-none sm:p-5 lg:p-6">
+          <DialogContent className="flex h-[calc(100vh-4rem)] w-[calc(100vw-4rem)] max-w-none flex-col overflow-hidden border-none bg-black/95 p-3 shadow-2xl outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 sm:h-[calc(100vh-5rem)] sm:w-[calc(100vw-5rem)] sm:max-w-none sm:p-5 lg:p-6">
             <DialogTitle className="sr-only">{title}</DialogTitle>
             <DialogDescription className="sr-only">
               Larger preview for {title} with options to update or clear the image.
             </DialogDescription>
             {previewEditor ? (
-              <ExpandedImageEditor
-                getEditableFile={previewEditor.getEditableFile}
-                imageActions={previewEditor.imageActions}
-                isApplying={isApplyingEditedImage}
-                onApply={handleApplyEditedImage}
-                title={title}
-              />
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <ExpandedImageEditor
+                  getEditableFile={previewEditor.getEditableFile}
+                  imageActions={previewEditor.imageActions}
+                  isApplying={isApplyingEditedImage}
+                  onApply={handleApplyEditedImage}
+                  title={title}
+                />
+              </div>
             ) : (
-              <div className="flex max-h-[72vh] items-center justify-center overflow-hidden">
+              <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
                 {expandedPreview ? (
                   <div className="max-h-[72vh] w-full overflow-hidden">
                     {expandedPreview}
@@ -279,7 +281,7 @@ export function ItemHeroPreview({
               </div>
             )}
             {(onPreviewEdit || onPreviewClear) && (
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex shrink-0 items-center justify-between gap-4 pt-4">
                 <div className="flex items-center gap-3">
                   {onPreviewEdit ? (
                     <PrimitiveButton

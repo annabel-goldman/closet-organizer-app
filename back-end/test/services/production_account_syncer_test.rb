@@ -193,7 +193,8 @@ class ProductionAccountSyncerTest < ActiveSupport::TestCase
     assert_equal 1, target_user.outfits.count
     assert_equal 1, target_user.outfit_uploads.count
     assert_equal "Prod Oxford", imported_item.name
-    assert_equal [ "capsule", "navy" ], imported_item.tags
+    assert_equal "top", imported_item.category
+    assert_equal [ "capsule", "navy", "shirt" ], imported_item.tags
     assert_equal imported_upload.id, imported_item.source_outfit_upload_id
     assert_equal imported_detection.id, imported_item.source_outfit_detection_id
     assert_equal "source-upload-bytes", imported_upload.source_photo.download

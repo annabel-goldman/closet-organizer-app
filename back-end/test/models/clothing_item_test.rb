@@ -29,7 +29,7 @@ class ClothingItemTest < ActiveSupport::TestCase
     assert_nil item.brand
   end
 
-  test "normalizes category to lowercase" do
+  test "normalizes category aliases to canonical taxonomy" do
     item = ClothingItem.new(
       user: users(:one),
       name: "Basic Tee",
@@ -39,7 +39,20 @@ class ClothingItemTest < ActiveSupport::TestCase
 
     item.valid?
 
-    assert_equal "sweater", item.category
+    assert_equal "top", item.category
+    assert_includes item.tags, "sweater"
+  end
+
+  test "rejects categories outside the canonical taxonomy" do
+    item = ClothingItem.new(
+      user: users(:one),
+      name: "Mystery Piece",
+      size: :small,
+      category: "costume"
+    )
+
+    assert_not item.valid?
+    assert_includes item.errors[:category], "is not included in the list"
   end
 
   test "normalizes tags into a clean list" do
@@ -56,7 +69,7 @@ class ClothingItemTest < ActiveSupport::TestCase
 
     item.valid?
 
-    assert_equal [ "cos", "workwear" ], item.tags
+    assert_equal [ "cos", "workwear", "blazer" ], item.tags
   end
 
   test "defaults size to na on create" do

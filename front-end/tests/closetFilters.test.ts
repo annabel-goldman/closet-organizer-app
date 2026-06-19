@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ClothingItem } from "../src/app/lib/closet.ts";
+import type { ClothingItem } from "../src/app/lib/closet.ts";
 import {
+  buildGroupedTagOptions,
   getClosetSearchSuggestions,
   matchesSearchQuery,
   termMatchesInHaystack,
 } from "../src/app/lib/closetFilters.ts";
+import { normalizeCategory } from "../src/app/lib/wardrobeTaxonomy.ts";
 
 function makeItem(overrides: Partial<ClothingItem> & Pick<ClothingItem, "id" | "name">): ClothingItem {
   return {
@@ -83,4 +85,29 @@ test("getClosetSearchSuggestions limits results", () => {
   );
 
   assert.equal(suggestions.length, 3);
+});
+
+test("normalizeCategory maps legacy item types to canonical type values", () => {
+  assert.equal(normalizeCategory("Sweater"), "top");
+  assert.equal(normalizeCategory("jeans"), "bottom");
+  assert.equal(normalizeCategory("boots"), "shoes");
+  assert.equal(normalizeCategory("bra"), "intimates");
+  assert.equal(normalizeCategory("costume"), "");
+});
+
+test("buildGroupedTagOptions omits broad type tags from other tags", () => {
+  const items = [
+    makeItem({
+      id: 1,
+      name: "Cream Sweater",
+      brand: "J.Crew",
+      category: "top",
+      tags: ["white", "top", "sweater", "J.Crew"],
+    }),
+  ];
+
+  const grouped = buildGroupedTagOptions(items);
+
+  assert.deepEqual(grouped.colors, ["white"]);
+  assert.deepEqual(grouped.other, ["sweater"]);
 });

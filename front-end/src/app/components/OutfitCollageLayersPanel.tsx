@@ -1,19 +1,28 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Plus, X } from "lucide-react";
 import { ClothingItem, buildPlaceholderLabel } from "../lib/closet";
 import { OutfitCollageLayout, sortItemsByCollageLayer } from "../lib/outfitCollage";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 interface OutfitCollageLayersPanelProps {
+  availableItems: ClothingItem[];
   items: ClothingItem[];
   layouts: Record<number, OutfitCollageLayout>;
+  onAddItem: (itemId: number) => void;
+  onRemoveItem: (itemId: number) => void;
   onReorder: (orderedItemIds: number[]) => void;
   onSelectItem: (itemId: number) => void;
   selectedItemId?: number | null;
 }
 
 export function OutfitCollageLayersPanel({
+  availableItems,
   items,
   layouts,
+  onAddItem,
+  onRemoveItem,
   onReorder,
   onSelectItem,
   selectedItemId = null,
@@ -24,6 +33,7 @@ export function OutfitCollageLayersPanel({
   );
   const [draggingItemId, setDraggingItemId] = useState<number | null>(null);
   const [dragHoverItemId, setDragHoverItemId] = useState<number | null>(null);
+  const [isAddOpen, setIsAddOpen] = useState(false);
   const lastDropTargetIdRef = useRef<number | null>(null);
   const keyboardHintId = useId();
 
@@ -153,10 +163,10 @@ export function OutfitCollageLayersPanel({
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 border border-border bg-card/90 p-2 sm:gap-3 sm:p-3">
       <PrimitiveText as="p" variant="overline" tone="muted" className="text-[0.65rem] sm:text-[0.7rem]">
-        Layers
+        Items
       </PrimitiveText>
       <p id={keyboardHintId} className="sr-only">
-        Press Enter or Space to select a layer. Press Option plus Arrow Up or Arrow Down to reorder layers.
+        Press Enter or Space to select an item. Press Option plus Arrow Up or Arrow Down to reorder items.
       </p>
       <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
         {orderedItems.map((item) => {
@@ -173,7 +183,7 @@ export function OutfitCollageLayersPanel({
                 handleLayerPointerDown(item.id);
               }}
               onKeyDown={(event) => handleLayerKeyDown(event, item.id)}
-              className={`group flex aspect-[3/4] w-full items-center justify-center overflow-hidden border bg-background transition-colors ${
+              className={`group relative flex aspect-[3/4] w-full items-center justify-center overflow-hidden border bg-background transition-colors ${
                 isSelected ? "border-foreground shadow-[0_0_0_1px_rgba(17,17,17,0.18)]" : "border-border hover:bg-stone-50"
               } ${
                 draggingItemId === item.id ? "cursor-grabbing opacity-80" : "cursor-grab"
@@ -182,9 +192,28 @@ export function OutfitCollageLayersPanel({
               }`}
               aria-describedby={keyboardHintId}
               aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown Alt+Home Alt+End"
-              aria-label={`Select layer ${item.name}`}
+              aria-label={`Select item ${item.name}`}
               title={item.name}
             >
+              <PrimitiveButton
+                type="button"
+                variant="outline"
+                size="icon"
+                className="absolute right-1.5 top-1.5 z-10 h-5.5 w-5.5 border-white/70 bg-white/85 text-stone-700 shadow-sm hover:bg-white"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onRemoveItem(item.id);
+                }}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                aria-label={`Remove ${item.name} from outfit`}
+                title={`Remove ${item.name}`}
+              >
+                <X className="h-3 w-3" />
+              </PrimitiveButton>
               {item.image_url ? (
                 <img src={item.image_url} alt="" className="h-full w-full object-cover" />
               ) : (
@@ -196,6 +225,72 @@ export function OutfitCollageLayersPanel({
           );
         })}
       </div>
+      <Popover open={isAddOpen} onOpenChange={setIsAddOpen}>
+        <PopoverTrigger asChild>
+          <PrimitiveButton
+            type="button"
+            variant="outline"
+            size="icon"
+            className="mt-auto h-8 w-8 self-center border-dashed"
+            disabled={availableItems.length === 0}
+            aria-label="Add item to outfit"
+            title="Add item"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </PrimitiveButton>
+        </PopoverTrigger>
+        <PopoverContent
+          side="right"
+          align="start"
+          sideOffset={12}
+          collisionPadding={{ top: 16, right: 16, bottom: 76, left: 16 }}
+          className="flex max-h-[24rem] w-[15.5rem] flex-col overflow-hidden border-border p-0 shadow-[0_18px_40px_rgba(15,23,42,0.16)]"
+        >
+          <div className="shrink-0 border-b border-border px-3 py-2.5">
+            <PrimitiveText as="p" variant="overline" tone="muted" className="mb-1">
+              Add Item
+            </PrimitiveText>
+          </div>
+          <div
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3"
+            onWheel={(event) => event.stopPropagation()}
+          >
+            {availableItems.length === 0 ? (
+              <div className="rounded-sm border border-dashed border-border p-4 text-sm text-muted-foreground">
+                All closet items are already in this outfit.
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-1.5">
+                {availableItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      onAddItem(item.id);
+                      setIsAddOpen(false);
+                    }}
+                    className="group text-left"
+                    aria-label={`Add ${item.name} to outfit`}
+                    title={item.name}
+                  >
+                    <div className="relative aspect-[3/4] overflow-hidden border border-border bg-background transition-colors group-hover:bg-stone-50">
+                      {item.image_url ? (
+                        <img src={item.image_url} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <PrimitiveText as="span" variant="bodySm" tone="muted">
+                            {buildPlaceholderLabel(item.name) || "?"}
+                          </PrimitiveText>
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

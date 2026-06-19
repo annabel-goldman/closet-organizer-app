@@ -59,6 +59,7 @@ interface CreateItemImageModeProps {
   onGetDetectionImageEditorFile?: (detection: OutfitDetection) => Promise<File | null>;
   onGetSourceImageEditorFile?: () => Promise<File | null>;
   onRequestDetectionAutofill: (detection: OutfitDetection) => void;
+  onReplaceDetectionImage?: (detection: OutfitDetection, file: File) => Promise<void> | void;
   onRedoDetectionDraft: (detection: OutfitDetection) => void;
   onSaveSelectedItems: () => void;
   onToggleSelection: (detection: OutfitDetection) => void;
@@ -102,6 +103,7 @@ export function CreateItemImageMode({
   onGetDetectionImageEditorFile,
   onGetSourceImageEditorFile,
   onRequestDetectionAutofill,
+  onReplaceDetectionImage,
   onRedoDetectionDraft,
   onSaveSelectedItems,
   onToggleSelection,
@@ -120,6 +122,8 @@ export function CreateItemImageMode({
   const [isRedetectDialogOpen, setIsRedetectDialogOpen] = useState(false);
   const [isSaveWarningDialogOpen, setIsSaveWarningDialogOpen] = useState(false);
   const previousDetectionCountRef = useRef(0);
+  const detectionReplacementInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingReplacementDetectionIdRef = useRef<number | null>(null);
   const hasStartedDetectionFlow = Boolean(selectedFileName || isDetecting || outfitUpload);
 
   useEffect(() => {
@@ -161,6 +165,10 @@ export function CreateItemImageMode({
   const isSourceFocused = previewTarget === "source";
   const previewDetectionBox = previewDetection ? preferredDetectionBox(previewDetection) : null;
   const detailsPreviewBox = detailsDetection ? preferredDetectionBox(detailsDetection) : null;
+  const previewDraft = previewDetection ? getDetectionDraft(previewDetection) : null;
+  const previewSuggestedName = previewDraft?.name.trim()
+    || previewDetection?.suggested_name?.trim()
+    || (previewDetection ? titleize(previewDetection.category) : "");
   const detailsDraftReady = detailsDetection ? hasDetectionDraft(detailsDetection.id) : false;
   const focusedDraft = detailsDetection ? getDetectionDraft(detailsDetection) : null;
   const focusedSuggestedName = focusedDraft?.name.trim()
@@ -201,12 +209,12 @@ export function CreateItemImageMode({
 
     return (
       <DetectionPreviewImage
-        alt={`${focusedSuggestedName} preview`}
+        alt={`${previewSuggestedName} preview`}
         cropBox={previewDetectionBox}
         sourceImageUrl={sourceImageUrl}
       />
     );
-  }, [focusedSuggestedName, previewDetection, previewDetectionBox, previewDetectionCleanedImageUrl, sourceImageUrl]);
+  }, [previewSuggestedName, previewDetection, previewDetectionBox, previewDetectionCleanedImageUrl, sourceImageUrl]);
   const expandedPreview = useMemo(() => {
     if (!previewDetection || !sourceImageUrl || !previewDetectionBox || previewDetectionCleanedImageUrl) {
       return undefined;
@@ -214,12 +222,12 @@ export function CreateItemImageMode({
 
     return (
       <DetectionPreviewImage
-        alt={`${focusedSuggestedName} preview`}
+        alt={`${previewSuggestedName} preview`}
         cropBox={previewDetectionBox}
         sourceImageUrl={sourceImageUrl}
       />
     );
-  }, [focusedSuggestedName, previewDetection, previewDetectionBox, previewDetectionCleanedImageUrl, sourceImageUrl]);
+  }, [previewSuggestedName, previewDetection, previewDetectionBox, previewDetectionCleanedImageUrl, sourceImageUrl]);
   const sourcePreviewTitle = selectedFileName ?? "Upload an image";
   const sourcePreviewPrimaryDetail = isDetecting
     ? "Detecting items"
@@ -242,6 +250,35 @@ export function CreateItemImageMode({
   const hasUnsavedDetectedItems = selectedCount < detectionCount;
   const detectPromptCopy = "Press the button below to detect your items.";
 
+  function handleRequestDetectionImageReplacement() {
+    if (!previewDetection || !onReplaceDetectionImage) {
+      return;
+    }
+
+    pendingReplacementDetectionIdRef.current = previewDetection.id;
+    detectionReplacementInputRef.current?.click();
+  }
+
+  async function handleDetectionReplacementFileChange(file: File | null) {
+    const detectionId = pendingReplacementDetectionIdRef.current;
+    pendingReplacementDetectionIdRef.current = null;
+
+    if (detectionReplacementInputRef.current) {
+      detectionReplacementInputRef.current.value = "";
+    }
+
+    if (!file || !onReplaceDetectionImage || detectionId == null) {
+      return;
+    }
+
+    const detection = detections.find((entry) => entry.id === detectionId);
+    if (!detection) {
+      return;
+    }
+
+    await onReplaceDetectionImage(detection, file);
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-6 pt-12 pb-24 space-y-8">
       <PrimitiveButton
@@ -258,8 +295,16 @@ export function CreateItemImageMode({
         imageUrl={previewDetectionCleanedImageUrl ?? (isSourceFocused ? sourceImageUrl : null)}
         isPreviewProcessing={focusedIsCleaning || focusedIsMakingTransparent}
         onPreviewClick={() => inputRef.current?.click()}
-        onPreviewClear={selectedFileName ? onClearImageSelection : undefined}
-        onPreviewEdit={selectedFileName ? () => inputRef.current?.click() : undefined}
+        onPreviewClear={isSourceFocused && selectedFileName ? onClearImageSelection : undefined}
+        onPreviewEdit={
+          isSourceFocused
+            ? selectedFileName
+              ? () => inputRef.current?.click()
+              : undefined
+            : previewDetection && onReplaceDetectionImage
+              ? handleRequestDetectionImageReplacement
+              : undefined
+        }
         previewEditor={
           isSourceFocused && selectedFileName && onGetSourceImageEditorFile && onApplySourceImageEdits
             ? {
@@ -303,13 +348,22 @@ export function CreateItemImageMode({
             ? null
             : sourcePreviewSecondaryDetail
         }
-        previewTitle={previewDetection ? titleize(previewDetection.suggested_name?.trim() || previewDetection.category) : sourcePreviewTitle}
+        previewTitle={previewDetection ? previewSuggestedName : sourcePreviewTitle}
       >
         <input
           ref={inputRef}
           type="file"
           accept="image/*"
           onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
+          className="sr-only"
+        />
+        <input
+          ref={detectionReplacementInputRef}
+          type="file"
+          accept="image/*"
+          onChange={(event) => {
+            void handleDetectionReplacementFileChange(event.target.files?.[0] ?? null);
+          }}
           className="sr-only"
         />
 

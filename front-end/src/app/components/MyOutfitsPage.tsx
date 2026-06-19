@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { Pencil, Shirt, Trash2 } from "lucide-react";
+import { Pencil, RotateCcw, RotateCw, Shirt, Trash2 } from "lucide-react";
 import {
   ClothingItem,
   destroyOutfit,
@@ -32,6 +32,7 @@ import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveConfirmationDialog } from "./primitives/PrimitiveConfirmationDialog";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { MAX_OUTFIT_NAME, MAX_OUTFIT_NOTES } from "../lib/inputLengthPolicy";
+import { useUndoRedoShortcuts } from "../lib/useUndoRedoShortcuts";
 
 interface MyOutfitsPageProps {
   user: User;
@@ -40,6 +41,12 @@ interface MyOutfitsPageProps {
 interface FlashState {
   kind: "success" | "error";
   message: string;
+}
+
+interface OutfitEditorSnapshot {
+  formState: OutfitDraft;
+  layouts: Record<number, OutfitCollageLayout>;
+  selectedItemId: number | null;
 }
 
 function outfitToFormState(outfit: Outfit): OutfitDraft {
@@ -66,6 +73,8 @@ export function MyOutfitsPage({
   });
   const [editorLayouts, setEditorLayouts] = useState<Record<number, OutfitCollageLayout>>({});
   const [selectedCollageItemId, setSelectedCollageItemId] = useState<number | null>(null);
+  const [editorUndoHistory, setEditorUndoHistory] = useState<OutfitEditorSnapshot[]>([]);
+  const [editorRedoHistory, setEditorRedoHistory] = useState<OutfitEditorSnapshot[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [outfitPendingDelete, setOutfitPendingDelete] = useState<Outfit | null>(null);
@@ -80,6 +89,10 @@ export function MyOutfitsPage({
       .map((id) => itemById.get(id))
       .filter((item): item is ClothingItem => Boolean(item));
   }, [formState.itemIds, sortedItems]);
+  const availableEditorItems = useMemo(() => {
+    const selectedIdSet = new Set(formState.itemIds);
+    return sortedItems.filter((item) => !selectedIdSet.has(item.id));
+  }, [formState.itemIds, sortedItems]);
   const editingOutfit = editingOutfitId
     ? outfits.find((outfit) => outfit.id === editingOutfitId) ?? null
     : null;
@@ -88,10 +101,100 @@ export function MyOutfitsPage({
     setFlash({ kind, message });
   }
 
+  function cloneLayouts(layouts: Record<number, OutfitCollageLayout>) {
+    return Object.fromEntries(
+      Object.entries(layouts).map(([ itemId, layout ]) => [ Number(itemId), { ...layout } ]),
+    ) as Record<number, OutfitCollageLayout>;
+  }
+
+  function cloneSnapshot(snapshot: OutfitEditorSnapshot): OutfitEditorSnapshot {
+    return {
+      formState: {
+        ...snapshot.formState,
+        itemIds: [ ...snapshot.formState.itemIds ],
+      },
+      layouts: cloneLayouts(snapshot.layouts),
+      selectedItemId: snapshot.selectedItemId,
+    };
+  }
+
+  function captureEditorSnapshot(): OutfitEditorSnapshot {
+    return cloneSnapshot({
+      formState,
+      layouts: editorLayouts,
+      selectedItemId: selectedCollageItemId,
+    });
+  }
+
+  function snapshotsEqual(left: OutfitEditorSnapshot, right: OutfitEditorSnapshot) {
+    if (
+      left.selectedItemId !== right.selectedItemId
+      || left.formState.name !== right.formState.name
+      || left.formState.notes !== right.formState.notes
+      || left.formState.tagInput !== right.formState.tagInput
+      || left.formState.itemIds.length !== right.formState.itemIds.length
+    ) {
+      return false;
+    }
+
+    for (let index = 0; index < left.formState.itemIds.length; index += 1) {
+      if (left.formState.itemIds[index] !== right.formState.itemIds[index]) {
+        return false;
+      }
+    }
+
+    const leftLayoutKeys = Object.keys(left.layouts);
+    const rightLayoutKeys = Object.keys(right.layouts);
+    if (leftLayoutKeys.length !== rightLayoutKeys.length) {
+      return false;
+    }
+
+    for (const key of leftLayoutKeys) {
+      const leftLayout = left.layouts[Number(key)];
+      const rightLayout = right.layouts[Number(key)];
+      if (
+        !rightLayout
+        || leftLayout.x !== rightLayout.x
+        || leftLayout.y !== rightLayout.y
+        || leftLayout.width !== rightLayout.width
+        || leftLayout.height !== rightLayout.height
+        || leftLayout.rotation !== rightLayout.rotation
+        || leftLayout.layer_order !== rightLayout.layer_order
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function applyEditorSnapshot(snapshot: OutfitEditorSnapshot) {
+    const nextSnapshot = cloneSnapshot(snapshot);
+    setFormState(nextSnapshot.formState);
+    setEditorLayouts(nextSnapshot.layouts);
+    setSelectedCollageItemId(nextSnapshot.selectedItemId);
+  }
+
+  function applyEditorChange(transform: (snapshot: OutfitEditorSnapshot) => OutfitEditorSnapshot) {
+    const currentSnapshot = captureEditorSnapshot();
+    const nextSnapshot = cloneSnapshot(transform(cloneSnapshot(currentSnapshot)));
+
+    if (snapshotsEqual(currentSnapshot, nextSnapshot)) {
+      return;
+    }
+
+    setEditorUndoHistory((current) => [ ...current, currentSnapshot ]);
+    setEditorRedoHistory([]);
+    applyEditorSnapshot(nextSnapshot);
+  }
+
   function setFormField<Key extends keyof OutfitDraft>(key: Key, value: OutfitDraft[Key]) {
-    setFormState((current) => ({
+    applyEditorChange((current) => ({
       ...current,
-      [key]: value,
+      formState: {
+        ...current.formState,
+        [key]: value,
+      },
     }));
   }
 
@@ -200,6 +303,8 @@ export function MyOutfitsPage({
     const nextLayouts = resolveOutfitCollageLayouts(outfit.items);
     setEditorLayouts(nextLayouts);
     setSelectedCollageItemId(outfit.items[0]?.id ?? null);
+    setEditorUndoHistory([]);
+    setEditorRedoHistory([]);
     setFlash(null);
   }
 
@@ -213,7 +318,100 @@ export function MyOutfitsPage({
     });
     setEditorLayouts({});
     setSelectedCollageItemId(null);
+    setEditorUndoHistory([]);
+    setEditorRedoHistory([]);
   }
+
+  function removeEditorItem(itemId: number) {
+    applyEditorChange((current) => {
+      const nextItemIds = current.formState.itemIds.filter((id) => id !== itemId);
+      const nextLayouts = cloneLayouts(current.layouts);
+      delete nextLayouts[itemId];
+
+      return {
+        ...current,
+        formState: {
+          ...current.formState,
+          itemIds: nextItemIds,
+        },
+        layouts: nextLayouts,
+        selectedItemId: current.selectedItemId === itemId ? (nextItemIds[0] ?? null) : current.selectedItemId,
+      };
+    });
+  }
+
+  function addEditorItem(itemId: number) {
+    applyEditorChange((current) => {
+      if (current.formState.itemIds.includes(itemId)) {
+        return current;
+      }
+
+      const nextItem = sortedItems.find((item) => item.id === itemId);
+      if (!nextItem) {
+        return current;
+      }
+
+      const nextItemIds = [ ...current.formState.itemIds, itemId ];
+      const itemById = new Map(sortedItems.map((item) => [ item.id, item ]));
+      const nextItems = nextItemIds
+        .map((id) => itemById.get(id))
+        .filter((item): item is ClothingItem => Boolean(item));
+      const nextLayouts = resolveOutfitCollageLayouts(nextItems, current.layouts);
+      const maxLayerOrder = Math.max(-1, ...Object.values(current.layouts).map((layout) => layout.layer_order));
+      const nextLayout = nextLayouts[itemId];
+
+      return {
+        ...current,
+        formState: {
+          ...current.formState,
+          itemIds: nextItemIds,
+        },
+        layouts: {
+          ...nextLayouts,
+          [itemId]: {
+            ...nextLayout,
+            layer_order: Math.max(maxLayerOrder + 1, nextLayout?.layer_order ?? 0),
+          },
+        },
+        selectedItemId: itemId,
+      };
+    });
+  }
+
+  function handleEditorUndo() {
+    const snapshot = editorUndoHistory[editorUndoHistory.length - 1];
+    if (!snapshot) {
+      return;
+    }
+
+    const currentSnapshot = captureEditorSnapshot();
+    setEditorUndoHistory((current) => current.slice(0, -1));
+    setEditorRedoHistory((current) => [ ...current, currentSnapshot ]);
+    applyEditorSnapshot(snapshot);
+  }
+
+  function handleEditorRedo() {
+    const snapshot = editorRedoHistory[editorRedoHistory.length - 1];
+    if (!snapshot) {
+      return;
+    }
+
+    const currentSnapshot = captureEditorSnapshot();
+    setEditorRedoHistory((current) => current.slice(0, -1));
+    setEditorUndoHistory((current) => [ ...current, currentSnapshot ]);
+    applyEditorSnapshot(snapshot);
+  }
+
+  const canEditorUndo = editorUndoHistory.length > 0;
+  const canEditorRedo = editorRedoHistory.length > 0;
+
+  useUndoRedoShortcuts({
+    canRedo: canEditorRedo,
+    canUndo: canEditorUndo,
+    disabled: !editingOutfitId || isSaving,
+    onRedo: handleEditorRedo,
+    onUndo: handleEditorUndo,
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-12 space-y-10">
@@ -377,15 +575,21 @@ export function MyOutfitsPage({
                     <div className="grid min-h-0 flex-1 grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[5rem_minmax(0,1fr)] sm:gap-4 lg:grid-cols-[5.75rem_minmax(0,1fr)]">
                       <div className="min-w-0">
                         <OutfitCollageLayersPanel
-                          items={editingOutfit.items}
+                          availableItems={availableEditorItems}
+                          items={selectedItems}
                           layouts={editorLayouts}
+                          onAddItem={addEditorItem}
+                          onRemoveItem={removeEditorItem}
                           selectedItemId={selectedCollageItemId}
                           onSelectItem={setSelectedCollageItemId}
                           onReorder={(orderedItemIds) => {
-                            setEditorLayouts((current) => reorderCollageLayers(current, orderedItemIds));
-                            setFormState((current) => ({
+                            applyEditorChange((current) => ({
                               ...current,
-                              itemIds: orderedItemIds,
+                              layouts: reorderCollageLayers(current.layouts, orderedItemIds),
+                              formState: {
+                                ...current.formState,
+                                itemIds: orderedItemIds,
+                              },
                             }));
                           }}
                         />
@@ -393,12 +597,17 @@ export function MyOutfitsPage({
                       <div className="min-w-0">
                         <div className="mx-auto w-full max-w-[min(20rem,calc((100vh-20rem)*0.8))] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.16)] sm:max-w-[min(32rem,calc((100vh-22rem)*0.8))] lg:max-w-[min(72rem,calc((100vh-16rem)*0.8))]">
                         <OutfitCollageCanvas
-                          items={editingOutfit.items}
+                          items={selectedItems}
                           layouts={editorLayouts}
                           editable
                           selectedItemId={selectedCollageItemId}
                           onSelectItem={setSelectedCollageItemId}
-                          onLayoutsChange={setEditorLayouts}
+                          onLayoutsChange={(nextLayouts) => {
+                            applyEditorChange((current) => ({
+                              ...current,
+                              layouts: nextLayouts,
+                            }));
+                          }}
                           className="w-full"
                         />
                         </div>
@@ -495,6 +704,28 @@ export function MyOutfitsPage({
                 ) : null}
 
                 <DialogFooter className="pt-2 sm:justify-start">
+                  <div className="mr-auto flex items-center gap-2">
+                    <PrimitiveButton
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={!canEditorUndo || isSaving}
+                      onClick={handleEditorUndo}
+                      aria-label="Undo last outfit edit"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                    </PrimitiveButton>
+                    <PrimitiveButton
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={!canEditorRedo || isSaving}
+                      onClick={handleEditorRedo}
+                      aria-label="Redo last outfit edit"
+                    >
+                      <RotateCw className="h-4 w-4" />
+                    </PrimitiveButton>
+                  </div>
                   <PrimitiveButton type="submit" disabled={isSaving} variant="outline">
                     Save Changes
                   </PrimitiveButton>

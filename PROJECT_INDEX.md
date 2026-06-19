@@ -1,6 +1,6 @@
 # Project Structure Index
 
-Last updated: 2026-05-29
+Last updated: 2026-06-15
 
 This file is intentionally concise and focused on repository structure.
 For the product purpose and problem statement, see `wiki.md`.
@@ -27,10 +27,10 @@ project-closet-organizer/
 - `app/models`: `user`, `clothing_item`, `outfit`, `outfit_item`, `outfit_upload`, and `outfit_detection`
 - `app/controllers`: auth/session handling, JSON CRUD controllers, outfit collage/layout-aware outfit updates, upload flows, AI clean-image and transparent-PNG helper endpoints, SPA fallback, and the development/test `X-Test-User-Id` QA auth override in `ApplicationController`
 - `app/presenters`: API payload shaping for users, clothing items, outfits, uploads, and detections, including saved outfit collage layout data
-- `app/services/`: OpenRouter detection, metadata suggestion, crop refinement, crop verification, single-image catalog cleanup with backdrop selection plus transparent-background cleanup, snapshot-based account mirror sync services, one-time user PNG backfill support, incremental prod-item import support, and shared tempfile/image-source helpers
+- `app/services/`: OpenRouter detection, metadata suggestion, crop refinement, crop verification, single-image catalog cleanup with backdrop selection plus transparent-background cleanup, shared wardrobe taxonomy and local closet-data standardization services, snapshot-based account mirror sync services, one-time user PNG backfill support, incremental prod-item import support, and shared tempfile/image-source helpers
 - `config/routes.rb`: API routes plus HTML fallback routes
 - `db/seeds.rb`: demo admin user plus large-scale dev seed (~1k users, ~5k items, ~2k outfits) for pagination/perf testing
-- `lib/tasks`: maintenance tasks, including snapshot-based account mirror sync, legacy production-account sync/import helpers, incremental prod-item imports, and one-time clothing-item PNG backfills
+- `lib/tasks`: maintenance tasks, including snapshot-based account mirror sync, local closet-data standardization, legacy production-account sync/import helpers, incremental prod-item imports, and one-time clothing-item PNG backfills
 - `test/`: model, integration, and service tests
 
 ## Frontend (`front-end`)
@@ -50,6 +50,7 @@ project-closet-organizer/
 - `src/app/lib/outfitCollageRenderMath.ts`: shared stage-aspect normalization and resize-aspect helpers that keep saved cards and the editor preview on the same rendering contract
 - `src/app/lib/outfitImageBounds.ts`: cached image-content-bounds measurement helpers for saved-outfit collage rendering and editing
 - `src/app/lib/closetFilters.ts`: closet search, filter, and sort helpers
+- `src/app/lib/wardrobeTaxonomy.ts`: shared canonical clothing type values and alias normalization used by item forms and filters
 - `src/app/lib/useItemPhotoState.ts`: shared photo upload and preview state management
 - `src/app/lib/useUndoRedoShortcuts.ts`: shared editor keyboard shortcut handling for undo/redo
 - `src/app/lib/usePageData.ts`: shared async page-loading hook

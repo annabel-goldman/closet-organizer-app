@@ -1,19 +1,21 @@
 .expanded-image-editor-crop {
   display: block;
-  max-height: 100%;
-  max-width: 100%;
   overflow: hidden;
+  height: 100%;
+  width: 100%;
 }
 
 .expanded-image-editor-crop .ReactCrop__child-wrapper {
+  display: block;
+  height: 100%;
   overflow: hidden;
+  width: 100%;
 }
 
 .expanded-image-editor-crop .ReactCrop__child-wrapper > img {
   display: block;
-  height: auto !important;
-  max-height: 100% !important;
-  max-width: 100% !important;
-  object-fit: contain;
-  width: auto !important;
+  height: 100% !important;
+  max-height: none !important;
+  max-width: none !important;
+  width: 100% !important;
 }

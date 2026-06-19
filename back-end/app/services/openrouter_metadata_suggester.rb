@@ -7,6 +7,39 @@ class OpenrouterMetadataSuggester
   DEFAULT_BASE_URL = "https://openrouter.ai/api/v1".freeze
   DEFAULT_MODEL = "openai/gpt-4.1-mini".freeze
   DEFAULT_MAX_TOKENS = 300
+  SMALL_TITLE_WORDS = %w[a an and as at but by en for if in nor of on or per the to via vs with].freeze
+  BASE_COLOR_WORDS = %w[
+    black white gray grey red blue green yellow orange purple pink brown beige tan cream ivory
+    navy teal turquoise gold silver burgundy maroon olive lilac lavender peach rust coral khaki charcoal
+  ].freeze
+  MODIFIED_COLOR_PATTERN = /
+    \b
+    (?:
+      light|dark|bright|pale|deep|soft|muted|dusty|neon|pastel|rich|faded
+    )
+    \s+
+    (?:
+      #{BASE_COLOR_WORDS.join("|")}
+    )
+    \b
+  /ix.freeze
+  NAMED_COLOR_PATTERN = /
+    \b
+    (?:
+      black\s+and\s+white|
+      off[-\s]white|
+      navy\s+blue|
+      sky\s+blue|
+      baby\s+blue|
+      powder\s+blue|
+      forest\s+green|
+      olive\s+green|
+      hot\s+pink|
+      rose\s+gold|
+      #{BASE_COLOR_WORDS.join("|")}
+    )
+    \b
+  /ix.freeze
 
   def self.call(source_photo, category_hint: nil, reference_photos: [], metadata_context: {})
     new(
@@ -31,7 +64,7 @@ class OpenrouterMetadataSuggester
 
     {
       category: normalize_category(parsed.fetch("category", "")) || normalize_category(category_hint) || "",
-      name: parsed.fetch("name", "").to_s.strip,
+      name: normalize_item_name(parsed.fetch("name", ""), tags: parsed.fetch("tags", [])),
       brand: parsed.fetch("brand", "").to_s.strip,
       tags: TagListNormalizer.call(parsed.fetch("tags", [])),
       provider: "openrouter",
@@ -130,6 +163,8 @@ class OpenrouterMetadataSuggester
       - The first image is the latest item-focused photo. Any additional images are original/reference context for the same item.
       - Keep category short, lowercase, and normalized to the main item type.
       - Keep the name short and useful, such as "White Button-Up Shirt" or "Black Wide-Leg Trousers".
+      - If a visible color is identifiable, include it first in the name.
+      - Use title capitalization for the name. Capitalize major words, but keep small joining words like "with", "and", or "of" lowercase unless they start the name.
       - Do not include the brand inside the name unless it is part of the visible product identity.
       - Tags should be lowercase and should not repeat the exact full name.
       - Prefer tags for color, silhouette, material, pattern, vibe, and category.
@@ -263,5 +298,79 @@ class OpenrouterMetadataSuggester
 
   def normalize_category(value)
     value.to_s.strip.downcase.presence
+  end
+
+  def normalize_item_name(value, tags: [])
+    raw_name = value.to_s.strip.gsub(/\s+/, " ")
+    return "" if raw_name.blank?
+
+    color_phrase = extract_color_phrase(raw_name) || extract_color_phrase_from_tags(tags)
+    reordered_name = move_or_prefix_color_phrase(raw_name, color_phrase)
+
+    titleize_item_name(reordered_name)
+  end
+
+  def extract_color_phrase_from_tags(tags)
+    Array(tags)
+      .filter_map { |tag| extract_color_phrase(tag.to_s) }
+      .find(&:present?)
+  end
+
+  def extract_color_phrase(text)
+    normalized = text.to_s.strip.gsub(/\s+/, " ")
+    return nil if normalized.blank?
+
+    lower = normalized.downcase
+    match = MODIFIED_COLOR_PATTERN.match(lower) || NAMED_COLOR_PATTERN.match(lower)
+    return nil unless match
+
+    normalized[match.begin(0)...match.end(0)]
+  end
+
+  def move_or_prefix_color_phrase(name, color_phrase)
+    normalized_name = name.to_s.strip.gsub(/\s+/, " ")
+    normalized_color = color_phrase.to_s.strip.gsub(/\s+/, " ")
+    return normalized_name if normalized_name.blank? || normalized_color.blank?
+
+    lower_name = normalized_name.downcase
+    lower_color = normalized_color.downcase
+    return normalized_name if lower_name == lower_color || lower_name.start_with?("#{lower_color} ")
+
+    match = /#{Regexp.escape(lower_color)}/i.match(normalized_name)
+    if match
+      before = normalized_name[0...match.begin(0)].strip
+      after = normalized_name[match.end(0)..].to_s.strip
+      remainder = [before, after].reject(&:blank?).join(" ")
+      return remainder.blank? ? normalized_name : "#{normalized_color} #{remainder}"
+    end
+
+    "#{normalized_color} #{normalized_name}"
+  end
+
+  def titleize_item_name(value)
+    words = value.to_s.strip.gsub(/\s+/, " ").split(" ")
+
+    words.map.with_index do |word, index|
+      titleize_name_token(word, first: index.zero?, last: index == words.length - 1)
+    end.join(" ")
+  end
+
+  def titleize_name_token(token, first:, last:)
+    token.split("-").map.with_index do |segment, segment_index|
+      titleize_name_segment(
+        segment,
+        first: first && segment_index.zero?,
+        last: last && segment_index == token.split("-").length - 1
+      )
+    end.join("-")
+  end
+
+  def titleize_name_segment(segment, first:, last:)
+    return segment if segment.blank?
+
+    lower = segment.downcase
+    return lower if !first && !last && SMALL_TITLE_WORDS.include?(lower) && segment == lower
+
+    lower.gsub(/\A[[:alpha:]]/) { |character| character.upcase }
   end
 end

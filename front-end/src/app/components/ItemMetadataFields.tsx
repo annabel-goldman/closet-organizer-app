@@ -6,6 +6,7 @@ import {
   formatTagInput,
   parseTagInput,
 } from "../lib/closet";
+import { CANONICAL_CLOTHING_CATEGORIES, CATEGORY_LABELS } from "../lib/wardrobeTaxonomy";
 import { ClothingItemFormErrors, clothingItemFieldElementId } from "../lib/itemFormValidation";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import {
@@ -19,7 +20,6 @@ import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import {
   MAX_CLOTHING_ITEM_BRAND,
-  MAX_CLOTHING_ITEM_CATEGORY,
   MAX_CLOTHING_ITEM_NAME,
   MAX_TAG_LENGTH,
 } from "../lib/inputLengthPolicy";
@@ -304,20 +304,40 @@ export function ItemMetadataFields({
         ) : null}
       </label>
 
-      <label className="space-y-2 sm:col-span-full" htmlFor={fieldId("category")}>
-        <PrimitiveText as="span" variant="label">
+      <div className="space-y-2 sm:col-span-full">
+        <PrimitiveText as="span" variant="label" id={`${fieldId("category")}-label`}>
           Type
         </PrimitiveText>
-        <Input
-          id={fieldId("category")}
-          value={values.category}
-          onBlur={(event) => commitValues(nextFieldValues("category", event.target.value))}
-          onChange={(event) => updateField("category", event.target.value)}
-          placeholder="e.g. sweater, jacket, dress"
-          className="h-auto px-4 py-3"
-          maxLength={MAX_CLOTHING_ITEM_CATEGORY}
-        />
-      </label>
+        <PrimitiveSelect
+          value={values.category || undefined}
+          onValueChange={(value) => {
+            const nextValues = updateField("category", value);
+            commitValues(nextValues);
+          }}
+        >
+          <PrimitiveSelectTrigger
+            id={fieldId("category")}
+            aria-labelledby={`${fieldId("category")}-label`}
+            aria-invalid={Boolean(errors.category)}
+            className="h-auto px-4 py-3"
+          >
+            <PrimitiveSelectValue placeholder="Select type" />
+          </PrimitiveSelectTrigger>
+          <PrimitiveSelectContent>
+            {CANONICAL_CLOTHING_CATEGORIES.map((category) => (
+              <PrimitiveSelectItem key={category} value={category}>
+                {CATEGORY_LABELS[category]}
+              </PrimitiveSelectItem>
+            ))}
+          </PrimitiveSelectContent>
+        </PrimitiveSelect>
+        <FieldError message={errors.category} />
+        {errors.category ? (
+          <span id={`${fieldId("category")}-error`} className="sr-only">
+            {errors.category}
+          </span>
+        ) : null}
+      </div>
 
       <div className="space-y-2">
         <PrimitiveText as="span" variant="label" id={`${fieldId("size")}-label`}>

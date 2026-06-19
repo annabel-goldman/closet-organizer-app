@@ -1,4 +1,5 @@
-import { ClothingItem } from "./closet";
+import type { ClothingItem } from "./closet";
+import { CATEGORY_LIKE_TAGS } from "./wardrobeTaxonomy.ts";
 
 export type ClosetSortOption = "name-asc" | "newest-added" | "oldest-added" | "recent-purchase";
 
@@ -10,25 +11,34 @@ const COLOR_TAGS = new Set([
   "burgundy",
   "charcoal",
   "cream",
-  "dark blue",
   "gold",
   "gray",
+  "dark blue",
+  "dark charcoal",
   "green",
   "grey",
   "indigo",
   "ivory",
   "khaki",
+  "light blue",
+  "light green",
+  "light pink",
+  "light yellow",
   "maroon",
+  "multicolor",
   "navy",
   "oatmeal",
   "olive",
+  "olive green",
   "orange",
   "pink",
   "purple",
   "red",
+  "rust",
   "sand",
   "silver",
   "tan",
+  "taupe",
   "teal",
   "white",
   "yellow",
@@ -206,6 +216,8 @@ export function buildGroupedTagOptions(items: ClothingItem[]): GroupedTagOptions
         colorSet.add(tag);
       } else if (brandNorm && normalizedTag === brandNorm) {
         // Omit tag that duplicates the explicit brand field from the Tags filter list.
+      } else if (CATEGORY_LIKE_TAGS.has(normalizedTag)) {
+        // Omit broad type tags that duplicate the explicit Type field.
       } else {
         otherSet.add(tag);
       }

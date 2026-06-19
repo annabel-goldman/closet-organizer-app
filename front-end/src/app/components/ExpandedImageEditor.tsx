@@ -15,6 +15,7 @@ import {
   Sparkles,
   WandSparkles,
 } from "lucide-react";
+import { ensureImageFileWithinUploadLimit } from "../lib/closet";
 import { useAiActionState } from "../lib/useAiActionState";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
@@ -140,6 +141,38 @@ export function ExpandedImageEditor({
   }, [currentFile, tool]);
 
   useEffect(() => {
+    if (!imageUrl) {
+      setMediaNaturalSize({ height: 0, width: 0 });
+      return;
+    }
+
+    let cancelled = false;
+    const image = new Image();
+    image.onload = () => {
+      if (cancelled) {
+        return;
+      }
+
+      setMediaNaturalSize({
+        height: image.naturalHeight,
+        width: image.naturalWidth,
+      });
+    };
+    image.onerror = () => {
+      if (cancelled) {
+        return;
+      }
+
+      setMediaNaturalSize({ height: 0, width: 0 });
+    };
+    image.src = imageUrl;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrl]);
+
+  useEffect(() => {
     const element = imageViewportRef.current;
     if (!element) {
       return;
@@ -189,10 +222,6 @@ export function ExpandedImageEditor({
         return;
       }
 
-      setMediaNaturalSize({
-        height: image.naturalHeight,
-        width: image.naturalWidth,
-      });
       baseCanvas.width = image.naturalWidth;
       baseCanvas.height = image.naturalHeight;
       overlayCanvas.width = image.naturalWidth;
@@ -315,13 +344,6 @@ export function ExpandedImageEditor({
       setCurrentFile(nextFile.file);
       setCurrentImageKind(nextFile.imageKind);
       return current.slice(0, -1);
-    });
-  }
-
-  function handleCropImageLoad(event: React.SyntheticEvent<HTMLImageElement>) {
-    setMediaNaturalSize({
-      height: event.currentTarget.naturalHeight,
-      width: event.currentTarget.naturalWidth,
     });
   }
 
@@ -594,14 +616,13 @@ export function ExpandedImageEditor({
                   }}
                   onComplete={(nextCrop) => setCompletedCrop(nextCrop)}
                   className="expanded-image-editor-crop"
-                  style={editorMediaBoxStyle}
                 >
                   <img
                     ref={imageRef}
                     src={imageUrl}
                     alt={title}
-                    className="block max-h-full max-w-full"
-                    onLoad={handleCropImageLoad}
+                    className="block"
+                    style={editorMediaBoxStyle}
                   />
                 </ReactCrop>
               </div>
@@ -1074,7 +1095,9 @@ async function canvasToPngFile(canvas: HTMLCanvasElement, filename: string) {
     }, "image/png");
   });
 
-  return new File([blob], filename, { type: blob.type || "image/png" });
+  return ensureImageFileWithinUploadLimit(
+    new File([blob], filename, { type: blob.type || "image/png" }),
+  );
 }
 
 function cropFilename(filename: string, suffix: string) {

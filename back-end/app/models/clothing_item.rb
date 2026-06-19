@@ -27,6 +27,7 @@ class ClothingItem < ApplicationRecord
   validates :name, presence: true, length: { maximum: InputLengthPolicy::MAX_CLOTHING_ITEM_NAME }
   validates :brand, length: { maximum: InputLengthPolicy::MAX_CLOTHING_ITEM_BRAND }, allow_blank: true
   validates :category, length: { maximum: InputLengthPolicy::MAX_CLOTHING_ITEM_CATEGORY }, allow_blank: true
+  validates :category, inclusion: { in: WardrobeTaxonomy::CANONICAL_CATEGORIES }, allow_blank: true
   validates :size, presence: true
   validate :tags_meet_length_policy
   validate :photo_must_be_an_image
@@ -64,7 +65,14 @@ class ClothingItem < ApplicationRecord
   end
 
   def normalize_tags
-    self.tags = TagListNormalizer.call(tags)
+    self.tags = WardrobeTaxonomy.normalize_tags(
+      tags,
+      category: category,
+      extra_tags: [
+        @wardrobe_taxonomy_category_subtype,
+        WardrobeTaxonomy.infer_subtype_from_name_for_category(name, category)
+      ].compact
+    )
   end
 
   def tags_meet_length_policy
@@ -72,7 +80,7 @@ class ClothingItem < ApplicationRecord
   end
 
   def normalize_brand
-    self.brand = brand.to_s.strip.presence
+    self.brand = WardrobeTaxonomy.normalize_brand(brand)
   end
 
   def apply_defaults
@@ -80,6 +88,14 @@ class ClothingItem < ApplicationRecord
   end
 
   def normalize_category
-    self.category = category.to_s.strip.downcase.presence
+    raw_category = category
+    normalized_category = WardrobeTaxonomy.normalize_category(raw_category, name: name)
+
+    @wardrobe_taxonomy_category_subtype = WardrobeTaxonomy.subtype_tag_for_category(
+      raw_category,
+      canonical_category: normalized_category
+    )
+
+    self.category = normalized_category
   end
 end

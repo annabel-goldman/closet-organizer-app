@@ -1,6 +1,7 @@
 import { localDevAuthHeaders, requestJson, requestJsonOrNull, requestVoid } from "./api";
 import { fetchAttachmentResponse, normalizeAttachmentUrl } from "./attachmentUrls";
 import { OutfitCollageLayout } from "./outfitCollage";
+import { normalizeCategory } from "./wardrobeTaxonomy";
 
 const LOCAL_BACKEND_BASE_URL = "http://127.0.0.1:3000";
 
@@ -28,6 +29,8 @@ function defaultBackendBaseUrl() {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? defaultApiBaseUrl();
 const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL ?? defaultBackendBaseUrl();
+const MAX_IMAGE_UPLOAD_BYTES = 9.5 * 1024 * 1024;
+const MAX_IMAGE_RESIZE_ATTEMPTS = 8;
 
 export interface UserSummary {
   id: number;
@@ -758,24 +761,20 @@ export async function createCroppedImageFile(
     canvas.height,
   );
 
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((nextBlob) => {
-      if (!nextBlob) {
-        reject(new Error("Unable to prepare the detected item preview."));
-        return;
-      }
-
-      resolve(nextBlob);
-    }, "image/png");
-  });
-
-  return new File([blob], filename, { type: blob.type || "image/png" });
+  return canvasToUploadSafeImageFile(
+    canvas,
+    filename,
+    "image/png",
+    "Unable to prepare the detected item preview.",
+  );
 }
 
 async function fileFromDataUrl(dataUrl: string, filename: string, contentType?: string) {
   const response = await fetch(dataUrl);
   const blob = await response.blob();
-  return new File([blob], filename, { type: contentType || blob.type || "image/png" });
+  return ensureImageFileWithinUploadLimit(
+    new File([blob], filename, { type: contentType || blob.type || "image/png" }),
+  );
 }
 
 function inferFilenameFromUrl(imageUrl: string) {
@@ -810,20 +809,12 @@ async function createImageFileFromRenderableUrl(sourceImageUrl: string, filename
 
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
 
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((nextBlob) => {
-      if (!nextBlob) {
-        reject(new Error("Unable to load the source image for this AI action."));
-        return;
-      }
-
-      resolve(nextBlob);
-    }, inferCanvasContentType(filename));
-  });
-
-  return new File([blob], filename, {
-    type: blob.type || inferCanvasContentType(filename),
-  });
+  return canvasToUploadSafeImageFile(
+    canvas,
+    filename,
+    inferCanvasContentType(filename),
+    "Unable to load the source image for this AI action.",
+  );
 }
 
 function inferCanvasContentType(filename: string) {
@@ -838,6 +829,138 @@ function inferCanvasContentType(filename: string) {
   }
 
   return "image/png";
+}
+
+function outputFilenameForContentType(filename: string, contentType: string) {
+  const extIndex = filename.lastIndexOf(".");
+  const baseName = extIndex === -1 ? filename : filename.slice(0, extIndex);
+
+  switch (contentType) {
+    case "image/jpeg":
+      return `${baseName}.jpg`;
+    case "image/webp":
+      return `${baseName}.webp`;
+    default:
+      return `${baseName}.png`;
+  }
+}
+
+async function loadBrowserImageFromFile(file: File) {
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    return await loadBrowserImage(objectUrl);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function blobFromCanvas(
+  canvas: HTMLCanvasElement,
+  contentType: string,
+  quality?: number,
+  errorMessage = "Unable to prepare the image file.",
+) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((nextBlob) => {
+      if (!nextBlob) {
+        reject(new Error(errorMessage));
+        return;
+      }
+
+      resolve(nextBlob);
+    }, contentType, quality);
+  });
+}
+
+async function canvasToUploadSafeImageFile(
+  canvas: HTMLCanvasElement,
+  filename: string,
+  preferredType: string,
+  errorMessage: string,
+) {
+  const initialBlob = await blobFromCanvas(canvas, preferredType, undefined, errorMessage);
+  return ensureImageFileWithinUploadLimit(
+    new File([initialBlob], outputFilenameForContentType(filename, initialBlob.type || preferredType), {
+      type: initialBlob.type || preferredType,
+    }),
+  );
+}
+
+export async function ensureImageFileWithinUploadLimit(
+  file: File,
+  maxBytes = MAX_IMAGE_UPLOAD_BYTES,
+) {
+  if (file.size <= maxBytes) {
+    return file;
+  }
+
+  const image = await loadBrowserImageFromFile(file);
+  let width = Math.max(1, image.naturalWidth);
+  let height = Math.max(1, image.naturalHeight);
+  let contentType = file.type || inferCanvasContentType(file.name);
+  let quality = contentType === "image/jpeg" || contentType === "image/webp" ? 0.92 : undefined;
+  let bestBlob: Blob | null = null;
+  let bestType = contentType;
+
+  for (let attempt = 0; attempt < MAX_IMAGE_RESIZE_ATTEMPTS; attempt += 1) {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      break;
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+    const blob = await blobFromCanvas(
+      canvas,
+      contentType,
+      quality,
+      "Unable to prepare the image for upload.",
+    );
+
+    if (!bestBlob || blob.size < bestBlob.size) {
+      bestBlob = blob;
+      bestType = blob.type || contentType;
+    }
+
+    if (blob.size <= maxBytes) {
+      return new File(
+        [blob],
+        outputFilenameForContentType(file.name, blob.type || contentType),
+        { type: blob.type || contentType },
+      );
+    }
+
+    if (contentType === "image/png") {
+      contentType = "image/webp";
+      quality = 0.9;
+      continue;
+    }
+
+    if (typeof quality === "number" && quality > 0.72) {
+      quality = Math.max(0.72, quality - 0.08);
+    }
+
+    const nextScale = Math.max(
+      0.55,
+      Math.min(0.9, Math.sqrt(maxBytes / blob.size) * 0.92),
+    );
+    width = Math.max(1, Math.floor(width * nextScale));
+    height = Math.max(1, Math.floor(height * nextScale));
+  }
+
+  if (bestBlob) {
+    return new File(
+      [bestBlob],
+      outputFilenameForContentType(file.name, bestType),
+      { type: bestType },
+    );
+  }
+
+  return file;
 }
 
 function normalizeTagList(rawTags: unknown): string[] {
@@ -857,7 +980,7 @@ function normalizeTagList(rawTags: unknown): string[] {
 }
 
 function normalizeCategoryValue(rawCategory: unknown) {
-  return typeof rawCategory === "string" ? rawCategory.trim().toLowerCase() : "";
+  return normalizeCategory(rawCategory);
 }
 
 function normalizeClothingItemPayload(item: ClothingItem): ClothingItem {

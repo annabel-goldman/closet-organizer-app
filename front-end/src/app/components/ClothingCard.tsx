@@ -88,9 +88,9 @@ export function ClothingCard({
         )}
 
         <motion.div
-          initial={{ opacity: image_url ? 0.88 : 0.12 }}
-          animate={{ opacity: isHovered ? 1 : image_url ? 0.88 : 0.12 }}
-          className="absolute inset-0 bg-gradient-to-t from-neutral-950/88 via-neutral-900/46 to-neutral-900/10"
+          initial={{ opacity: image_url ? 0.72 : 0.12 }}
+          animate={{ opacity: isHovered ? 0.88 : image_url ? 0.72 : 0.12 }}
+          className="absolute inset-0 bg-gradient-to-t from-neutral-950/76 via-neutral-900/34 to-neutral-900/6"
         />
 
         <div className="absolute inset-x-0 top-0 p-5 pt-8">
@@ -101,8 +101,8 @@ export function ClothingCard({
             className="max-w-[11ch] break-words"
             style={{
               color: image_url ? "white" : "rgba(68, 64, 60, 0.92)",
-              fontSize: "clamp(2rem, 4vw, 3rem)",
-              lineHeight: "0.95",
+              fontSize: "clamp(1.5rem, 3vw, 2.25rem)",
+              lineHeight: "1",
             }}
           >
             {name}
