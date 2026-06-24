@@ -41,6 +41,7 @@ import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveConfirmationDialog } from "./primitives/PrimitiveConfirmationDialog";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { useItemPhotoState } from "../lib/useItemPhotoState";
+import type { ExpandedImageEditorApplyContext } from "./ExpandedImageEditor";
 
 interface CreateItemPageProps {
   userId: number | null;
@@ -69,6 +70,8 @@ export function CreateItemPage({
   const [autofillingDetectionId, setAutofillingDetectionId] = useState<number | null>(null);
   const [isPreparingDetectedMetadata, setIsPreparingDetectedMetadata] = useState(false);
   const [isReplaceImageWarningOpen, setIsReplaceImageWarningOpen] = useState(false);
+  const [selectedImageKind, setSelectedImageKind] =
+    useState<ExpandedImageEditorApplyContext["imageKind"]>("base");
   const [outfitUpload, setOutfitUpload] = useState<OutfitUpload | null>(null);
   const [pendingReplacementFile, setPendingReplacementFile] = useState<File | null>(null);
   const [selectedDetectionIds, setSelectedDetectionIds] = useState<number[]>([]);
@@ -119,9 +122,15 @@ export function CreateItemPage({
     setIsPreparingDetectedMetadata(false);
   }
 
-  function applyImageFileSelection(file: File) {
+  function applyImageFileSelection(
+    file: File,
+    imageKind: ExpandedImageEditorApplyContext["imageKind"] = "base",
+  ) {
     detectionPollControllerRef.current?.abort();
-    originalUploadedPhotoRef.current = file;
+    if (imageKind === "base" || !originalUploadedPhotoRef.current) {
+      originalUploadedPhotoRef.current = file;
+    }
+    setSelectedImageKind(imageKind);
     photoState.updateSelectedFile(file);
     resetDetectionState();
     setErrorMessage("");
@@ -237,6 +246,7 @@ export function CreateItemPage({
   function clearImageSelection() {
     detectionPollControllerRef.current?.abort();
     originalUploadedPhotoRef.current = null;
+    setSelectedImageKind("base");
     photoState.clearSelectedFile();
     resetDetectionState();
     setErrorMessage("");
@@ -283,6 +293,7 @@ export function CreateItemPage({
         metadata: formValues,
         originalSourcePhoto: originalUploadedPhotoRef.current,
       });
+      setSelectedImageKind("cleaned");
       photoState.updateSelectedFile(cleanedFile);
     } catch (error) {
       setErrorMessage(
@@ -315,6 +326,17 @@ export function CreateItemPage({
     } finally {
       setIsAutofillingMetadata(false);
     }
+  }
+
+  async function getPreviewEditorFile() {
+    return photoState.selectedFile;
+  }
+
+  async function createPreviewEditorCleanImage(file: File) {
+    return createCleanPreviewFile(file, {
+      metadata: formValues,
+      originalSourcePhoto: originalUploadedPhotoRef.current,
+    });
   }
 
   async function handleAutofillDetectionMetadata(detection: OutfitDetection) {
@@ -455,8 +477,13 @@ export function CreateItemPage({
     setErrorMessage("");
 
     try {
+      const photoOptions = photoState.selectedFile
+        ? selectedImageKind === "base"
+          ? { photo: photoState.selectedFile }
+          : { cleanedPhoto: photoState.selectedFile }
+        : {};
       const createdItem = await createClothingItem(userId, formValues, {
-        photo: photoState.selectedFile,
+        ...photoOptions,
       });
       onItemsCreated([createdItem]);
     } catch (error) {
@@ -569,6 +596,10 @@ export function CreateItemPage({
           onCleanDetectionImage={(detection) => void handleCleanDetectionImage(detection)}
           onDetectItems={() => photoState.selectedFile && void detectItems(photoState.selectedFile)}
           onDraftChange={updateDetectionDraft}
+          onApplySourceImageEdits={(file, context) => {
+            applyImageFileSelection(file, context.imageKind);
+          }}
+          onGetSourceImageEditorFile={getPreviewEditorFile}
           onRequestDetectionAutofill={(detection) => void handleAutofillDetectionMetadata(detection)}
           onFileChange={handleImageFileChange}
           onSaveSelectedItems={() => void handleSaveSelectedItems()}
@@ -577,6 +608,10 @@ export function CreateItemPage({
           selectedCount={selectedCount}
           selectedDetectionIds={selectedDetectionIds}
           selectedFileName={photoState.selectedFile?.name}
+          sourceImageEditorActions={{
+            initialKind: selectedImageKind,
+            onClean: createPreviewEditorCleanImage,
+          }}
           sourceImageUrl={sourceImageUrl}
           tagSuggestions={closetSuggestions.tagSuggestions}
           user={user}
@@ -601,8 +636,18 @@ export function CreateItemPage({
       imageUrl={photoState.imageUrl}
       onBack={onBack}
       onPreviewClick={() => photoState.inputRef.current?.click()}
-      onPreviewClear={photoState.clearSelectedFile}
+      onPreviewClear={clearImageSelection}
       onPreviewEdit={() => photoState.inputRef.current?.click()}
+      previewEditor={photoState.selectedFile ? {
+        getEditableFile: getPreviewEditorFile,
+        imageActions: {
+          initialKind: selectedImageKind,
+          onClean: createPreviewEditorCleanImage,
+        },
+        onApply: (file, context) => {
+          applyImageFileSelection(file, context.imageKind);
+        },
+      } : undefined}
       onSubmit={handleManualSubmit}
       previewAriaLabel={photoState.selectedFile ? "Preview image" : "Upload photo"}
       previewBackgroundDecoration={

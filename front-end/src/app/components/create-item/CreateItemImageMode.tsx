@@ -19,6 +19,10 @@ import { PrimitiveButton } from "../primitives/PrimitiveButton";
 import { PrimitiveConfirmationDialog } from "../primitives/PrimitiveConfirmationDialog";
 import { AiActionLoadingNotice } from "../shared/AiActionLoadingNotice";
 import { UploadWorkspace } from "../UploadWorkspace";
+import type {
+  ExpandedImageEditorApplyContext,
+  ExpandedImageEditorImageActions,
+} from "../ExpandedImageEditor";
 import { DetectionPreviewImage } from "./DetectionPreview";
 import { DetectionThumbnailStrip } from "./DetectionThumbnailStrip";
 
@@ -35,12 +39,17 @@ interface CreateItemImageModeProps {
   isCreating: boolean;
   isDetecting: boolean;
   inputRef: RefObject<HTMLInputElement | null>;
+  onApplySourceImageEdits?: (
+    file: File,
+    context: ExpandedImageEditorApplyContext,
+  ) => Promise<void> | void;
   onBack: () => void;
   onClearImageSelection: () => void;
   onCleanDetectionImage: (detection: OutfitDetection) => void;
   onDetectItems: () => void;
   onDraftChange: (detectionId: number, nextValues: ClothingItemFormValues) => void;
   onFileChange: (file: File | null) => void;
+  onGetSourceImageEditorFile?: () => Promise<File | null>;
   onRequestDetectionAutofill: (detection: OutfitDetection) => void;
   onSaveSelectedItems: () => void;
   onToggleSelection: (detection: OutfitDetection) => void;
@@ -48,6 +57,7 @@ interface CreateItemImageModeProps {
   selectedCount: number;
   selectedDetectionIds: number[];
   selectedFileName?: string;
+  sourceImageEditorActions?: ExpandedImageEditorImageActions;
   sourceImageUrl: string | null;
   tagSuggestions?: string[];
   user: User;
@@ -66,12 +76,14 @@ export function CreateItemImageMode({
   isCreating,
   isDetecting,
   inputRef,
+  onApplySourceImageEdits,
   onBack,
   onClearImageSelection,
   onCleanDetectionImage,
   onDetectItems,
   onDraftChange,
   onFileChange,
+  onGetSourceImageEditorFile,
   onRequestDetectionAutofill,
   onSaveSelectedItems,
   onToggleSelection,
@@ -79,6 +91,7 @@ export function CreateItemImageMode({
   selectedCount,
   selectedDetectionIds,
   selectedFileName,
+  sourceImageEditorActions,
   sourceImageUrl,
   tagSuggestions = [],
   user,
@@ -216,6 +229,15 @@ export function CreateItemImageMode({
         onPreviewClick={() => inputRef.current?.click()}
         onPreviewClear={selectedFileName ? onClearImageSelection : undefined}
         onPreviewEdit={selectedFileName ? () => inputRef.current?.click() : undefined}
+        previewEditor={
+          isSourceFocused && selectedFileName && onGetSourceImageEditorFile && onApplySourceImageEdits
+            ? {
+                getEditableFile: onGetSourceImageEditorFile,
+                imageActions: sourceImageEditorActions,
+                onApply: onApplySourceImageEdits,
+              }
+            : undefined
+        }
         previewAriaLabel={selectedFileName ? "Change upload image" : "Upload photo"}
         previewBackgroundDecoration={
           isSourceFocused ? (

@@ -4,6 +4,10 @@ import { ArrowLeft } from "lucide-react";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { UploadWorkspace } from "./UploadWorkspace";
+import type {
+  ExpandedImageEditorApplyContext,
+  ExpandedImageEditorImageActions,
+} from "./ExpandedImageEditor";
 
 interface ItemEditorWorkspaceProps {
   backLabel?: string;
@@ -19,6 +23,11 @@ interface ItemEditorWorkspaceProps {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   previewAriaLabel?: string;
   previewBackgroundDecoration?: ReactNode;
+  previewEditor?: {
+    getEditableFile: () => Promise<File | null>;
+    imageActions?: ExpandedImageEditorImageActions;
+    onApply: (file: File, context: ExpandedImageEditorApplyContext) => Promise<void> | void;
+  };
   isPreviewProcessing?: boolean;
   previewLabel: string;
   previewPrimaryDetail: string;
@@ -41,6 +50,7 @@ export function ItemEditorWorkspace({
   onSubmit,
   previewAriaLabel,
   previewBackgroundDecoration,
+  previewEditor,
   isPreviewProcessing,
   previewLabel,
   previewPrimaryDetail,
@@ -88,6 +98,7 @@ export function ItemEditorWorkspace({
           onPreviewEdit={onPreviewEdit}
           previewAriaLabel={previewAriaLabel}
           previewBackgroundDecoration={previewBackgroundDecoration}
+          previewEditor={previewEditor}
           isPreviewProcessing={isPreviewProcessing}
           previewTopAction={previewTopAction}
           previewLabel={previewLabel}
