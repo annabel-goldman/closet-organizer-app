@@ -1,10 +1,11 @@
-import { LoaderCircle, Sparkles } from "lucide-react";
+import { LoaderCircle, Sparkles, type LucideIcon } from "lucide-react";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 interface AiCleanImageButtonProps {
   className?: string;
   disabled?: boolean;
+  icon?: LucideIcon;
   iconOnly?: boolean;
   isLoading?: boolean;
   label?: string;
@@ -14,6 +15,7 @@ interface AiCleanImageButtonProps {
 export function AiCleanImageButton({
   className = "",
   disabled = false,
+  icon: Icon = Sparkles,
   iconOnly = false,
   isLoading = false,
   label = "AI clean PNG",
@@ -21,7 +23,7 @@ export function AiCleanImageButton({
 }: AiCleanImageButtonProps) {
   const buttonLabel = label;
   const isDisabled = disabled || isLoading;
-  const Icon = isLoading ? LoaderCircle : Sparkles;
+  const ButtonIcon = isLoading ? LoaderCircle : Icon;
 
   const button = (
     <PrimitiveButton
@@ -33,7 +35,7 @@ export function AiCleanImageButton({
       aria-busy={isLoading}
       aria-label={buttonLabel}
     >
-      <Icon className={`h-4 w-4 shrink-0 ${isLoading ? "animate-spin" : ""}`} />
+      <ButtonIcon className={`h-4 w-4 shrink-0 ${isLoading ? "animate-spin" : ""}`} />
       {!iconOnly ? buttonLabel : null}
     </PrimitiveButton>
   );

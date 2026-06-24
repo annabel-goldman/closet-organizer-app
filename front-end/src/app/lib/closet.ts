@@ -187,9 +187,11 @@ export interface ClothingItemFormValues {
 }
 
 export interface ClothingItemPhotoOptions {
+  cleanedPhoto?: File | null;
   photo?: File | null;
   crop?: OutfitDetectionBoundingBox | null;
   sourceOutfitDetectionId?: number | null;
+  removeCleanedPhoto?: boolean;
   removePhoto?: boolean;
 }
 
@@ -706,10 +708,34 @@ export async function createCleanPreviewFile(photo: File, options: AiImageOption
   return fileFromDataUrl(preview.data_url, preview.filename, preview.content_type);
 }
 
+export async function fetchImageFileFromUrl(imageUrl: string, filename?: string) {
+  const response = await fetch(imageUrl, {
+    credentials: "include",
+  });
+  if (!response.ok) {
+    throw new Error("Unable to load the source image for editing.");
+  }
+
+  const blob = await response.blob();
+  return new File([blob], filename ?? inferFilenameFromUrl(imageUrl), {
+    type: blob.type || "image/png",
+  });
+}
+
 async function fileFromDataUrl(dataUrl: string, filename: string, contentType?: string) {
   const response = await fetch(dataUrl);
   const blob = await response.blob();
   return new File([blob], filename, { type: contentType || blob.type || "image/png" });
+}
+
+function inferFilenameFromUrl(imageUrl: string) {
+  try {
+    const url = new URL(imageUrl, window.location.origin);
+    const lastSegment = url.pathname.split("/").pop()?.trim();
+    return lastSegment && lastSegment.includes(".") ? lastSegment : "image.png";
+  } catch {
+    return "image.png";
+  }
 }
 
 function normalizeTagList(rawTags: unknown): string[] {
@@ -861,6 +887,10 @@ function buildClothingItemFormData(
     formData.append("clothing_item[photo]", photoOptions.photo);
   }
 
+  if (photoOptions.cleanedPhoto) {
+    formData.append("clothing_item[cleaned_photo]", photoOptions.cleanedPhoto);
+  }
+
   if (photoOptions.sourceOutfitDetectionId) {
     formData.append(
       "clothing_item[source_outfit_detection_id]",
@@ -877,6 +907,10 @@ function buildClothingItemFormData(
 
   if (photoOptions.removePhoto) {
     formData.append("clothing_item[remove_photo]", "true");
+  }
+
+  if (photoOptions.removeCleanedPhoto) {
+    formData.append("clothing_item[remove_cleaned_photo]", "true");
   }
 
   return formData;

@@ -6,6 +6,7 @@ import {
   ClothingItem,
   ClothingItemFormValues,
   destroyClothingItem,
+  fetchImageFileFromUrl,
   fetchClothingItem,
   generateClothingItemCleanImage,
   generateClothingItemMetadataSuggestions,
@@ -30,6 +31,7 @@ import { ItemMetadataFields } from "./ItemMetadataFields";
 import { ItemMetadataPanel } from "./ItemMetadataPanel";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import type { ExpandedImageEditorApplyContext } from "./ExpandedImageEditor";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -72,6 +74,8 @@ export function ItemDetailPage({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCleaningImage, setIsCleaningImage] = useState(false);
   const [isAutofillingMetadata, setIsAutofillingMetadata] = useState(false);
+  const [selectedImageKind, setSelectedImageKind] =
+    useState<ExpandedImageEditorApplyContext["imageKind"]>("base");
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const {
@@ -99,6 +103,7 @@ export function ItemDetailPage({
     setFormValues(toClothingItemFormValues(item));
     photoState.reset();
     originalUploadedPhotoRef.current = null;
+    setSelectedImageKind("base");
   }, [item]);
 
   const isDirty = useMemo(() => {
@@ -117,9 +122,15 @@ export function ItemDetailPage({
     ? buildItemPreviewMetadata(formValues.size, parseTagInput(formValues.tags))
     : "";
 
-  function handleEditImageFileChange(file: File | null) {
+  function handleEditImageFileChange(
+    file: File | null,
+    context: ExpandedImageEditorApplyContext = { imageKind: "base" },
+  ) {
     if (file) {
-      originalUploadedPhotoRef.current = file;
+      if (context.imageKind === "base") {
+        originalUploadedPhotoRef.current = file;
+      }
+      setSelectedImageKind(context.imageKind);
       photoState.updateSelectedFile(file);
     }
   }
@@ -127,6 +138,7 @@ export function ItemDetailPage({
   function handlePreviewClear() {
     if (photoState.selectedFile) {
       originalUploadedPhotoRef.current = null;
+      setSelectedImageKind("base");
       photoState.clearSelectedFile();
       return;
     }
@@ -171,8 +183,13 @@ export function ItemDetailPage({
     setSuccessMessage("");
 
     try {
+      const photoOptions = photoState.selectedFile
+        ? selectedImageKind === "base"
+          ? { photo: photoState.selectedFile }
+          : { cleanedPhoto: photoState.selectedFile }
+        : {};
       const updatedItem = await saveClothingItem(item.id, item.user_id, formValues, {
-        photo: photoState.selectedFile,
+        ...photoOptions,
         removePhoto: photoState.removeExisting,
       });
       setItem(updatedItem);
@@ -218,6 +235,7 @@ export function ItemDetailPage({
           metadata: formValues,
           originalSourcePhoto: originalUploadedPhotoRef.current,
         });
+        setSelectedImageKind("cleaned");
         photoState.updateSelectedFile(cleanedFile);
         setSuccessMessage("AI-cleaned preview ready. Save changes to keep it.");
       } else {
@@ -233,6 +251,29 @@ export function ItemDetailPage({
     } finally {
       setIsCleaningImage(false);
     }
+  }
+
+  async function getPreviewEditorFile() {
+    if (photoState.selectedFile) {
+      return photoState.selectedFile;
+    }
+
+    const sourceUrl = photoState.imageUrl ?? item?.image_url;
+    if (!sourceUrl) {
+      return null;
+    }
+
+    return fetchImageFileFromUrl(
+      sourceUrl,
+      `${(formValues?.name || item?.name || "closet-item").trim() || "closet-item"}-edit-source.png`,
+    );
+  }
+
+  async function createItemEditorCleanImage(file: File) {
+    return createCleanPreviewFile(file, {
+      metadata: formValues ?? undefined,
+      originalSourcePhoto: originalUploadedPhotoRef.current,
+    });
   }
 
   async function handleAutofillMetadata() {
@@ -344,6 +385,14 @@ export function ItemDetailPage({
       onPreviewClick={() => photoState.inputRef.current?.click()}
       onPreviewClear={handlePreviewClear}
       onPreviewEdit={() => photoState.inputRef.current?.click()}
+      previewEditor={{
+        getEditableFile: getPreviewEditorFile,
+        imageActions: {
+          initialKind: selectedImageKind,
+          onClean: createItemEditorCleanImage,
+        },
+        onApply: handleEditImageFileChange,
+      }}
       onSubmit={handleSubmit}
       previewAriaLabel={photoState.imageUrl ? "Preview image" : "Upload photo"}
       previewBackgroundDecoration={

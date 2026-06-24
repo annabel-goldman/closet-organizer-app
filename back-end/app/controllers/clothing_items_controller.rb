@@ -85,10 +85,11 @@ class ClothingItemsController < ApplicationController
   def persist_clothing_item(clothing_item, status: :ok)
     temporary_files = ManagedTempfiles.new
     attach_photo_from_request(clothing_item, temporary_files)
+    prepare_requested_cleaned_photo_state(clothing_item)
 
     if clothing_item.errors.empty? && clothing_item.save
-      remove_all_item_photos(clothing_item) if remove_photo_requested?
-      render json: payloads.clothing_item(clothing_item), status: status
+      apply_post_save_photo_changes(clothing_item)
+      render json: payloads.clothing_item(clothing_item.reload), status: status
     else
       render_validation_errors(clothing_item)
     end
@@ -194,6 +195,57 @@ class ClothingItemsController < ApplicationController
     clothing_item.save! if clothing_item.persisted?
   end
 
+  def prepare_requested_cleaned_photo_state(clothing_item)
+    return if requested_cleaned_photo.blank?
+
+    clothing_item.clean_image_status = :succeeded
+    clothing_item.clean_image_error_message = nil
+    clothing_item.clean_image_provider = nil
+    clothing_item.clean_image_model = nil
+    clothing_item.clean_image_generated_at = Time.current
+  end
+
+  def apply_post_save_photo_changes(clothing_item)
+    if remove_photo_requested?
+      remove_all_item_photos(clothing_item)
+      return
+    end
+
+    if remove_cleaned_photo_requested?
+      remove_cleaned_photo(clothing_item)
+      return
+    end
+
+    attach_requested_cleaned_photos(clothing_item)
+  end
+
+  def attach_requested_cleaned_photos(clothing_item)
+    return if requested_cleaned_photo.blank?
+
+    clothing_item.cleaned_photo.purge if clothing_item.cleaned_photo.attached?
+    attach_uploaded_image(clothing_item.cleaned_photo, requested_cleaned_photo)
+  end
+
+  def attach_uploaded_image(attachment, uploaded_file)
+    uploaded_file.tempfile.rewind if uploaded_file.respond_to?(:tempfile)
+    attachment.attach(
+      io: uploaded_file,
+      filename: uploaded_file.original_filename,
+      content_type: uploaded_file.content_type.presence || "image/png"
+    )
+  end
+
+  def remove_cleaned_photo(clothing_item)
+    clothing_item.cleaned_photo.purge if clothing_item.cleaned_photo.attached?
+    clothing_item.update!(
+      clean_image_status: :idle,
+      clean_image_error_message: nil,
+      clean_image_provider: nil,
+      clean_image_model: nil,
+      clean_image_generated_at: nil
+    )
+  end
+
   def source_outfit_detection
     detection_id = params.dig(:clothing_item, :source_outfit_detection_id)
     return @source_outfit_detection if defined?(@source_outfit_detection)
@@ -210,6 +262,14 @@ class ClothingItemsController < ApplicationController
 
   def remove_photo_requested?
     ActiveModel::Type::Boolean.new.cast(params.dig(:clothing_item, :remove_photo))
+  end
+
+  def remove_cleaned_photo_requested?
+    ActiveModel::Type::Boolean.new.cast(params.dig(:clothing_item, :remove_cleaned_photo))
+  end
+
+  def requested_cleaned_photo
+    params.dig(:clothing_item, :cleaned_photo)
   end
 
   def clothing_item_reference_photos
