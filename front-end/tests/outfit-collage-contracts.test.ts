@@ -70,6 +70,33 @@ test("saved collage layouts seed the editor with the same normalized preview fra
   assert.deepEqual(editorDisplayLayouts, savedDisplayLayouts);
 });
 
+test("category defaults place tops above bottoms with accessories on the left and no rotation", () => {
+  const items = [
+    { id: 1, category: "top" },
+    { id: 2, category: "bottom" },
+    { id: 3, category: "shoes" },
+    { id: 4, category: "accessory" },
+  ];
+
+  const layouts = resolveOutfitCollageLayouts(items as never);
+  const top = layouts[1];
+  const bottom = layouts[2];
+  const shoes = layouts[3];
+  const accessory = layouts[4];
+
+  assert.deepEqual(
+    Object.values(layouts).map((layout) => layout.rotation),
+    [ 0, 0, 0, 0 ],
+  );
+  assert.equal(top.x, bottom.x);
+  assert.equal(top.width, bottom.width);
+  assert.ok(top.y < bottom.y);
+  assert.ok(top.layer_order > bottom.layer_order);
+  assert.ok(shoes.x < top.x);
+  assert.ok(accessory.x < top.x);
+  assert.ok(accessory.y < shoes.y);
+});
+
 test("normalized collage layouts are idempotent across repeated saved/editor renders", () => {
   const layout = {
     x: 12,

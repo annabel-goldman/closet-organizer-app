@@ -21,6 +21,7 @@ Rails 8 JSON backend for Curated Closet.
 - user-scoped clothing item CRUD
 - admin-only user directory access
 - saved outfit CRUD with owned-item validation
+- AI outfit generation from closet item metadata, visual descriptions, uploaded flatlay reference analysis, shortlisted candidate photos, and passive per-user feedback from saved edits/deletions
 - outfit photo upload, detection persistence, crop refinement, and review support
 - AI-assisted image cleanup and metadata suggestion flows for clothing items and outfit detections, including transparent-background post-processing on generated clean images
 - HTML fallback routes for the SPA frontend
@@ -78,6 +79,7 @@ POST    /clothing_items/:id/generate_clean_image
 POST    /clothing_items/:id/generate_metadata_suggestions
 GET     /outfits
 POST    /outfits
+POST    /outfits/generate
 GET     /outfits/:id
 PATCH   /outfits/:id
 DELETE  /outfits/:id
@@ -97,7 +99,9 @@ Notes:
 - `ApplicationController` returns `404` JSON for missing records and `422` JSON for validation failures.
 - Text input length is capped at every layer: `app/models/concerns/input_length_policy.rb` exposes the limits (username 60, email 254, item name 120, brand 80, category 60, outfit name 120, notes 2_000, tag 40 chars × 30 per record); the `User`/`ClothingItem`/`Outfit` models validate against the same constants and surface friendly errors; the `AddInputLengthConstraints` migration enforces matching `limit:` and `null: false` constraints at the database. SQL injection is mitigated by ActiveRecord's parameterized queries — the only raw SQL fragment in the app (`where("lower(email) = ?", ...)` in `User`) uses bound placeholders.
 - `GET /users` is paginated via Kaminari. It accepts `page` and `per_page` query params (default 24, max 100) and returns `{ users: [...], meta: { page, per_page, total_pages, total_count } }`. The index payload omits each user's `clothing_items` array and only includes a `clothing_items_count` field; per-user `GET /users/:id` still returns the full items array.
-- Outfit payloads now preserve per-piece collage presentation through `outfit_items`: each embedded outfit item can include `outfit_item_id`, `layer_order`, and `collage_layout` (`x`, `y`, `width`, `height`, `rotation`) so the frontend can reopen and edit saved collages faithfully. The outfit integration suite also covers the round-trip contract that the collage layout returned by `PATCH /outfits/:id` matches the subsequent `GET /outfits/:id` payload used by the saved gallery.
+- Outfit payloads now preserve per-piece collage presentation through `outfit_items`: each embedded outfit item can include `outfit_item_id`, `layer_order`, and `collage_layout` (`x`, `y`, `width`, `height`, `rotation`) so the frontend can reopen and edit saved collages faithfully. AI-generated outfits also include optional `generation_id`, `generated_by_ai`, and `generated_item_ids` fields. The outfit integration suite covers the round-trip contract that the collage layout returned by `PATCH /outfits/:id` matches the subsequent `GET /outfits/:id` payload used by the saved gallery.
+- `POST /outfits/generate` accepts JSON `{ "occasion": "optional vibe or event" }` or multipart form data with `occasion` plus an optional `reference_photo` flatlay image. It creates a saved outfit from owned item IDs only and returns the normal outfit payload with AI generation metadata. When a reference flatlay is present, the backend first analyzes it into structured target slots such as hoodie, white denim shorts, chain shoulder bag, or sneakers. For larger closets, generation then sends randomized closet metadata, visual descriptions, the reference flatlay, the target profile, and compact per-user feedback examples to select up to 20 candidate items while preserving strong matches for required target slots plus cross-slot signature anchors such as sequins, satin, burgundy leather, patent shine, metallic hardware, or glam mood. Final visual refinement receives all candidate metadata, the reference flatlay when present, the target profile, per-user feedback signals, and a capped set of attached display photos, then repairs the final item list to include missing required target-slot matches when available. The prompts and structured schema still require core complete looks when the candidate set supports them: dress-based outfits must include available footwear, top-based outfits should include compatible bottoms, and bag-like accessories are encouraged when they complement the look. Closets of 20 items or fewer skip the broad selector and go straight to refinement. Items without photos remain eligible through metadata and visual descriptions. If any AI stage fails, the JSON error includes `stage`, `provider`, `cause_class`, and `cause` fields to aid debugging.
+- AI outfit feedback is stored as recommender-style logs. Each generated outfit creates an `outfit_generation_run` with candidate item IDs, generated item IDs, the structured reference profile, and generator version. Save/delete behavior appends `outfit_generation_events`: unchanged saves become positive keep signals, item-list edits become added/removed/kept correction signals, layout-only edits do not become item-change feedback, and deletes become weak negative feedback for the generated combination. Runs survive outfit deletion through a nullable `outfit_id`.
 
 ## Important Internal Files
 
@@ -115,6 +119,18 @@ Notes:
   Removes the white studio backdrop from generated clean images and produces the final transparent PNG attachment
 - `app/services/openrouter_metadata_suggester.rb`
   Calls OpenRouter structured vision responses for item metadata suggestions
+- `app/services/openrouter_outfit_generator.rb`
+  Orchestrates reference-aware saved outfit generation from closet item context and wraps AI failures with stage-specific error details
+- `app/services/openrouter_outfit_reference_analyzer.rb`
+  Converts an uploaded flatlay reference into structured target slots used by candidate selection and final refinement
+- `app/services/outfit_reference_matcher.rb`
+  Scores closet items against structured reference target slots, preserves strong slot candidates, applies gentle user preference nudges, and repairs final generated item lists
+- `app/services/outfit_generation_preference_builder.rb`
+  Summarizes recent generated-outfit save/edit/delete events into compact per-user preference signals for future generation
+- `app/services/openrouter_outfit_candidate_selector.rb`
+  Calls OpenRouter structured multimodal responses to shortlist candidate item IDs from metadata, visual descriptions, and reference target slots
+- `app/services/openrouter_outfit_visual_refiner.rb`
+  Calls OpenRouter structured multimodal responses to choose the final outfit from shortlisted candidates, sending metadata for all candidates and a capped set of available photos
 - `app/services/outfit_upload_analyzer.rb`
   Coordinates upload analysis, detection creation, and crop refinement workflow
 - `app/services/managed_tempfiles.rb`
@@ -136,6 +152,7 @@ Notes:
 - `password_digest`
 - `has_many :clothing_items`
 - `has_many :outfits`
+- `has_many :outfit_generation_runs`
 - `has_many :outfit_uploads`
 
 ### `ClothingItem`
@@ -143,6 +160,7 @@ Notes:
 - `name`
 - `category`
 - `brand`
+- `style_notes`
 - `size`
 - `date`
 - `tags`
@@ -170,6 +188,7 @@ Supported `size` enum values:
 - `notes`
 - `has_many :outfit_items`
 - `has_many :clothing_items, through: :outfit_items`
+- `has_one :outfit_generation_run`
 
 ### `OutfitItem`
 
@@ -181,6 +200,27 @@ Supported `size` enum values:
 - `collage_width`
 - `collage_height`
 - `collage_rotation`
+
+### `OutfitGenerationRun`
+
+- `user_id`
+- nullable `outfit_id`
+- `occasion`
+- `reference_profile`
+- `candidate_item_ids`
+- `generated_item_ids`
+- `generator_version`
+- `generated_at`
+- `has_many :outfit_generation_events`
+
+### `OutfitGenerationEvent`
+
+- `outfit_generation_run_id`
+- `event_type` (`generated`, `opened_for_edit`, `saved_unchanged`, `saved_with_item_changes`, `deleted`)
+- `final_item_ids`
+- `added_item_ids`
+- `removed_item_ids`
+- `kept_item_ids`
 
 ### `OutfitUpload`
 
@@ -223,6 +263,7 @@ See [back-end/.env.example](./.env.example) for expected variables.
 - `AI_CLEAN_BACKGROUND_FUZZ` optionally adjusts how aggressively edge-connected near-white pixels are removed from AI-cleaned images.
 - `AI_CLEAN_SHARPEN` optionally adjusts the sharpen pass that restores edge definition on the final transparent PNG.
 - `OPENROUTER_METADATA_MODEL` can override the metadata suggestion model independently.
+- `OPENROUTER_OUTFIT_MODEL` can override the AI outfit generator model independently.
 - `AI_CLEAN_BACKGROUND_FUZZ` optionally tunes how aggressively the clean-image post-process removes near-white edge background pixels. It defaults to `12%`.
 - `AI_CLEAN_SHARPEN` optionally adds a light sharpen pass after background removal to recover edge crispness in the final transparent PNG. It defaults to `0x0.8`.
 - `OUTFIT_CROP_CYCLE_LIMIT` controls refinement and verification retries.

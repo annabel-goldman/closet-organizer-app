@@ -9,6 +9,7 @@ one:
     - elegant
     - maison
     - ivory
+  style_notes: Tuck into wide-leg trousers for polished dinners.
   date: 2026-04-19 17:45:04
   user: one
 
@@ -21,5 +22,6 @@ two:
     - casual
     - heritage
     - blue
+  style_notes: Works best as a casual top layer.
   date: 2026-04-18 15:30:00
   user: two

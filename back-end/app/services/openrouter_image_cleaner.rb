@@ -113,6 +113,7 @@ class OpenrouterImageCleaner
     soft_hints = Array(prompt_context[:soft_hints]).compact_blank
     appearance_summary = prompt_context[:appearance_summary].presence
     metadata_lines = metadata_prompt_lines
+    presentation_constraints = presentation_prompt_constraints
 
     <<~PROMPT
       Create a single realistic catalog-style PNG of the same clothing item shown in the reference image.
@@ -123,6 +124,8 @@ class OpenrouterImageCleaner
       - Show only one item centered in frame.
       - Use a clean plain white studio background.
       - Remove people, body parts, hangers, background clutter, extra garments, props, and shadows that distract from the item.
+      - For jewelry, watches, sunglasses, boxed accessories, or luxury goods, preserve any visible branded box, tray, pouch, case, packaging, or display holder when it is part of the product presentation.
+      - Do not treat a jewelry box, branded case, display tray, or storage pouch as removable clutter unless it clearly obscures the item.
       - Keep the style photorealistic and suitable for an ecommerce product card.
       - Do not invent a different garment or change the dominant color/pattern.
       - Treat the structured fields and description below as identity constraints from an earlier identification pass.
@@ -133,6 +136,7 @@ class OpenrouterImageCleaner
       #{metadata_lines.present? ? "\nCurrent metadata context:\n#{metadata_lines.join("\n")}" : ""}
       #{appearance_summary.present? ? "\nAppearance summary:\n#{appearance_summary}" : ""}
       #{hard_constraints.present? ? "\nHard constraints:\n#{hard_constraints.map { |constraint| "- #{constraint}" }.join("\n")}" : ""}
+      #{presentation_constraints.present? ? "\nProduct presentation constraints:\n#{presentation_constraints.map { |constraint| "- #{constraint}" }.join("\n")}" : ""}
       #{soft_hints.present? ? "\nSoft hints:\n#{soft_hints.map { |hint| "- #{hint}" }.join("\n")}" : ""}
     PROMPT
   end
@@ -248,14 +252,47 @@ class OpenrouterImageCleaner
     return [] if metadata_context.blank?
 
     lines = []
+    lines << "- Category: #{metadata_context[:category]}" if metadata_context[:category].present?
     lines << "- Name: #{metadata_context[:name]}" if metadata_context[:name].present?
     lines << "- Brand: #{metadata_context[:brand]}" if metadata_context[:brand].present?
     lines << "- Size: #{metadata_context[:size]}" if metadata_context[:size].present?
     lines << "- Date: #{metadata_context[:date]}" if metadata_context[:date].present?
+    lines << "- Visual description: #{metadata_context[:style_notes]}" if metadata_context[:style_notes].present?
     if metadata_context[:tags].present?
       lines << "- Tags: #{Array(metadata_context[:tags]).join(', ')}"
     end
     lines
+  end
+
+  def presentation_prompt_constraints
+    context_text = [
+      prompt_context[:name],
+      prompt_context[:category],
+      prompt_context[:notes],
+      prompt_context[:appearance_summary],
+      metadata_context[:category],
+      metadata_context[:name],
+      metadata_context[:brand],
+      metadata_context[:style_notes],
+      Array(metadata_context[:tags]).join(" ")
+    ].compact_blank.join(" ").downcase
+
+    return [] unless presentation_context?(context_text)
+
+    constraints = [
+      "Preserve the visible product presentation exactly when the item is shown in or on a box, case, tray, pouch, packaging, or display holder."
+    ]
+    if context_text.match?(/\bcartier\b/)
+      constraints << "If a Cartier box or Cartier-branded case is visible, keep the item inside that Cartier presentation box/case."
+    end
+    constraints
+  end
+
+  def presentation_context?(context_text)
+    accessory_terms = /\b(accessor(?:y|ies)|jewelry|jewellery|earrings?|necklace|bracelet|ring|watch|sunglasses?|glasses|luxury|boxed)\b/
+    presentation_terms = /\b(box|case|pouch|tray|holder|packaging|display|cartier)\b/
+
+    context_text.match?(accessory_terms) || context_text.match?(presentation_terms)
   end
 
   def ensure_configuration!

@@ -18,10 +18,15 @@ Curated Closet is a monorepo with a Rails JSON API in `back-end/` and a React + 
 - Sign in with Google and load the current user through `/me`
 - View and manage the signed-in user closet at `/closet`
 - Create, edit, delete, and photo-manage clothing items
+- Choose item types from the canonical wardrobe taxonomy while AI and legacy aliases normalize into those supported types
 - Generate AI metadata suggestions for item type, name, brand, and tags
 - Generate cleaned catalog-style item images
+- Undo or redo manual add-item, detected-item draft, and saved item-detail edits from the main item workflows
 - Build outfits from the closet cart and browse/edit saved outfits at `/outfits`
-- Upload an outfit photo, review detections, and convert detections into closet items
+- Add or remove closet pieces directly while editing a saved outfit
+- Reuse already-loaded closet and saved-outfit data across protected-page navigation, patching local state after writes instead of refetching unchanged collections
+- Generate saved outfits through an AI reference-analysis, shortlist, and refinement flow that uses closet metadata, visual descriptions, optional uploaded flatlay references, photos for shortlisted candidate items, and passive feedback from the user's generated-outfit edits/deletions, with stronger matching for required reference pieces like hoodies, denim shorts, chain bags, and sneakers
+- Upload an outfit photo, review and image-edit detections, and convert detections into closet items
 - Restrict `/users` and `/users/:id` to admin users only
 - Show frontend not-found and unauthorized states instead of raw backend responses
 
@@ -37,7 +42,9 @@ Curated Closet is a monorepo with a Rails JSON API in `back-end/` and a React + 
 
 Heroku deployment link:
 
-- https://closet-organizer-app-6a29560f355b.herokuapp.com/
+- https://closet-organizer-165f918adeda.herokuapp.com/
+
+Production deploys are handled through GitHub Actions. The `CI` workflow runs on pull requests and pushes to `main`; when it succeeds on `main`, `.github/workflows/deploy.yml` pushes the same commit to the Heroku app `closet-organizer`. The deploy workflow requires a GitHub Actions secret named `HEROKU_API_KEY`.
 
 ## Repository Layout
 
@@ -52,12 +59,12 @@ Heroku deployment link:
 
 ## Current Code Organization
 
-- Frontend route parsing, closet filtering, shared API helpers, page-loading hooks, and outfit-draft persistence are split into focused modules under `front-end/src/app/lib/`.
+- Frontend route parsing, closet filtering, shared API helpers, page-loading hooks, and outfit-draft persistence are split into focused modules under `front-end/src/app/lib/`, while `App.tsx` keeps session-level closet and saved-outfit caches in sync across protected routes.
 - Saved-outfit collage rendering and resize math are shared between the `/outfits` gallery and edit modal so the editor preview and saved card composition stay on the same contract.
 - Shared frontend control patterns live under `front-end/src/app/components/primitives/` and should be reused before introducing custom button, dropdown, select-trigger, or typography markup.
-- The add/edit item workflow is centered on `ItemEditorWorkspace.tsx`, `CreateItemPage.tsx`, `ItemDetailPage.tsx`, and extracted review components under `front-end/src/app/components/create-item/`.
+- The add/edit item workflow is centered on `ItemEditorWorkspace.tsx`, `CreateItemPage.tsx`, `ItemDetailPage.tsx`, the canonical wardrobe taxonomy in `front-end/src/app/lib/wardrobeTaxonomy.ts`, and extracted review components under `front-end/src/app/components/create-item/`.
 - Backend JSON response shaping lives in `back-end/app/presenters/api_payloads.rb`.
-- Backend image-preparation, metadata suggestion, and tempfile lifecycle helpers live under `back-end/app/services/`.
+- Backend image-preparation, metadata suggestion, reference-aware outfit generation, generated-outfit preference feedback, and tempfile lifecycle helpers live under `back-end/app/services/`.
 
 ## Getting Started
 
@@ -85,6 +92,19 @@ Or use the script shorthand:
 ```bash
 ./start.sh port=4100
 ./start.sh backend-port=3100 frontend-port=5174
+```
+
+Stop the local dev servers without restarting them:
+
+```bash
+./stop.sh
+```
+
+Use the same port overrides when stopping custom-port sessions:
+
+```bash
+./stop.sh port=4100
+./stop.sh backend-port=3100 frontend-port=5174
 ```
 
 Important for Google sign-in:
@@ -133,7 +153,8 @@ npm run dev
 
 - Rails tests run in GitHub Actions through `.github/workflows/ci.yml`
 - Frontend contract tests run through `cd front-end && npm test`
-- CI also runs `brakeman`, `bundler-audit`, and `rubocop`
+- CI also runs the frontend production build, `brakeman`, `bundler-audit`, and `rubocop`
+- Successful CI runs on `main` trigger `.github/workflows/deploy.yml`, which deploys to Heroku using the `HEROKU_API_KEY` repository secret
 - Recent local verification:
   `npm run build`
   `cd front-end && npm test`

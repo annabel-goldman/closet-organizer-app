@@ -4,8 +4,25 @@ const DEFAULT_HEADERS = {
 
 async function buildApiError(response: Response) {
   try {
-    const payload = (await response.json()) as { error?: string; errors?: string[] };
+    const payload = (await response.json()) as {
+      error?: string;
+      errors?: string[];
+      stage?: string;
+      provider?: string;
+      cause_class?: string;
+      cause?: string;
+    };
     const message = payload.errors?.join(", ") || payload.error;
+    const details = [
+      payload.stage ? `stage: ${payload.stage}` : null,
+      payload.provider ? `provider: ${payload.provider}` : null,
+      payload.cause_class ? `cause: ${payload.cause_class}${payload.cause ? ` - ${payload.cause}` : ""}` : null,
+    ].filter(Boolean);
+
+    if (message && details.length > 0) {
+      return new Error(`${message} (${details.join("; ")})`);
+    }
+
     return new Error(message || `Request failed with status ${response.status}`);
   } catch {
     return new Error(`Request failed with status ${response.status}`);

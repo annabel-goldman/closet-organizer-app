@@ -19,8 +19,8 @@ export function PrivacyPage() {
         </PrimitiveText>
         <PrimitiveText as="p" tone="muted">
           When you use the closet, we store clothing item details you enter or generate (such as
-          name, size, brand, tags, and dates), photos you upload, AI-cleaned versions of those
-          photos, and saved outfits (names, notes, tags, and links to your items).
+          name, type, brand, tags, and visual descriptions), photos you upload, AI-cleaned versions of
+          those photos, and saved outfits (names, notes, tags, and links to your items).
         </PrimitiveText>
         <PrimitiveText as="p" tone="muted">
           If you use outfit-photo import, we store the uploaded photo, detection results, and related

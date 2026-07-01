@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Save, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, RotateCcw, RotateCw, Save, Trash2, Upload } from "lucide-react";
 import {
   buildItemPreviewMetadata,
   createCleanPreviewFile,
@@ -32,6 +32,7 @@ import { ItemMetadataPanel } from "./ItemMetadataPanel";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import type { ExpandedImageEditorApplyContext } from "./ExpandedImageEditor";
+import { useUndoRedoShortcuts } from "../lib/useUndoRedoShortcuts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -72,8 +73,11 @@ export function ItemDetailPage({
   const [fieldErrors, setFieldErrors] = useState<ClothingItemFormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isUndoing, setIsUndoing] = useState(false);
   const [isCleaningImage, setIsCleaningImage] = useState(false);
   const [isAutofillingMetadata, setIsAutofillingMetadata] = useState(false);
+  const [undoHistory, setUndoHistory] = useState<ClothingItem[]>([]);
+  const [redoHistory, setRedoHistory] = useState<ClothingItem[]>([]);
   const [selectedImageKind, setSelectedImageKind] =
     useState<ExpandedImageEditorApplyContext["imageKind"]>("base");
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -119,8 +123,19 @@ export function ItemDetailPage({
 
   const previewName = formValues?.name.trim() || item?.name?.trim() || "Untitled Item";
   const previewMetadata = formValues
-    ? buildItemPreviewMetadata(formValues.size, parseTagInput(formValues.tags))
+    ? buildItemPreviewMetadata(parseTagInput(formValues.tags))
     : "";
+  const persistedHistoryDisabled = isSaving || isDeleting || isUndoing || isCleaningImage || isAutofillingMetadata;
+  const canUndoSavedChange = undoHistory.length > 0;
+  const canRedoSavedChange = redoHistory.length > 0;
+
+  useUndoRedoShortcuts({
+    canRedo: canRedoSavedChange,
+    canUndo: canUndoSavedChange,
+    disabled: persistedHistoryDisabled,
+    onRedo: () => void handleRedo(),
+    onUndo: () => void handleUndo(),
+  });
 
   function handleEditImageFileChange(
     file: File | null,
@@ -192,6 +207,8 @@ export function ItemDetailPage({
         ...photoOptions,
         removePhoto: photoState.removeExisting,
       });
+      setUndoHistory((current) => [...current, item]);
+      setRedoHistory([]);
       setItem(updatedItem);
       setSuccessMessage("Item details saved.");
       onItemSaved(updatedItem);
@@ -240,6 +257,8 @@ export function ItemDetailPage({
         setSuccessMessage("AI-cleaned preview ready. Save changes to keep it.");
       } else {
         const updatedItem = await generateClothingItemCleanImage(item.id, formValues);
+        setUndoHistory((current) => [...current, item]);
+        setRedoHistory([]);
         setItem(updatedItem);
         setSuccessMessage("AI-cleaned image saved to this item.");
         onItemSaved(updatedItem);
@@ -303,6 +322,83 @@ export function ItemDetailPage({
     }
   }
 
+  async function restorePersistedSnapshot(snapshot: ClothingItem, message: string) {
+    if (!item) {
+      return null;
+    }
+
+    const [photoFile, cleanedFile] = await Promise.all([
+      snapshot.original_image_url
+        ? fetchImageFileFromUrl(snapshot.original_image_url, `${snapshot.name || "closet-item"}-original.png`)
+        : Promise.resolve<File | undefined>(undefined),
+      snapshot.cleaned_image_url
+        ? fetchImageFileFromUrl(snapshot.cleaned_image_url, `${snapshot.name || "closet-item"}-cleaned.png`)
+        : Promise.resolve<File | undefined>(undefined),
+    ]);
+
+    const restoredItem = await saveClothingItem(
+      item.id,
+      item.user_id,
+      toClothingItemFormValues(snapshot),
+      {
+        photo: photoFile,
+        cleanedPhoto: cleanedFile,
+        removeCleanedPhoto: !snapshot.cleaned_image_url,
+        removePhoto: !snapshot.original_image_url,
+      },
+    );
+
+    setItem(restoredItem);
+    setFormValues(toClothingItemFormValues(restoredItem));
+    setSelectedImageKind("base");
+    photoState.reset();
+    setSuccessMessage(message);
+    onItemSaved(restoredItem);
+    return restoredItem;
+  }
+
+  async function handleUndo() {
+    const snapshot = undoHistory[undoHistory.length - 1];
+    if (!snapshot || !item) {
+      return;
+    }
+
+    setIsUndoing(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      await restorePersistedSnapshot(snapshot, "Last change undone.");
+      setUndoHistory((current) => current.slice(0, -1));
+      setRedoHistory((current) => [...current, item]);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to undo the last change.");
+    } finally {
+      setIsUndoing(false);
+    }
+  }
+
+  async function handleRedo() {
+    const snapshot = redoHistory[redoHistory.length - 1];
+    if (!snapshot || !item) {
+      return;
+    }
+
+    setIsUndoing(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      await restorePersistedSnapshot(snapshot, "Last change redone.");
+      setRedoHistory((current) => current.slice(0, -1));
+      setUndoHistory((current) => [...current, item]);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to redo the last change.");
+    } finally {
+      setIsUndoing(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="max-w-7xl mx-auto px-6 py-12">
@@ -346,39 +442,63 @@ export function ItemDetailPage({
       backLabel="Back to closet"
       formLabel="Edit Item"
       formTopAction={
-        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <div className="flex flex-wrap items-center gap-2">
           <PrimitiveButton
             type="button"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isDeleting}
+            onClick={() => void handleUndo()}
+            disabled={!canUndoSavedChange || persistedHistoryDisabled}
             variant="outline"
-            className="border-destructive/30 text-destructive hover:bg-destructive/5"
+            size="sm"
+            aria-label="Undo last saved change"
           >
-            <Trash2 className="w-4 h-4" />
-            Delete
+            <RotateCcw className="w-4 h-4" />
+            Undo
           </PrimitiveButton>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete {item.name}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This removes the item from your closet and cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                disabled={isDeleting}
-                className="bg-destructive text-white hover:bg-destructive/90"
-                onClick={(event) => {
-                  event.preventDefault();
-                  void handleDelete();
-                }}
-              >
-                {isDeleting ? "Deleting..." : "Delete item"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          <PrimitiveButton
+            type="button"
+            onClick={() => void handleRedo()}
+            disabled={!canRedoSavedChange || persistedHistoryDisabled}
+            variant="outline"
+            size="sm"
+            aria-label="Redo last saved change"
+          >
+            <RotateCw className="w-4 h-4" />
+            Redo
+          </PrimitiveButton>
+          <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+            <PrimitiveButton
+              type="button"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              disabled={isDeleting}
+              variant="outline"
+              className="border-destructive/30 text-destructive hover:bg-destructive/5"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </PrimitiveButton>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete {item.name}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This removes the item from your closet and cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={isDeleting}
+                  className="bg-destructive text-white hover:bg-destructive/90"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void handleDelete();
+                  }}
+                >
+                  {isDeleting ? "Deleting..." : "Delete item"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       }
       imageUrl={photoState.imageUrl}
       onBack={onBack}
@@ -418,7 +538,7 @@ export function ItemDetailPage({
       footer={
         <div className="mt-auto pt-2 flex items-center justify-between gap-4">
           <PrimitiveText as="div" variant="bodySm" tone="muted">
-            {isDirty ? "Unsaved changes" : "All changes saved"}
+            {isUndoing ? "Restoring change..." : isDirty ? "Unsaved changes" : "All changes saved"}
           </PrimitiveText>
 
           <PrimitiveButton

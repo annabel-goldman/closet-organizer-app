@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ClothingItem } from "../src/app/lib/closet.ts";
+import type { ClothingItem } from "../src/app/lib/closet.ts";
 import {
   getClosetSearchSuggestions,
   matchesSearchQuery,

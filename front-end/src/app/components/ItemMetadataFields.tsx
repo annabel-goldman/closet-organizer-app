@@ -2,13 +2,14 @@ import { KeyboardEvent, useState } from "react";
 import { CircleHelp, Plus, X } from "lucide-react";
 import {
   ClothingItemFormValues,
-  formatDisplaySize,
   formatTagInput,
   parseTagInput,
 } from "../lib/closet";
+import { CANONICAL_CLOTHING_CATEGORIES, CATEGORY_LABELS } from "../lib/wardrobeTaxonomy";
 import { ClothingItemFormErrors, clothingItemFieldElementId } from "../lib/itemFormValidation";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import { AiActionLoadingNotice } from "./shared/AiActionLoadingNotice";
+import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import {
   PrimitiveSelect,
   PrimitiveSelectContent,
@@ -16,15 +17,15 @@ import {
   PrimitiveSelectTrigger,
   PrimitiveSelectValue,
 } from "./primitives/PrimitiveSelect";
-import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import {
   MAX_CLOTHING_ITEM_BRAND,
-  MAX_CLOTHING_ITEM_CATEGORY,
   MAX_CLOTHING_ITEM_NAME,
+  MAX_CLOTHING_ITEM_STYLE_NOTES,
   MAX_TAG_LENGTH,
 } from "../lib/inputLengthPolicy";
 import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
 import { Command, CommandGroup, CommandItem, CommandList } from "./ui/command";
@@ -41,8 +42,6 @@ interface ItemMetadataFieldsProps {
   tagSuggestions?: string[];
   values: ClothingItemFormValues;
 }
-
-const sizeOptions = ["na", "xs", "small", "medium", "large", "xl"];
 
 function FieldError({ message }: { message?: string }) {
   if (!message) {
@@ -264,18 +263,37 @@ export function ItemMetadataFields({
         />
       ) : null}
 
-      <label className="space-y-2 sm:col-span-2" htmlFor={fieldId("category")}>
-        <PrimitiveText as="span" variant="label">
+      <label className="space-y-2 sm:col-span-2">
+        <PrimitiveText as="span" variant="label" id={`${fieldId("category")}-label`}>
           Type
         </PrimitiveText>
-        <Input
-          id={fieldId("category")}
-          value={values.category}
-          onChange={(event) => updateField("category", event.target.value)}
-          placeholder="e.g. sweater, jacket, dress"
-          className="h-auto px-4 py-3"
-          maxLength={MAX_CLOTHING_ITEM_CATEGORY}
-        />
+        <PrimitiveSelect
+          value={values.category || undefined}
+          onValueChange={(value) => updateField("category", value)}
+        >
+          <PrimitiveSelectTrigger
+            id={fieldId("category")}
+            aria-labelledby={`${fieldId("category")}-label`}
+            aria-invalid={Boolean(errors.category)}
+            aria-describedby={errors.category ? `${fieldId("category")}-error` : undefined}
+            className="h-auto px-4 py-3"
+          >
+            <PrimitiveSelectValue placeholder="Select type" />
+          </PrimitiveSelectTrigger>
+          <PrimitiveSelectContent>
+            {CANONICAL_CLOTHING_CATEGORIES.map((category) => (
+              <PrimitiveSelectItem key={category} value={category}>
+                {CATEGORY_LABELS[category]}
+              </PrimitiveSelectItem>
+            ))}
+          </PrimitiveSelectContent>
+        </PrimitiveSelect>
+        <FieldError message={errors.category} />
+        {errors.category ? (
+          <span id={`${fieldId("category")}-error`} className="sr-only">
+            {errors.category}
+          </span>
+        ) : null}
       </label>
 
       <label className="space-y-2 sm:col-span-2" htmlFor={fieldId("name")}>
@@ -300,55 +318,10 @@ export function ItemMetadataFields({
         ) : null}
       </label>
 
-      <div className="space-y-2">
-        <PrimitiveText as="span" variant="label" id={`${fieldId("size")}-label`}>
-          Size
-        </PrimitiveText>
-        <PrimitiveSelect value={values.size} onValueChange={(value) => updateField("size", value)}>
-          <PrimitiveSelectTrigger
-            id={fieldId("size")}
-            aria-labelledby={`${fieldId("size")}-label`}
-            className="h-auto px-4 py-3"
-          >
-            <PrimitiveSelectValue placeholder="Select size" />
-          </PrimitiveSelectTrigger>
-          <PrimitiveSelectContent>
-            {sizeOptions.map((size) => (
-              <PrimitiveSelectItem key={size} value={size}>
-                {formatDisplaySize(size)}
-              </PrimitiveSelectItem>
-            ))}
-          </PrimitiveSelectContent>
-        </PrimitiveSelect>
-      </div>
-
-      <label className="space-y-2" htmlFor={fieldId("date")}>
-        <PrimitiveText as="span" variant="label">
-          Purchase Date
-        </PrimitiveText>
-        <Input
-          id={fieldId("date")}
-          type="date"
-          value={values.date}
-          onChange={(event) => updateField("date", event.target.value)}
-          aria-invalid={Boolean(errors.date)}
-          aria-describedby={errors.date ? `${fieldId("date")}-error` : undefined}
-          className="h-auto px-4 py-3"
-        />
-        <FieldError message={errors.date} />
-        {errors.date ? (
-          <span id={`${fieldId("date")}-error`} className="sr-only">
-            {errors.date}
-          </span>
-        ) : null}
-      </label>
-
       <label className="space-y-2 sm:col-span-2" htmlFor={fieldId("brand")}>
-        <LabelWithTooltip
-          htmlFor={fieldId("brand")}
-          label="Brand"
-          tooltip="Brands power the Brands filter on your closet. Start typing to reuse a brand you have already saved."
-        />
+        <PrimitiveText as="span" variant="label">
+          Brand
+        </PrimitiveText>
         <BrandAutocomplete
           id={fieldId("brand")}
           value={values.brand ?? ""}
@@ -357,6 +330,20 @@ export function ItemMetadataFields({
           placeholder="Optional, e.g. COS, Nike"
           className="h-auto px-4 py-3"
           maxLength={MAX_CLOTHING_ITEM_BRAND}
+        />
+      </label>
+
+      <label className="space-y-2 sm:col-span-2" htmlFor={fieldId("visualDescription")}>
+        <PrimitiveText as="span" variant="label">
+          Visual description
+        </PrimitiveText>
+        <Textarea
+          id={fieldId("visualDescription")}
+          value={values.visualDescription}
+          onChange={(event) => updateField("visualDescription", event.target.value)}
+          placeholder="Objective details, e.g. color, fabric, silhouette, print, hardware..."
+          className="min-h-28 bg-input-background px-4 py-3"
+          maxLength={MAX_CLOTHING_ITEM_STYLE_NOTES}
         />
       </label>
 

@@ -2,6 +2,7 @@ class Outfit < ApplicationRecord
   belongs_to :user
   has_many :outfit_items, -> { order(:layer_order, :id) }, dependent: :destroy, autosave: true
   has_many :clothing_items, through: :outfit_items
+  has_one :outfit_generation_run, dependent: :nullify
 
   validates :name, presence: true, length: { maximum: InputLengthPolicy::MAX_OUTFIT_NAME }
   validates :notes, length: { maximum: InputLengthPolicy::MAX_OUTFIT_NOTES }, allow_blank: true

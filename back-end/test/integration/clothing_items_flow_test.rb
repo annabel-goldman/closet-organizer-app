@@ -19,6 +19,7 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal @clothing_item.name, response_json["name"]
     assert_equal @clothing_item.category, response_json["category"]
+    assert_equal @clothing_item.style_notes, response_json["style_notes"]
   end
 
   test "can create a clothing item" do
@@ -31,7 +32,8 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
           size: "large",
           date: "2026-04-20",
           tags: [ "wool", "camel", "tailored", "studio north" ],
-          brand: "Studio North"
+          brand: "Studio North",
+          style_notes: "Layer over monochrome basics."
         }
       }, headers: auth_headers(@user), as: :json
     end
@@ -41,6 +43,7 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_equal "Camel Coat", response_json["name"]
     assert_equal "large", response_json["size"]
     assert_equal "Studio North", response_json["brand"]
+    assert_equal "Layer over monochrome basics.", response_json["style_notes"]
     assert_equal [ "wool", "camel", "tailored", "studio north" ], response_json["tags"]
   end
 
@@ -209,7 +212,8 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
         user_id: @user.id,
         size: "small",
         date: "2026-04-18",
-        tags: [ "silk", "ivory", "dressy", "maison" ]
+        tags: [ "silk", "ivory", "dressy", "maison" ],
+        style_notes: "Wear tucked with high-rise denim."
       }
     }, headers: auth_headers(@user), as: :json
 
@@ -219,8 +223,25 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_equal "blouse", @clothing_item.category
     assert_equal "Ivory Silk Blouse", @clothing_item.name
     assert_equal "small", @clothing_item.size
+    assert_equal "Wear tucked with high-rise denim.", @clothing_item.style_notes
     assert_equal [ "silk", "ivory", "dressy", "maison" ], @clothing_item.tags
+    assert_equal "Wear tucked with high-rise denim.", response_json["style_notes"]
     assert_equal [ "silk", "ivory", "dressy", "maison" ], response_json["tags"]
+  end
+
+  test "rejects overlong visual descriptions" do
+    patch clothing_item_url(@clothing_item), params: {
+      clothing_item: {
+        name: @clothing_item.name,
+        user_id: @user.id,
+        size: @clothing_item.size,
+        tags: @clothing_item.tags,
+        style_notes: "x" * (InputLengthPolicy::MAX_CLOTHING_ITEM_STYLE_NOTES + 1)
+      }
+    }, headers: auth_headers(@user), as: :json
+
+    assert_response :unprocessable_content
+    assert_includes response_json["errors"].join(", "), "Visual description is too long"
   end
 
   test "can remove a clothing item photo" do
@@ -253,6 +274,7 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
         ai_context: {
           name: "Ivory Silk Blouse",
           brand: "Maison North",
+          style_notes: "Best with relaxed trousers.",
           tags: [ "ivory", "silk", "blouse" ]
         }
       }, headers: auth_headers(@user)
@@ -266,6 +288,7 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_equal response_json["cleaned_image_url"], response_json["image_url"]
     assert_equal "Ivory Silk Blouse", captured.dig(:metadata_context, :name)
     assert_equal "Maison North", captured.dig(:metadata_context, :brand)
+    assert_equal "Best with relaxed trousers.", captured.dig(:metadata_context, :style_notes)
   end
 
   test "can generate metadata suggestions for an existing clothing item photo" do
@@ -278,6 +301,7 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
           category: "blouse",
           name: "Ivory Silk Blouse",
           brand: "Maison North",
+          style_notes: "Best with relaxed trousers.",
           tags: [ "ivory", "silk", "blouse" ]
         }
       }, headers: auth_headers(@user)
@@ -287,10 +311,12 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_equal "blouse", response_json["category"]
     assert_equal "Ivory Silk Blouse", response_json["name"]
     assert_equal "Maison North", response_json["brand"]
+    assert_equal "Pair with relaxed trousers.", response_json["style_notes"]
     assert_equal [ "ivory", "silk", "blouse" ], response_json["tags"]
     assert_equal "blouse", captured.dig(:metadata_context, :category)
     assert_equal "Ivory Silk Blouse", captured.dig(:metadata_context, :name)
     assert_equal "Maison North", captured.dig(:metadata_context, :brand)
+    assert_equal "Best with relaxed trousers.", captured.dig(:metadata_context, :style_notes)
   end
 
   test "can delete a clothing item" do
@@ -325,6 +351,7 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
         category: category_hint.presence || metadata_context[:category] || "blouse",
         name: category_hint.present? ? "#{category_hint.to_s.titleize} Item" : "Ivory Silk Blouse",
         brand: "Maison North",
+        style_notes: "Pair with relaxed trousers.",
         tags: [ "ivory", "silk", "blouse" ],
         provider: "openrouter",
         vision_model: "openai/gpt-4.1-mini"

@@ -1,6 +1,6 @@
 # Project Structure Index
 
-Last updated: 2026-05-23
+Last updated: 2026-06-27
 
 This file is intentionally concise and focused on repository structure.
 For the product purpose and problem statement, see `wiki.md`.
@@ -9,7 +9,7 @@ For the product purpose and problem statement, see `wiki.md`.
 
 ```text
 project-closet-organizer/
-├── .github/                    # CI and automation
+├── .github/                    # CI, frontend checks, and Heroku deploy automation
 ├── AGENTS.md                   # Repo-specific working rules for agents and shared docs maintenance
 ├── back-end/                   # Rails API app
 ├── front-end/                  # React + Vite UI app
@@ -19,15 +19,16 @@ project-closet-organizer/
 ├── wiki.md                     # Product purpose and problem statement
 ├── PROJECT_INDEX.md            # This structure index
 ├── CHANGELOG.md                # Release notes and tag-aligned history
-└── start.sh                    # Boots backend and frontend together
+├── start.sh                    # Boots backend and frontend together
+└── stop.sh                     # Stops local backend and frontend dev servers without restarting
 ```
 
 ## Backend (`back-end`)
 
-- `app/models`: `user`, `clothing_item`, `outfit`, `outfit_item`, `outfit_upload`, and `outfit_detection`
+- `app/models`: `user`, `clothing_item`, `outfit`, `outfit_item`, generated-outfit feedback logs, `outfit_upload`, and `outfit_detection`
 - `app/controllers`: auth/session handling, JSON CRUD controllers, outfit collage/layout-aware outfit updates, upload flows, AI helper endpoints, and SPA fallback
-- `app/presenters`: API payload shaping for users, clothing items, outfits, uploads, and detections, including saved outfit collage layout data
-- `app/services/`: OpenRouter detection, metadata suggestion, crop refinement, crop verification, image-cleaning and background-removal logic, and shared tempfile/image-source helpers
+- `app/presenters`: API payload shaping for users, clothing items, outfits, uploads, and detections, including saved outfit collage layout data and optional AI generation metadata
+- `app/services/`: OpenRouter detection, metadata suggestion, two-stage outfit generation, generated-outfit preference feedback, crop refinement, crop verification, image-cleaning and background-removal logic, and shared tempfile/image-source helpers
 - `config/routes.rb`: API routes plus HTML fallback routes
 - `db/seeds.rb`: demo admin user plus large-scale dev seed (~1k users, ~5k items, ~2k outfits) for pagination/perf testing
 - `test/`: model, integration, and service tests
@@ -42,11 +43,13 @@ project-closet-organizer/
 - `src/app/lib/routes.ts`: route parsing, navigation helpers, and route guards
 - `src/app/lib/api.ts`: shared request/error helpers for frontend API calls
 - `src/app/lib/closet.ts`: shared types, formatting helpers, and feature-specific API helpers, including AI preview and metadata-suggestion requests
+- `src/app/lib/wardrobeTaxonomy.ts`: canonical clothing type options and category alias normalization for item forms and AI metadata suggestions
 - `src/app/lib/outfitCollage.ts`: shared default-layout and layer-order helpers for saved outfit collages
 - `src/app/lib/outfitCollageRenderMath.ts`: shared stage-aspect normalization and resize-aspect helpers that keep saved cards and the editor preview on the same rendering contract
 - `src/app/lib/outfitImageBounds.ts`: cached image-content-bounds measurement helpers for saved-outfit collage rendering and editing
 - `src/app/lib/closetFilters.ts`: closet search, filter, and sort helpers
 - `src/app/lib/useItemPhotoState.ts`: shared photo upload and preview state management
+- `src/app/lib/useUndoRedoShortcuts.ts`: shared keyboard shortcut wiring for undo/redo controls outside the image editor
 - `src/app/lib/usePageData.ts`: shared async page-loading hook
 - `src/app/lib/useOutfitDraftState.ts`: persisted outfit draft state management
 - `tests/`: frontend contract tests run with Node's built-in test runner

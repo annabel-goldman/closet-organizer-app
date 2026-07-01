@@ -30,7 +30,7 @@ class UserTest < ActiveSupport::TestCase
       provider: "google_oauth2",
       uid: "new-google-user",
       info: OpenStruct.new(
-        email: "annabel@example.com",
+        email: "annabel.m.goldman@gmail.com",
         name: "Annabel Goldman",
         image: "https://example.com/avatar.png"
       )
@@ -39,7 +39,7 @@ class UserTest < ActiveSupport::TestCase
     user = User.from_google_auth(auth_hash)
 
     assert_equal "Annabel Goldman 2", user.username
-    assert_equal "annabel@example.com", user.email
+    assert_equal "annabel.m.goldman@gmail.com", user.email
   end
 
   test "google auth reuses the same user without renaming on repeat sign in" do
@@ -47,7 +47,7 @@ class UserTest < ActiveSupport::TestCase
       provider: "google_oauth2",
       uid: users(:one).uid,
       info: OpenStruct.new(
-        email: "updated-alex@example.com",
+        email: "annabel.m.goldman@gmail.com",
         name: "Alex Renamed",
         image: "https://example.com/alex.png"
       )
@@ -57,7 +57,7 @@ class UserTest < ActiveSupport::TestCase
 
     assert_equal users(:one).id, user.id
     assert_equal "alex", user.username
-    assert_equal "updated-alex@example.com", user.email
+    assert_equal "annabel.m.goldman@gmail.com", user.email
   end
 
   test "google auth reuses an existing user with the same email" do
@@ -112,5 +112,23 @@ class UserTest < ActiveSupport::TestCase
 
     assert_equal seeded_user.id, user.id
     assert_equal "real-google-uid-456", user.uid
+  end
+
+  test "google auth rejects unapproved email addresses" do
+    auth_hash = OpenStruct.new(
+      provider: "google_oauth2",
+      uid: "unapproved-google-user",
+      info: OpenStruct.new(
+        email: "not-annabel@example.com",
+        name: "Not Annabel",
+        image: "https://example.com/not-annabel.png"
+      )
+    )
+
+    assert_no_difference "User.count" do
+      assert_raises(User::UnauthorizedGoogleEmailError) do
+        User.from_google_auth(auth_hash)
+      end
+    end
   end
 end

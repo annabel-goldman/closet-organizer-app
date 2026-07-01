@@ -2,7 +2,33 @@
 
 ## Unreleased
 
+- Added passive AI outfit feedback learning: generated outfits now log recommendation runs, candidate impressions, generated item IDs, save/edit/delete events, and per-user preference signals that gently influence future candidate selection, visual refinement, and reference matching.
+- Renamed the item editor's user-facing `Style notes` field to `Visual description`, retuned AI metadata suggestions toward objective item descriptions, and added a one-time regeneration task for closet item visual descriptions.
+- Improved flatlay-based AI outfit generation by analyzing uploaded references into structured target slots, preserving strong closet matches for required slots during candidate selection, and repairing final outfits to include missing required reference pieces when available.
+- Tuned flatlay matching to preserve cross-slot visual anchors such as sequins, burgundy leather, patent shine, satin, and glam styling so generated looks can prioritize cohesive vibe over literal item-type matching.
+- Improved reference-slot repair so generated outfits can replace an already-selected weak top or bottom with a stronger palette/silhouette match instead of stopping once the slot is merely filled.
+- Added a root-level `stop.sh` helper that stops local Rails and Vite dev servers without restarting them, using the same port arguments as `start.sh`.
+- Added `accessory` to the canonical frontend item type picker while keeping `bag` as a separate specific option.
+- Added `swimwear` to the canonical frontend item type picker and normalized swimwear aliases such as bikini and swimsuit to that type.
+- Added a sticky round outfit-cart button on the closet page that appears once the top cart button scrolls out of view.
+- Added a lower-right confirmation toast when closet items are added to or removed from the outfit cart.
+- Added an optional flatlay reference upload to AI outfit generation so the selector and visual refiner can match the closest available closet outfit to an uploaded look.
+- Added search to the saved-outfit editor's add-item popover so large closets can find pieces without scanning the full thumbnail grid.
+- Cached the saved-outfits collection at the app level so visiting `/outfits` reuses already-loaded data and only updates the cache after outfit create, edit, delete, AI generation, or clothing-item changes.
+- Restored the canonical clothing type picker for item add/edit flows, including category alias normalization and frontend validation against the supported wardrobe taxonomy.
+- Restored undo/redo controls for manual item creation, detected-item metadata drafts, and saved item-detail changes, with keyboard shortcuts where the workflow can safely restore state.
+- Restored the manual add-item pending AI-clean save dialog so users can create with the current image immediately or create now and attach the cleaned image when it finishes.
+- Restored add/remove piece controls inside the saved-outfit editor modal so existing outfits can pull additional items directly from the closet while editing.
+- Restored the expanded image editor for detected outfit-photo items, so newly detected items can be cropped, erased with the magic wand, AI-cleaned, and saved with the edited preview.
 - Restored the expanded item-image editor on item detail pages, including crop, magic-wand erase, and AI-clean actions from the image preview dialog.
+- Hardened AI outfit generation so failures return the failing AI stage and provider details, final visual refinement sends a capped number of candidate photos, and dress-based looks require available footwear instead of saving a single-item outfit while treating bags as an optional preference.
+- Updated AI outfit generation prompts so generated looks prefer including a complementary bag when the closet has a suitable bag-like accessory.
+- Reworked AI outfit generation into a two-stage flow: OpenRouter first picks a text-only candidate shortlist from closet metadata and visual descriptions, then refines the final saved outfit with photos for only those candidate items.
+- Randomized the closet item context sent to AI outfit generation so generated looks are less biased toward alphabetically early items such as beige pieces.
+- Added per-item visual descriptions plus an AI outfit generator on `/outfits` that creates a saved look from closet metadata and visual descriptions.
+- Restricted Google sign-in to the two approved personal accounts and added a clear unauthorized-account login message.
+- Reused the already-loaded session closet data when navigating between protected pages so returning to `/closet` no longer refetches the full item list during the same app session.
+- Removed size and purchase-date fields from the item create/edit UI, item metadata previews, closet search/sort surfaces, and profile item rows.
 - Added filter-aware closet search suggestions with fuzzy typo matching: typing in the closet search field now opens an item dropdown that respects active tag, color, and brand filters, click fills the search query, and Enter opens the highlighted item.
 - Fixed Heroku frontend deploys by keeping the Vite build-time plugins (`@tailwindcss/vite` and `@vitejs/plugin-react`) in production dependencies and pinning the root Node runtime to `22.x`.
 - Added a configurable post-removal sharpen step to AI-cleaned transparent PNG outputs so item edges render a bit crisper after background removal.

@@ -1,8 +1,16 @@
 class User < ApplicationRecord
+  ALLOWED_GOOGLE_EMAILS = %w[
+    annabelgoldman2025@u.northwestern.edu
+    annabel.m.goldman@gmail.com
+  ].freeze
+
+  class UnauthorizedGoogleEmailError < StandardError; end
+
   has_secure_password
 
   has_many :clothing_items, dependent: :destroy
   has_many :outfits, dependent: :destroy
+  has_many :outfit_generation_runs, dependent: :destroy
   has_many :outfit_uploads, dependent: :destroy
 
   validates :username, presence: true, uniqueness: true,
@@ -14,6 +22,8 @@ class User < ApplicationRecord
   validates :uid, presence: true, uniqueness: { scope: :provider }
 
   def self.from_google_auth(auth_hash)
+    raise UnauthorizedGoogleEmailError unless google_email_allowed?(auth_hash.info.email)
+
     user = find_for_google_auth(auth_hash)
     preferred_username = auth_hash.info.name.presence || auth_hash.info.email.presence || "User"
 
@@ -34,6 +44,10 @@ class User < ApplicationRecord
     find_by(provider: auth_hash.provider, uid: auth_hash.uid) ||
       find_by_normalized_email(auth_hash.info.email) ||
       new
+  end
+
+  def self.google_email_allowed?(email)
+    ALLOWED_GOOGLE_EMAILS.include?(email.to_s.downcase)
   end
 
   def self.resolved_google_username(user, preferred_username)

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_21_165312) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_30_093000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -42,17 +42,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_21_165312) do
   create_table "clothing_items", force: :cascade do |t|
     t.string "brand", limit: 80
     t.string "category", limit: 60
+    t.boolean "clean_image_cutout_fallback", default: false
     t.text "clean_image_error_message"
     t.datetime "clean_image_generated_at"
     t.string "clean_image_model"
     t.string "clean_image_provider"
     t.integer "clean_image_status", default: 0, null: false
+    t.string "clean_image_variant"
     t.datetime "created_at", null: false
     t.datetime "date"
     t.string "name", limit: 120, null: false
     t.integer "size"
     t.integer "source_outfit_detection_id"
     t.integer "source_outfit_upload_id"
+    t.text "style_notes"
     t.json "tags"
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
@@ -67,11 +70,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_21_165312) do
     t.float "bbox_x"
     t.float "bbox_y"
     t.string "category", null: false
+    t.boolean "clean_image_cutout_fallback", default: false
     t.text "clean_image_error_message"
     t.datetime "clean_image_generated_at"
     t.string "clean_image_model"
     t.string "clean_image_provider"
     t.integer "clean_image_status", default: 0, null: false
+    t.string "clean_image_variant"
     t.float "coarse_bbox_height"
     t.float "coarse_bbox_width"
     t.float "coarse_bbox_x"
@@ -97,6 +102,36 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_21_165312) do
     t.string "suggested_name"
     t.datetime "updated_at", null: false
     t.index ["outfit_upload_id"], name: "index_outfit_detections_on_outfit_upload_id"
+  end
+
+  create_table "outfit_generation_events", force: :cascade do |t|
+    t.json "added_item_ids", default: [], null: false
+    t.datetime "created_at", null: false
+    t.string "event_type", null: false
+    t.json "final_item_ids", default: [], null: false
+    t.json "kept_item_ids", default: [], null: false
+    t.integer "outfit_generation_run_id", null: false
+    t.json "removed_item_ids", default: [], null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_outfit_generation_events_on_created_at"
+    t.index ["event_type"], name: "index_outfit_generation_events_on_event_type"
+    t.index ["outfit_generation_run_id"], name: "index_outfit_generation_events_on_run_id"
+  end
+
+  create_table "outfit_generation_runs", force: :cascade do |t|
+    t.json "candidate_item_ids", default: [], null: false
+    t.datetime "created_at", null: false
+    t.datetime "generated_at", null: false
+    t.json "generated_item_ids", default: [], null: false
+    t.string "generator_version", null: false
+    t.string "occasion"
+    t.integer "outfit_id"
+    t.json "reference_profile"
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["generated_at"], name: "index_outfit_generation_runs_on_generated_at"
+    t.index ["outfit_id"], name: "index_outfit_generation_runs_on_outfit_id"
+    t.index ["user_id"], name: "index_outfit_generation_runs_on_user_id"
   end
 
   create_table "outfit_items", force: :cascade do |t|
@@ -157,6 +192,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_21_165312) do
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "clothing_items", "users"
   add_foreign_key "outfit_detections", "outfit_uploads"
+  add_foreign_key "outfit_generation_events", "outfit_generation_runs"
+  add_foreign_key "outfit_generation_runs", "outfits", on_delete: :nullify
+  add_foreign_key "outfit_generation_runs", "users"
   add_foreign_key "outfit_items", "clothing_items"
   add_foreign_key "outfit_items", "outfits"
   add_foreign_key "outfit_uploads", "users"

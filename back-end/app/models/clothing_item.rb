@@ -8,6 +8,7 @@ class ClothingItem < ApplicationRecord
   before_validation :normalize_category
   before_validation :normalize_tags
   before_validation :normalize_brand
+  before_validation :normalize_style_notes
 
   enum :size, {
     xs: 0,
@@ -27,6 +28,7 @@ class ClothingItem < ApplicationRecord
   validates :name, presence: true, length: { maximum: InputLengthPolicy::MAX_CLOTHING_ITEM_NAME }
   validates :brand, length: { maximum: InputLengthPolicy::MAX_CLOTHING_ITEM_BRAND }, allow_blank: true
   validates :category, length: { maximum: InputLengthPolicy::MAX_CLOTHING_ITEM_CATEGORY }, allow_blank: true
+  validates :style_notes, length: { maximum: InputLengthPolicy::MAX_CLOTHING_ITEM_STYLE_NOTES }, allow_blank: true
   validates :size, presence: true
   validate :tags_meet_length_policy
   validate :photo_must_be_an_image
@@ -38,6 +40,12 @@ class ClothingItem < ApplicationRecord
 
   def source_photo_for_cleaning
     display_photo_attachment
+  end
+
+  def self.human_attribute_name(attribute, options = {})
+    return "Visual description" if attribute.to_s == "style_notes"
+
+    super
   end
 
   private
@@ -66,6 +74,10 @@ class ClothingItem < ApplicationRecord
 
   def normalize_brand
     self.brand = brand.to_s.strip.presence
+  end
+
+  def normalize_style_notes
+    self.style_notes = style_notes.to_s.strip.presence
   end
 
   def apply_defaults

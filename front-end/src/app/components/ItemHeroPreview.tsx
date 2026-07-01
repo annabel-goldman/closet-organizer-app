@@ -70,16 +70,6 @@ export function ItemHeroPreview({
     : "bg-stone-300";
   const previewActionButtonClass = "size-11 border border-white/75 bg-white/70 p-0 shadow-sm backdrop-blur-sm hover:bg-white/85";
 
-  function deferPreviewAction(action?: () => void) {
-    if (!action) {
-      return;
-    }
-
-    window.setTimeout(() => {
-      action();
-    }, 0);
-  }
-
   async function handleApplyEditedImage(file: File, context: ExpandedImageEditorApplyContext) {
     if (!previewEditor) {
       return;
@@ -285,13 +275,13 @@ export function ItemHeroPreview({
                       type="button"
                       variant="outline"
                       className="border-white/40 bg-white/10 text-white hover:bg-white/18"
-                    onClick={() => {
-                      setIsImageExpanded(false);
-                      deferPreviewAction(onPreviewEdit);
-                    }}
+                      onClick={() => {
+                        onPreviewEdit();
+                        setIsImageExpanded(false);
+                      }}
                     >
                       <Upload className="w-4 h-4" />
-                      Edit image
+                      Replace image
                     </PrimitiveButton>
                   ) : null}
                 </div>
@@ -304,7 +294,7 @@ export function ItemHeroPreview({
                     className="border-white/40 bg-white/10 text-white hover:bg-white/18"
                     onClick={() => {
                       setIsImageExpanded(false);
-                      deferPreviewAction(onPreviewClear);
+                      onPreviewClear();
                     }}
                     aria-label="Clear image"
                     title="Clear image"

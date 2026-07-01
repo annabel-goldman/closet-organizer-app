@@ -29,6 +29,19 @@ class ClothingItemTest < ActiveSupport::TestCase
     assert_nil item.brand
   end
 
+  test "normalizes blank visual descriptions to nil" do
+    item = ClothingItem.new(
+      user: users(:one),
+      name: "Basic Tee",
+      size: :small,
+      style_notes: "   "
+    )
+
+    item.valid?
+
+    assert_nil item.style_notes
+  end
+
   test "normalizes category to lowercase" do
     item = ClothingItem.new(
       user: users(:one),
@@ -75,6 +88,18 @@ class ClothingItemTest < ActiveSupport::TestCase
 
     assert_not item.valid?
     assert_includes item.errors[:name].first, "too long"
+  end
+
+  test "rejects visual descriptions longer than the configured maximum" do
+    item = ClothingItem.new(
+      user: users(:one),
+      size: :small,
+      name: "Long Notes Tee",
+      style_notes: "x" * (InputLengthPolicy::MAX_CLOTHING_ITEM_STYLE_NOTES + 1)
+    )
+
+    assert_not item.valid?
+    assert_includes item.errors[:style_notes].first, "too long"
   end
 
   test "rejects individual tags longer than the configured maximum" do
