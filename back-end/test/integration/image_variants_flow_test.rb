@@ -55,6 +55,7 @@ class ImageVariantsFlowTest < ActionDispatch::IntegrationTest
     assert_equal "shirt", response_json["category"]
     assert_equal "Striped Cotton Shirt", response_json["name"]
     assert_equal "Acme", response_json["brand"]
+    assert_equal "Wear open over a plain tee.", response_json["style_notes"]
     assert_equal [ "striped", "cotton", "shirt" ], response_json["tags"]
     assert_equal "shirt", captured[:category_hint]
     assert_equal "shirt", captured.dig(:metadata_context, :category)
@@ -113,6 +114,7 @@ class ImageVariantsFlowTest < ActionDispatch::IntegrationTest
         category: category_hint.presence || metadata_context[:category] || "top",
         name: "Striped Cotton #{category_hint.to_s.titleize}".strip,
         brand: "Acme",
+        style_notes: "Wear open over a plain tee.",
         tags: [ "striped", "cotton", category_hint.presence || "top" ],
         provider: "openrouter",
         vision_model: "openai/gpt-4.1-mini"

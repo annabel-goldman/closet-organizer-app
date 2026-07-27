@@ -1,6 +1,6 @@
-import { ClothingItem } from "./closet";
+import type { ClothingItem } from "./closet.ts";
 
-export type ClosetSortOption = "name-asc" | "newest-added" | "oldest-added" | "recent-purchase";
+export type ClosetSortOption = "name-asc" | "newest-added" | "oldest-added";
 
 const COLOR_TAGS = new Set([
   "beige",
@@ -68,7 +68,7 @@ function itemMatchesSelectedBrand(item: ClothingItem, selectedBrand: string): bo
 }
 
 export function buildClothingItemSearchHaystack(item: ClothingItem): string {
-  return [item.name, item.category, item.brand, item.size, ...item.tags]
+  return [item.name, item.category, item.brand, ...item.tags]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
@@ -173,10 +173,6 @@ export function sortClothingItems(items: ClothingItem[], sortOption: ClosetSortO
 
     if (sortOption === "oldest-added") {
       return new Date(left.created_at ?? 0).getTime() - new Date(right.created_at ?? 0).getTime();
-    }
-
-    if (sortOption === "recent-purchase") {
-      return new Date(right.date ?? 0).getTime() - new Date(left.date ?? 0).getTime();
     }
 
     return new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime();
@@ -288,10 +284,7 @@ export function formatClosetSearchSuggestionLabel(item: ClothingItem): string {
 
 export function formatClosetSearchSuggestionDetail(item: ClothingItem): string | null {
   const parts = [item.brand?.trim(), item.category?.trim(), ...item.tags.slice(0, 2)].filter(Boolean);
-  if (parts.length === 0) {
-    return item.size ? `Size ${item.size}` : null;
-  }
-  return parts.join(" · ");
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 export function hasActiveClosetControls(

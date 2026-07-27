@@ -21,7 +21,9 @@ Rails.application.routes.draw do
       post :generate_clean_image, on: :member
       post :generate_metadata_suggestions, on: :member
     end
-    resources :outfits, except: %i[new edit]
+    resources :outfits, except: %i[new edit] do
+      post :generate, on: :collection
+    end
     resources :outfit_uploads, only: %i[create show]
     resources :outfit_detections, only: [] do
       post :generate_clean_image, on: :member

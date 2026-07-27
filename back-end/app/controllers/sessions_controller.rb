@@ -11,6 +11,8 @@ class SessionsController < ApplicationController
     session[:user_id] = user.id
 
     redirect_to frontend_closet_redirect
+  rescue User::UnauthorizedGoogleEmailError
+    redirect_to frontend_login_redirect(error: "unauthorized_account")
   rescue ActiveRecord::RecordInvalid
     redirect_to frontend_login_redirect(error: "signin_failed")
   end

@@ -2,7 +2,6 @@ import { motion } from "motion/react";
 import { ChevronRight, Shirt } from "lucide-react";
 import {
   fetchUser,
-  formatDisplaySize,
   formatPossessive,
   formatPreferredStyle,
   formatTagLabel,
@@ -195,7 +194,7 @@ export function UserDetailPage({
                           <div>
                             <h3 className="mb-1">{item.name}</h3>
                             <PrimitiveText as="p" tone="muted">
-                              {formatDisplaySize(item.size)}
+                              {item.category?.trim() || "Closet item"}
                               {visibleTags[0] ? ` · ${formatTagLabel(visibleTags[0])}` : ""}
                             </PrimitiveText>
                             <PrimitiveText as="p" variant="bodySm" tone="muted" className="mt-2">

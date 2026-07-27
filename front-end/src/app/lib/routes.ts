@@ -87,6 +87,8 @@ export function authErrorMessage(code: string | null) {
       return "Google sign-in was cancelled before it finished.";
     case "google_auth_failed":
       return "Google sign-in could not be completed. Please try again.";
+    case "unauthorized_account":
+      return "This personal closet is only available to approved Google accounts.";
     case "signin_failed":
       return "Sign-in failed. Please try again.";
     default:

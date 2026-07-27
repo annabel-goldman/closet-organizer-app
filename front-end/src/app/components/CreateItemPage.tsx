@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Plus, Upload } from "lucide-react";
+import { ArrowLeft, Plus, RotateCcw, RotateCw, Upload } from "lucide-react";
 import {
   buildItemPreviewMetadata,
   ClothingItem,
@@ -9,9 +9,9 @@ import {
   createOutfitUpload,
   CreateItemMode,
   emptyClothingItemFormValues,
+  fetchImageFileFromUrl,
   fetchOutfitUpload,
   fetchUser,
-  generateOutfitDetectionCleanImage,
   generateOutfitDetectionMetadataSuggestions,
   mergeMetadataSuggestion,
   OutfitDetection,
@@ -19,6 +19,7 @@ import {
   parseTagInput,
   preferredDetectionBox,
   previewMetadataSuggestions,
+  saveClothingItem,
   toClothingItemFormValuesFromDetection,
   User,
 } from "../lib/closet";
@@ -41,7 +42,19 @@ import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveConfirmationDialog } from "./primitives/PrimitiveConfirmationDialog";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { useItemPhotoState } from "../lib/useItemPhotoState";
+import type { ItemPhotoStateSnapshot } from "../lib/useItemPhotoState";
+import { useUndoRedoShortcuts } from "../lib/useUndoRedoShortcuts";
 import type { ExpandedImageEditorApplyContext } from "./ExpandedImageEditor";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
 
 interface CreateItemPageProps {
   userId: number | null;
@@ -50,6 +63,15 @@ interface CreateItemPageProps {
   onBack: () => void;
   onItemsCreated: (items: ClothingItem[]) => void;
 }
+
+interface ManualCreateUndoSnapshot {
+  formValues: ClothingItemFormValues;
+  originalUploadedPhoto: File | null;
+  photoState: ItemPhotoStateSnapshot;
+  selectedImageKind: ExpandedImageEditorApplyContext["imageKind"];
+}
+
+type DetectionDraftHistory = Record<number, ClothingItemFormValues[]>;
 
 export function CreateItemPage({
   userId,
@@ -61,6 +83,8 @@ export function CreateItemPage({
   const detectionPollControllerRef = useRef<AbortController | null>(null);
   const detectionMetadataRunRef = useRef(0);
   const originalUploadedPhotoRef = useRef<File | null>(null);
+  const pendingManualCleanPromiseRef = useRef<Promise<File> | null>(null);
+  const pendingManualCleanModeRef = useRef<"preview" | "attach" | "ignore">("preview");
   const [formValues, setFormValues] = useState(emptyClothingItemFormValues);
   const [fieldErrors, setFieldErrors] = useState<ClothingItemFormErrors>({});
   const [isCreating, setIsCreating] = useState(false);
@@ -69,9 +93,14 @@ export function CreateItemPage({
   const [isAutofillingMetadata, setIsAutofillingMetadata] = useState(false);
   const [autofillingDetectionId, setAutofillingDetectionId] = useState<number | null>(null);
   const [isPreparingDetectedMetadata, setIsPreparingDetectedMetadata] = useState(false);
+  const [isManualCreateWhileCleaningDialogOpen, setIsManualCreateWhileCleaningDialogOpen] = useState(false);
   const [isReplaceImageWarningOpen, setIsReplaceImageWarningOpen] = useState(false);
   const [selectedImageKind, setSelectedImageKind] =
     useState<ExpandedImageEditorApplyContext["imageKind"]>("base");
+  const [manualUndoHistory, setManualUndoHistory] = useState<ManualCreateUndoSnapshot[]>([]);
+  const [manualRedoHistory, setManualRedoHistory] = useState<ManualCreateUndoSnapshot[]>([]);
+  const [detectionUndoHistory, setDetectionUndoHistory] = useState<DetectionDraftHistory>({});
+  const [detectionRedoHistory, setDetectionRedoHistory] = useState<DetectionDraftHistory>({});
   const [outfitUpload, setOutfitUpload] = useState<OutfitUpload | null>(null);
   const [pendingReplacementFile, setPendingReplacementFile] = useState<File | null>(null);
   const [selectedDetectionIds, setSelectedDetectionIds] = useState<number[]>([]);
@@ -80,6 +109,9 @@ export function CreateItemPage({
   const [editedDetections, setEditedDetections] = useState<Record<number, ClothingItemFormValues>>(
     {},
   );
+  const [editedDetectionPhotos, setEditedDetectionPhotos] = useState<
+    Record<number, { file: File; imageKind: ExpandedImageEditorApplyContext["imageKind"] }>
+  >({});
   const photoState = useItemPhotoState();
 
   const shouldUseInitialUser = Boolean(userId && initialUser?.id === userId);
@@ -118,14 +150,84 @@ export function CreateItemPage({
     setCleaningDetectionIds([]);
     setDetectionCleanErrors({});
     setEditedDetections({});
+    setEditedDetectionPhotos({});
+    setDetectionUndoHistory({});
+    setDetectionRedoHistory({});
     setAutofillingDetectionId(null);
     setIsPreparingDetectedMetadata(false);
+  }
+
+  async function autoAttachCleanedPhotoToCreatedItem({
+    cleanedFilePromise,
+    createdItem,
+    values,
+  }: {
+    cleanedFilePromise: Promise<File>;
+    createdItem: ClothingItem;
+    values: ClothingItemFormValues;
+  }) {
+    try {
+      const cleanedPreview = await cleanedFilePromise;
+      await saveClothingItem(createdItem.id, createdItem.user_id, values, {
+        cleanedPhoto: cleanedPreview,
+      });
+    } catch {
+      // The item has already been created; keep this background attachment best-effort.
+    }
+  }
+
+  function captureManualUndoSnapshot(): ManualCreateUndoSnapshot {
+    return {
+      formValues: { ...formValues },
+      originalUploadedPhoto: originalUploadedPhotoRef.current,
+      photoState: photoState.getSnapshot(),
+      selectedImageKind,
+    };
+  }
+
+  function pushManualUndoSnapshot(snapshot: ManualCreateUndoSnapshot = captureManualUndoSnapshot()) {
+    setManualUndoHistory((current) => [...current, snapshot]);
+    setManualRedoHistory([]);
+  }
+
+  function restoreManualSnapshot(snapshot: ManualCreateUndoSnapshot) {
+    setFormValues({ ...snapshot.formValues });
+    setFieldErrors(validateClothingItemForm(snapshot.formValues));
+    originalUploadedPhotoRef.current = snapshot.originalUploadedPhoto;
+    photoState.restoreSnapshot(snapshot.photoState);
+    setSelectedImageKind(snapshot.selectedImageKind);
+    setErrorMessage("");
+  }
+
+  function handleManualUndo() {
+    const snapshot = manualUndoHistory[manualUndoHistory.length - 1];
+    if (!snapshot) {
+      return;
+    }
+
+    const currentSnapshot = captureManualUndoSnapshot();
+    setManualUndoHistory((current) => current.slice(0, -1));
+    setManualRedoHistory((current) => [...current, currentSnapshot]);
+    restoreManualSnapshot(snapshot);
+  }
+
+  function handleManualRedo() {
+    const snapshot = manualRedoHistory[manualRedoHistory.length - 1];
+    if (!snapshot) {
+      return;
+    }
+
+    const currentSnapshot = captureManualUndoSnapshot();
+    setManualRedoHistory((current) => current.slice(0, -1));
+    setManualUndoHistory((current) => [...current, currentSnapshot]);
+    restoreManualSnapshot(snapshot);
   }
 
   function applyImageFileSelection(
     file: File,
     imageKind: ExpandedImageEditorApplyContext["imageKind"] = "base",
   ) {
+    pushManualUndoSnapshot();
     detectionPollControllerRef.current?.abort();
     if (imageKind === "base" || !originalUploadedPhotoRef.current) {
       originalUploadedPhotoRef.current = file;
@@ -244,6 +346,9 @@ export function CreateItemPage({
   }
 
   function clearImageSelection() {
+    if (photoState.selectedFile || originalUploadedPhotoRef.current || selectedImageKind !== "base") {
+      pushManualUndoSnapshot();
+    }
     detectionPollControllerRef.current?.abort();
     originalUploadedPhotoRef.current = null;
     setSelectedImageKind("base");
@@ -273,10 +378,71 @@ export function CreateItemPage({
   }
 
   function updateDetectionDraft(detectionId: number, nextValues: ClothingItemFormValues) {
+    const detection = detections.find((entry) => entry.id === detectionId);
+    if (!detection) {
+      return;
+    }
+
+    const previousValues = getDetectionDraft(detection);
+    if (JSON.stringify(previousValues) === JSON.stringify(nextValues)) {
+      return;
+    }
+
+    setDetectionUndoHistory((current) => ({
+      ...current,
+      [detectionId]: [...(current[detectionId] ?? []), previousValues],
+    }));
+    setDetectionRedoHistory((current) => ({
+      ...current,
+      [detectionId]: [],
+    }));
     setEditedDetections((current) => ({
       ...current,
       [detectionId]: nextValues,
     }));
+  }
+
+  function setDetectionDraftValues(detection: OutfitDetection, nextValues: ClothingItemFormValues) {
+    setEditedDetections((current) => ({
+      ...current,
+      [detection.id]: nextValues,
+    }));
+  }
+
+  function handleDetectionUndo(detection: OutfitDetection) {
+    const previousValues = detectionUndoHistory[detection.id]?.[detectionUndoHistory[detection.id].length - 1];
+    if (!previousValues) {
+      return;
+    }
+
+    const currentValues = getDetectionDraft(detection);
+    setDetectionUndoHistory((current) => ({
+      ...current,
+      [detection.id]: (current[detection.id] ?? []).slice(0, -1),
+    }));
+    setDetectionRedoHistory((current) => ({
+      ...current,
+      [detection.id]: [...(current[detection.id] ?? []), currentValues],
+    }));
+    setDetectionDraftValues(detection, previousValues);
+  }
+
+  function handleDetectionRedo(detection: OutfitDetection) {
+    const nextValues = detectionRedoHistory[detection.id]?.[detectionRedoHistory[detection.id].length - 1];
+    if (!nextValues) {
+      return;
+    }
+
+    const currentValues = getDetectionDraft(detection);
+    setDetectionRedoHistory((current) => ({
+      ...current,
+      [detection.id]: (current[detection.id] ?? []).slice(0, -1),
+    }));
+    setDetectionUndoHistory((current) => ({
+      ...current,
+      [detection.id]: [...(current[detection.id] ?? []), currentValues],
+    }));
+    setDetectionDraftValues(detection, nextValues);
   }
 
   async function handleCleanUploadedPhoto() {
@@ -285,22 +451,35 @@ export function CreateItemPage({
       return;
     }
 
+    pushManualUndoSnapshot();
     setIsCleaningUploadedPhoto(true);
     setErrorMessage("");
 
+    const cleanPromise = createCleanPreviewFile(photoState.selectedFile, {
+      metadata: formValues,
+      originalSourcePhoto: originalUploadedPhotoRef.current,
+    });
+    pendingManualCleanPromiseRef.current = cleanPromise;
+    pendingManualCleanModeRef.current = "preview";
+
     try {
-      const cleanedFile = await createCleanPreviewFile(photoState.selectedFile, {
-        metadata: formValues,
-        originalSourcePhoto: originalUploadedPhotoRef.current,
-      });
-      setSelectedImageKind("cleaned");
-      photoState.updateSelectedFile(cleanedFile);
+      const cleanedFile = await cleanPromise;
+      if (pendingManualCleanModeRef.current === "preview") {
+        setSelectedImageKind("cleaned");
+        photoState.updateSelectedFile(cleanedFile);
+      }
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Unable to create an AI-cleaned item image.",
-      );
+      if (pendingManualCleanModeRef.current !== "ignore") {
+        setErrorMessage(
+          error instanceof Error ? error.message : "Unable to create an AI-cleaned item image.",
+        );
+      }
     } finally {
-      setIsCleaningUploadedPhoto(false);
+      if (pendingManualCleanPromiseRef.current === cleanPromise) {
+        pendingManualCleanPromiseRef.current = null;
+        pendingManualCleanModeRef.current = "preview";
+        setIsCleaningUploadedPhoto(false);
+      }
     }
   }
 
@@ -318,6 +497,7 @@ export function CreateItemPage({
         metadata: formValues,
         originalSourcePhoto: originalUploadedPhotoRef.current,
       });
+      pushManualUndoSnapshot();
       setFormValues((current) => mergeMetadataSuggestion(current, suggestion));
     } catch (error) {
       setErrorMessage(
@@ -336,6 +516,93 @@ export function CreateItemPage({
     return createCleanPreviewFile(file, {
       metadata: formValues,
       originalSourcePhoto: originalUploadedPhotoRef.current,
+    });
+  }
+
+  async function getDetectionEditorFile(detection: OutfitDetection) {
+    const editedPhoto = editedDetectionPhotos[detection.id];
+    if (editedPhoto) {
+      return editedPhoto.file;
+    }
+
+    const suggestedName = detection.suggested_name?.trim() || detection.category || "detected-item";
+    if (detection.cleaned_image_url) {
+      return fetchImageFileFromUrl(detection.cleaned_image_url, `${suggestedName}-edited.png`);
+    }
+
+    const detectionBox = preferredDetectionBox(detection);
+    if (!sourceImageUrl || !detectionBox) {
+      return null;
+    }
+
+    const sourceFile = await fetchImageFileFromUrl(sourceImageUrl, `${suggestedName}-source.png`);
+    return cropDetectionImageFile(sourceFile, detectionBox, `${suggestedName}-detected.png`);
+  }
+
+  async function createDetectionEditorCleanImage(detection: OutfitDetection, file: File) {
+    return createCleanPreviewFile(file, {
+      metadata: getDetectionDraft(detection),
+    });
+  }
+
+  async function createManualItem(cleaningStrategy: "current" | "attach-when-ready" = "current") {
+    if (!userId) {
+      setErrorMessage("A user is required before you can create an item.");
+      return;
+    }
+
+    const valuesSnapshot = { ...formValues };
+    const cleaningPromise = pendingManualCleanPromiseRef.current;
+    if (cleaningPromise) {
+      pendingManualCleanModeRef.current =
+        cleaningStrategy === "attach-when-ready" ? "attach" : "ignore";
+    }
+
+    setIsCreating(true);
+    setErrorMessage("");
+
+    try {
+      const photoOptions = photoState.selectedFile
+        ? selectedImageKind === "base"
+          ? { photo: photoState.selectedFile }
+          : { cleanedPhoto: photoState.selectedFile }
+        : {};
+      const createdItem = await createClothingItem(userId, valuesSnapshot, {
+        ...photoOptions,
+      });
+
+      if (cleaningStrategy === "attach-when-ready" && cleaningPromise) {
+        void autoAttachCleanedPhotoToCreatedItem({
+          cleanedFilePromise: cleaningPromise,
+          createdItem,
+          values: valuesSnapshot,
+        });
+      }
+
+      onItemsCreated([createdItem]);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to create this clothing item.");
+      setIsCreating(false);
+      pendingManualCleanModeRef.current = "preview";
+    }
+  }
+
+  function applyDetectionImageEdits(
+    detection: OutfitDetection,
+    file: File,
+    context: ExpandedImageEditorApplyContext,
+  ) {
+    setEditedDetectionPhotos((current) => ({
+      ...current,
+      [detection.id]: {
+        file,
+        imageKind: context.imageKind,
+      },
+    }));
+    setDetectionCleanErrors((current) => {
+      const next = { ...current };
+      delete next[detection.id];
+      return next;
     });
   }
 
@@ -411,43 +678,6 @@ export function CreateItemPage({
     }
   }
 
-  async function handleCleanDetectionImage(detection: OutfitDetection) {
-    const detectionId = detection.id;
-    setCleaningDetectionIds((current) => [...current, detectionId]);
-    setDetectionCleanErrors((current) => {
-      const next = { ...current };
-      delete next[detectionId];
-      return next;
-    });
-
-    try {
-      const updatedDetection = await generateOutfitDetectionCleanImage(
-        detectionId,
-        getDetectionDraft(detection),
-      );
-      setOutfitUpload((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          detections: current.detections.map((detection) =>
-            detection.id === detectionId ? updatedDetection : detection,
-          ),
-        };
-      });
-    } catch (error) {
-      setDetectionCleanErrors((current) => ({
-        ...current,
-        [detectionId]:
-          error instanceof Error ? error.message : "Unable to create an AI-cleaned detection image.",
-      }));
-    } finally {
-      setCleaningDetectionIds((current) => current.filter((id) => id !== detectionId));
-    }
-  }
-
   function focusFirstInvalidField(errors: ClothingItemFormErrors) {
     const firstField = firstInvalidClothingItemField(errors);
     if (!firstField) {
@@ -473,24 +703,25 @@ export function CreateItemPage({
       return;
     }
 
-    setIsCreating(true);
-    setErrorMessage("");
-
-    try {
-      const photoOptions = photoState.selectedFile
-        ? selectedImageKind === "base"
-          ? { photo: photoState.selectedFile }
-          : { cleanedPhoto: photoState.selectedFile }
-        : {};
-      const createdItem = await createClothingItem(userId, formValues, {
-        ...photoOptions,
-      });
-      onItemsCreated([createdItem]);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to create this clothing item.");
-      setIsCreating(false);
+    if (isCleaningUploadedPhoto && pendingManualCleanPromiseRef.current) {
+      setIsManualCreateWhileCleaningDialogOpen(true);
+      return;
     }
+
+    await createManualItem();
   }
+
+  const manualUndoDisabled = isImageMode || isCreating || isCleaningUploadedPhoto || isAutofillingMetadata;
+  const canManualUndo = manualUndoHistory.length > 0;
+  const canManualRedo = manualRedoHistory.length > 0;
+
+  useUndoRedoShortcuts({
+    canRedo: canManualRedo,
+    canUndo: canManualUndo,
+    disabled: manualUndoDisabled,
+    onRedo: handleManualRedo,
+    onUndo: handleManualUndo,
+  });
 
   async function handleSaveSelectedItems() {
     if (!userId) {
@@ -522,7 +753,10 @@ export function CreateItemPage({
       const createdItems: ClothingItem[] = [];
 
       for (const detection of selectedDetections) {
+        const editedPhoto = editedDetectionPhotos[detection.id] ?? null;
         const createdItem = await createClothingItem(userId, getDetectionDraft(detection), {
+          photo: editedPhoto?.imageKind === "base" ? editedPhoto.file : undefined,
+          cleanedPhoto: editedPhoto && editedPhoto.imageKind !== "base" ? editedPhoto.file : undefined,
           sourceOutfitDetectionId: detection.id,
         });
         createdItems.push(createdItem);
@@ -581,6 +815,8 @@ export function CreateItemPage({
         <CreateItemImageMode
           autofillingDetectionId={autofillingDetectionId}
           brandSuggestions={closetSuggestions.brandSuggestions}
+          canRedoDetectionDraft={(detectionId) => (detectionRedoHistory[detectionId]?.length ?? 0) > 0}
+          canUndoDetectionDraft={(detectionId) => (detectionUndoHistory[detectionId]?.length ?? 0) > 0}
           cleaningDetectionIds={cleaningDetectionIds}
           detectionCleanErrors={detectionCleanErrors}
           detections={detections}
@@ -593,9 +829,14 @@ export function CreateItemPage({
           isDetecting={isDetecting}
           onBack={onBack}
           onClearImageSelection={clearImageSelection}
-          onCleanDetectionImage={(detection) => void handleCleanDetectionImage(detection)}
           onDetectItems={() => photoState.selectedFile && void detectItems(photoState.selectedFile)}
           onDraftChange={updateDetectionDraft}
+          getDetectionEditedImageFile={(detection) => editedDetectionPhotos[detection.id]?.file ?? null}
+          getDetectionEditedImageKind={(detection) => editedDetectionPhotos[detection.id]?.imageKind ?? null}
+          onApplyDetectionImageEdits={applyDetectionImageEdits}
+          onCleanDetectionEditorImage={(detection, file) => createDetectionEditorCleanImage(detection, file)}
+          onGetDetectionImageEditorFile={getDetectionEditorFile}
+          onRedoDetectionDraft={handleDetectionRedo}
           onApplySourceImageEdits={(file, context) => {
             applyImageFileSelection(file, context.imageKind);
           }}
@@ -604,6 +845,7 @@ export function CreateItemPage({
           onFileChange={handleImageFileChange}
           onSaveSelectedItems={() => void handleSaveSelectedItems()}
           onToggleSelection={toggleDetectionSelection}
+          onUndoDetectionDraft={handleDetectionUndo}
           outfitUpload={outfitUpload}
           selectedCount={selectedCount}
           selectedDetectionIds={selectedDetectionIds}
@@ -627,12 +869,38 @@ export function CreateItemPage({
   }
 
   const previewName = formValues.name.trim() || "Untitled Item";
-  const previewMetadata = buildItemPreviewMetadata(formValues.size, parseTagInput(formValues.tags));
+  const previewMetadata = buildItemPreviewMetadata(parseTagInput(formValues.tags));
 
   return (
     <ItemEditorWorkspace
       backLabel="Back"
       formLabel="Add Item"
+      formTopAction={
+        <div className="flex items-center gap-2">
+          <PrimitiveButton
+            type="button"
+            onClick={handleManualUndo}
+            disabled={!canManualUndo || manualUndoDisabled}
+            variant="outline"
+            size="sm"
+            aria-label="Undo last unsaved change"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Undo
+          </PrimitiveButton>
+          <PrimitiveButton
+            type="button"
+            onClick={handleManualRedo}
+            disabled={!canManualRedo || manualUndoDisabled}
+            variant="outline"
+            size="sm"
+            aria-label="Redo last unsaved change"
+          >
+            <RotateCw className="w-4 h-4" />
+            Redo
+          </PrimitiveButton>
+        </div>
+      }
       imageUrl={photoState.imageUrl}
       onBack={onBack}
       onPreviewClick={() => photoState.inputRef.current?.click()}
@@ -716,6 +984,7 @@ export function CreateItemPage({
             errors={fieldErrors}
             isAutofilling={isAutofillingMetadata}
             onChange={(nextValues) => {
+              pushManualUndoSnapshot();
               setFormValues(nextValues);
               if (Object.keys(fieldErrors).length > 0) {
                 setFieldErrors(validateClothingItemForm(nextValues));
@@ -727,6 +996,116 @@ export function CreateItemPage({
           />
         </div>
       </ItemMetadataPanel>
+      <AlertDialog
+        open={isManualCreateWhileCleaningDialogOpen}
+        onOpenChange={setIsManualCreateWhileCleaningDialogOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Your image is still being cleaned</AlertDialogTitle>
+            <AlertDialogDescription>
+              The AI-cleaned version is still processing. You can create the item now with the
+              current image, or create it now and let the cleaned version auto-save onto the item
+              once it is ready.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="sm:justify-between">
+            <AlertDialogCancel disabled={isCreating}>Cancel</AlertDialogCancel>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <AlertDialogAction
+                disabled={isCreating}
+                className="border border-border bg-background text-foreground hover:bg-accent"
+                onClick={(event) => {
+                  event.preventDefault();
+                  setIsManualCreateWhileCleaningDialogOpen(false);
+                  void createManualItem("current");
+                }}
+              >
+                Create with current image
+              </AlertDialogAction>
+              <AlertDialogAction
+                disabled={isCreating}
+                onClick={(event) => {
+                  event.preventDefault();
+                  setIsManualCreateWhileCleaningDialogOpen(false);
+                  void createManualItem("attach-when-ready");
+                }}
+              >
+                Auto-save cleaned image
+              </AlertDialogAction>
+            </div>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </ItemEditorWorkspace>
   );
+}
+
+async function cropDetectionImageFile(
+  sourceFile: File,
+  cropBox: { x: number; y: number; width: number; height: number },
+  filename: string,
+) {
+  const image = await loadImageFromFile(sourceFile);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.floor(cropBox.width * image.naturalWidth));
+  canvas.height = Math.max(1, Math.floor(cropBox.height * image.naturalHeight));
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Unable to prepare this detected item for editing.");
+  }
+
+  context.drawImage(
+    image,
+    cropBox.x * image.naturalWidth,
+    cropBox.y * image.naturalHeight,
+    cropBox.width * image.naturalWidth,
+    cropBox.height * image.naturalHeight,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  );
+
+  return canvasToPngFile(canvas, filename);
+}
+
+async function loadImageFromFile(file: File) {
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    return await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Unable to load this detected item for editing."));
+      image.src = objectUrl;
+    });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function canvasToPngFile(canvas: HTMLCanvasElement, filename: string) {
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((nextBlob) => {
+      if (!nextBlob) {
+        reject(new Error("Unable to prepare the edited detected item."));
+        return;
+      }
+
+      resolve(nextBlob);
+    }, "image/png");
+  });
+
+  return new File([blob], sanitizeImageFilename(filename), { type: blob.type || "image/png" });
+}
+
+function sanitizeImageFilename(filename: string) {
+  const normalized = filename
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9.-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized || "detected-item.png";
 }

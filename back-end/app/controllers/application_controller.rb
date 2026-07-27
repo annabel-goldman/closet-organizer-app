@@ -92,6 +92,7 @@ class ApplicationController < ActionController::API
       brand: values["brand"] || values[:brand],
       size: values["size"] || values[:size],
       date: values["date"] || values[:date],
+      style_notes: values["style_notes"] || values[:style_notes],
       tags: tags
     }.compact_blank
   end
@@ -103,6 +104,7 @@ class ApplicationController < ActionController::API
       brand: clothing_item.brand,
       size: clothing_item.size,
       date: clothing_item.date&.to_date&.iso8601,
+      style_notes: clothing_item.style_notes,
       tags: TagListNormalizer.call(clothing_item.tags)
     }.compact_blank
   end

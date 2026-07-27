@@ -1,5 +1,6 @@
-import { requestJson, requestJsonOrNull, requestVoid } from "./api";
-import { OutfitCollageLayout } from "./outfitCollage";
+import { requestJson, requestJsonOrNull, requestVoid } from "./api.ts";
+import type { OutfitCollageLayout } from "./outfitCollage.ts";
+import { normalizeCategory } from "./wardrobeTaxonomy.ts";
 
 const LOCAL_BACKEND_BASE_URL = "http://127.0.0.1:3000";
 
@@ -25,8 +26,12 @@ function defaultBackendBaseUrl() {
     : window.location.origin;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? defaultApiBaseUrl();
-const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL ?? defaultBackendBaseUrl();
+const importMetaEnv = (import.meta as ImportMeta & {
+  env?: Record<string, string | undefined>;
+}).env ?? {};
+
+const API_BASE_URL = importMetaEnv.VITE_API_BASE_URL ?? defaultApiBaseUrl();
+const BACKEND_BASE_URL = importMetaEnv.VITE_BACKEND_BASE_URL ?? defaultBackendBaseUrl();
 
 export interface UserSummary {
   id: number;
@@ -40,6 +45,7 @@ export interface ClothingItem {
   name: string;
   category?: string | null;
   brand?: string | null;
+  style_notes?: string | null;
   size: string;
   date: string | null;
   user_id: number;
@@ -139,6 +145,9 @@ export interface Outfit {
   notes?: string | null;
   item_ids: number[];
   items: ClothingItem[];
+  generation_id?: number | null;
+  generated_by_ai?: boolean;
+  generated_item_ids?: number[];
   created_at?: string;
   updated_at?: string;
 }
@@ -162,10 +171,7 @@ function normalizeAttachmentUrl(rawUrl: unknown) {
     const normalizedBackendOrigin = new URL(BACKEND_BASE_URL, window.location.origin).origin;
     const parsed = new URL(trimmed, normalizedBackendOrigin);
 
-    if (
-      parsed.origin === normalizedBackendOrigin
-      && parsed.pathname.startsWith("/rails/active_storage/")
-    ) {
+    if (isLocalBackendActiveStorageUrl(parsed, normalizedBackendOrigin)) {
       return `${parsed.pathname}${parsed.search}`;
     }
   } catch {
@@ -175,12 +181,53 @@ function normalizeAttachmentUrl(rawUrl: unknown) {
   return trimmed;
 }
 
+function isLocalBackendActiveStorageUrl(parsed: URL, normalizedBackendOrigin: string) {
+  if (!parsed.pathname.startsWith("/rails/active_storage/")) {
+    return false;
+  }
+
+  if (parsed.origin === normalizedBackendOrigin) {
+    return true;
+  }
+
+  const backendUrl = new URL(normalizedBackendOrigin);
+  return (
+    isLocalDevelopmentHost(parsed.hostname)
+    && isLocalDevelopmentHost(backendUrl.hostname)
+    && parsed.port === backendUrl.port
+  );
+}
+
+export function resolveEditableImageFetchUrl(imageUrl: string) {
+  const normalizedUrl = normalizeAttachmentUrl(imageUrl) ?? imageUrl;
+
+  try {
+    const parsed = new URL(normalizedUrl, typeof window === "undefined" ? LOCAL_BACKEND_BASE_URL : window.location.origin);
+    if (!parsed.pathname.startsWith("/rails/active_storage/")) {
+      return normalizedUrl;
+    }
+
+    const proxiedPathname = parsed.pathname
+      .replace("/rails/active_storage/blobs/redirect/", "/rails/active_storage/blobs/proxy/")
+      .replace("/rails/active_storage/representations/redirect/", "/rails/active_storage/representations/proxy/");
+
+    if (proxiedPathname === parsed.pathname) {
+      return normalizedUrl;
+    }
+
+    return `${proxiedPathname}${parsed.search}`;
+  } catch {
+    return normalizedUrl;
+  }
+}
+
 export type CreateItemMode = "manual" | "image";
 
 export interface ClothingItemFormValues {
   category: string;
   name: string;
   brand: string;
+  visualDescription: string;
   size: string;
   date: string;
   tags: string;
@@ -209,6 +256,7 @@ export interface ClothingItemMetadataSuggestion {
   category: string;
   name: string;
   brand: string;
+  style_notes?: string | null;
   tags: string[];
   provider?: string | null;
   vision_model?: string | null;
@@ -313,6 +361,7 @@ export function emptyClothingItemFormValues(): ClothingItemFormValues {
     category: "",
     name: "",
     brand: "",
+    visualDescription: "",
     size: "na",
     date: "",
     tags: "",
@@ -358,23 +407,9 @@ export function formatTagLabel(tag: string) {
   return titleize(tag);
 }
 
-export function formatDisplaySize(size: string) {
-  const normalized = size.trim().toLowerCase();
-
-  if (normalized === "na") {
-    return "N/A";
-  }
-
-  if (normalized === "xl" || normalized === "xs") {
-    return normalized.toUpperCase();
-  }
-
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-}
-
-export function buildItemPreviewMetadata(size: string, tags: string[]) {
+export function buildItemPreviewMetadata(tags: string[]) {
   const visibleTags = tags.slice(0, 3);
-  return [formatDisplaySize(size), ...visibleTags.slice(1).map(formatTagLabel)]
+  return visibleTags.map(formatTagLabel)
     .filter(Boolean)
     .join(" · ");
 }
@@ -388,6 +423,7 @@ export function mergeMetadataSuggestion(
     category: normalizeCategoryValue(suggestion.category) || values.category,
     name: suggestion.name.trim() || values.name,
     brand: suggestion.brand.trim() || values.brand,
+    visualDescription: suggestion.style_notes?.trim() || values.visualDescription,
     tags: suggestion.tags.length > 0 ? formatTagInput(suggestion.tags) : values.tags,
   };
 }
@@ -409,6 +445,7 @@ export function toClothingItemFormValues(item: ClothingItem): ClothingItemFormVa
     category: normalizeCategoryValue(item.category) || "",
     name: item.name,
     brand: item.brand?.trim() ?? "",
+    visualDescription: item.style_notes?.trim() ?? "",
     size: item.size,
     date: toDateInputValue(item.date),
     tags: formatTagInput(item.tags),
@@ -422,6 +459,7 @@ export function toClothingItemFormValuesFromDetection(
     category: normalizeCategoryValue(detection.category) || "",
     name: detection.suggested_name?.trim() || titleize(detection.category),
     brand: "",
+    visualDescription: detection.details.notes?.trim() || detection.details.appearance_summary?.trim() || "",
     size: "na",
     date: "",
     tags: formatTagInput([
@@ -605,6 +643,38 @@ export async function destroyOutfit(id: number) {
   });
 }
 
+interface GenerateOutfitInput {
+  occasion?: string;
+  referencePhoto?: File | null;
+}
+
+export async function generateOutfit(input: string | GenerateOutfitInput = {}) {
+  const occasion = typeof input === "string" ? input : input.occasion;
+  const referencePhoto = typeof input === "string" ? null : input.referencePhoto;
+
+  if (referencePhoto) {
+    const formData = new FormData();
+    const trimmedOccasion = occasion?.trim();
+    if (trimmedOccasion) {
+      formData.append("occasion", trimmedOccasion);
+    }
+    formData.append("reference_photo", referencePhoto);
+
+    return normalizeOutfitPayload(await requestJson<Outfit>(`${API_BASE_URL}/outfits/generate`, {
+      method: "POST",
+      body: formData,
+    }));
+  }
+
+  return normalizeOutfitPayload(await requestJson<Outfit>(`${API_BASE_URL}/outfits/generate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ occasion: occasion?.trim() || undefined }),
+  }));
+}
+
 export async function destroyClothingItem(id: number) {
   await requestVoid(`${API_BASE_URL}/clothing_items/${id}`, {
     method: "DELETE",
@@ -709,7 +779,8 @@ export async function createCleanPreviewFile(photo: File, options: AiImageOption
 }
 
 export async function fetchImageFileFromUrl(imageUrl: string, filename?: string) {
-  const response = await fetch(imageUrl, {
+  const fetchUrl = resolveEditableImageFetchUrl(imageUrl);
+  const response = await fetch(fetchUrl, {
     credentials: "include",
   });
   if (!response.ok) {
@@ -755,7 +826,7 @@ function normalizeTagList(rawTags: unknown): string[] {
 }
 
 function normalizeCategoryValue(rawCategory: unknown) {
-  return typeof rawCategory === "string" ? rawCategory.trim().toLowerCase() : "";
+  return normalizeCategory(rawCategory);
 }
 
 function normalizeClothingItemPayload(item: ClothingItem): ClothingItem {
@@ -785,6 +856,7 @@ function normalizeClothingItemPayload(item: ClothingItem): ClothingItem {
     ...item,
     category: normalizeCategoryValue(item.category) || null,
     brand: item.brand?.trim() ? item.brand.trim() : null,
+    style_notes: item.style_notes?.trim() ? item.style_notes.trim() : null,
     cleaned_image_url: normalizeAttachmentUrl(item.cleaned_image_url),
     image_url: normalizeAttachmentUrl(item.image_url),
     original_image_url: normalizeAttachmentUrl(item.original_image_url),
@@ -811,6 +883,8 @@ function normalizeOutfitUploadPayload(upload: OutfitUpload): OutfitUpload {
 function normalizeOutfitPayload(outfit: Outfit): Outfit {
   return {
     ...outfit,
+    generated_by_ai: Boolean(outfit.generated_by_ai),
+    generated_item_ids: Array.isArray(outfit.generated_item_ids) ? outfit.generated_item_ids : [],
     items: (outfit.items ?? []).map(normalizeClothingItemPayload),
   };
 }
@@ -823,6 +897,7 @@ function normalizeMetadataSuggestionPayload(
     category: normalizeCategoryValue(suggestion.category),
     name: suggestion.name?.trim?.() || "",
     brand: suggestion.brand?.trim?.() || "",
+    style_notes: suggestion.style_notes?.trim?.() || "",
     tags: normalizeTagList((suggestion as ClothingItemMetadataSuggestion & { tags?: unknown }).tags),
   };
 }
@@ -858,6 +933,7 @@ function appendAiContextFormData(formData: FormData, metadata?: ClothingItemForm
   formData.append("ai_context[brand]", metadata.brand.trim());
   formData.append("ai_context[size]", metadata.size);
   formData.append("ai_context[date]", metadata.date);
+  formData.append("ai_context[style_notes]", metadata.visualDescription.trim());
 
   parseTagInput(metadata.tags).forEach((tag) => {
     formData.append("ai_context[tags][]", tag);
@@ -879,6 +955,7 @@ function buildClothingItemFormData(
   formData.append("clothing_item[size]", values.size);
   formData.append("clothing_item[date]", values.date);
   formData.append("clothing_item[brand]", values.brand.trim());
+  formData.append("clothing_item[style_notes]", values.visualDescription.trim());
   parseTagInput(values.tags).forEach((tag) => {
     formData.append("clothing_item[tags][]", tag);
   });

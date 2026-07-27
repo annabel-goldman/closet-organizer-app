@@ -142,7 +142,7 @@ export function OutfitCartSheet({
           ) : (
             <div className="space-y-2.5">
               {items.map((item) => {
-                const metadata = buildItemPreviewMetadata(item.size, item.tags);
+                const metadata = buildItemPreviewMetadata(item.tags);
 
                 return (
                   <div

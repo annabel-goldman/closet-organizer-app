@@ -1,6 +1,6 @@
 import { motion } from "motion/react";
-import { Check, Plus, X } from "lucide-react";
-import { useState } from "react";
+import { Check, LoaderCircle, Plus, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import {
@@ -11,10 +11,8 @@ import {
 interface ClothingCardProps {
   id: number;
   name: string;
-  size: string;
   tags: string[];
   image_url?: string | null;
-  index: number;
   isInOutfit?: boolean;
   onSelect?: (id: number) => void;
   onAddToOutfit?: (id: number) => void;
@@ -24,24 +22,24 @@ interface ClothingCardProps {
 export function ClothingCard({
   id,
   name,
-  size,
   tags,
   image_url,
-  index,
   isInOutfit,
   onSelect,
   onAddToOutfit,
   onRemoveFromOutfit,
 }: ClothingCardProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const itemMetadata = buildItemPreviewMetadata(size, tags);
+  const [isImageLoading, setIsImageLoading] = useState(Boolean(image_url));
+  const itemMetadata = buildItemPreviewMetadata(tags.slice(1));
   const handleSelect = () => onSelect?.(id);
 
+  useEffect(() => {
+    setIsImageLoading(Boolean(image_url));
+  }, [image_url]);
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, delay: index * 0.08 }}
+    <div
       className="group relative cursor-pointer"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -57,19 +55,33 @@ export function ClothingCard({
     >
       <div className="relative overflow-hidden bg-muted aspect-[5/6] sm:aspect-[3/4]">
         {isInOutfit ? (
-          <div className="absolute top-3 right-3 z-10 rounded-full bg-foreground p-1 text-background">
+          <div className="absolute top-3 right-3 z-30 rounded-full bg-foreground p-1 text-background">
             <Check className="w-3 h-3" />
           </div>
         ) : null}
         {image_url ? (
-          <img
-            src={image_url}
-            alt={name}
-            className="w-full h-full object-cover transition-transform duration-700 ease-out"
-            style={{
-              transform: isHovered ? "scale(1.08)" : "scale(1)",
-            }}
-          />
+          <>
+            {isImageLoading ? (
+              <div
+                className="absolute inset-0 animate-pulse bg-gradient-to-br from-stone-300 via-neutral-200 to-stone-300"
+                aria-hidden="true"
+              />
+            ) : null}
+            <img
+              src={image_url}
+              alt={name}
+              loading="lazy"
+              decoding="async"
+              onLoad={() => setIsImageLoading(false)}
+              onError={() => setIsImageLoading(false)}
+              className={`w-full h-full object-cover transition-[opacity,transform] duration-700 ease-out ${
+                isImageLoading ? "opacity-0" : "opacity-100"
+              }`}
+              style={{
+                transform: isHovered ? "scale(1.08)" : "scale(1)",
+              }}
+            />
+          </>
         ) : (
           <div
             className="h-full w-full p-6 flex flex-col justify-end bg-gradient-to-br from-stone-100 via-neutral-50 to-stone-200 text-stone-700 transition-transform duration-700 ease-out"
@@ -98,7 +110,18 @@ export function ClothingCard({
           className="absolute inset-0 bg-gradient-to-t from-neutral-950/88 via-neutral-900/46 to-neutral-900/10"
         />
 
-        <div className="absolute inset-x-0 top-0 p-5 pt-8">
+        {image_url && isImageLoading ? (
+          <div
+            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
+            aria-hidden="true"
+          >
+            <div className="flex h-14 w-14 items-center justify-center">
+              <LoaderCircle className="h-7 w-7 animate-spin text-white drop-shadow-sm" />
+            </div>
+          </div>
+        ) : null}
+
+        <div className="absolute inset-x-0 top-0 z-20 p-5 pt-8">
           <PrimitiveText
             as="h3"
             variant="display"
@@ -117,7 +140,7 @@ export function ClothingCard({
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: isHovered ? 1 : 0, y: isHovered ? 0 : 20 }}
-          className="absolute bottom-4 left-4 right-4"
+          className="absolute bottom-4 left-4 right-4 z-20"
         >
           <PrimitiveButton
             onClick={(event) => {
@@ -137,6 +160,6 @@ export function ClothingCard({
           </PrimitiveButton>
         </motion.div>
       </div>
-    </motion.div>
+    </div>
   );
 }

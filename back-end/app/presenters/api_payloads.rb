@@ -27,6 +27,7 @@ class ApiPayloads
         category
         brand
         date
+        style_notes
         user_id
         created_at
         updated_at
@@ -110,8 +111,12 @@ class ApiPayloads
     )
 
     ordered_outfit_items = outfit.outfit_items.sort_by { |outfit_item| [ outfit_item.layer_order, outfit_item.id ] }
+    generation_run = outfit.outfit_generation_run
 
     payload["item_ids"] = ordered_outfit_items.map(&:clothing_item_id)
+    payload["generation_id"] = generation_run&.id
+    payload["generated_by_ai"] = generation_run.present?
+    payload["generated_item_ids"] = generation_run&.generated_item_ids || []
     payload["items"] = ordered_outfit_items.map do |outfit_item|
       clothing_item(outfit_item.clothing_item, include_user: false).merge(
         "outfit_item_id" => outfit_item.id,

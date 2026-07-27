@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
+export interface ItemPhotoStateSnapshot {
+  removeExisting: boolean;
+  selectedFile: File | null;
+}
+
 export function useItemPhotoState(existingImageUrl?: string | null) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -61,6 +66,19 @@ export function useItemPhotoState(existingImageUrl?: string | null) {
     clearInput();
   }
 
+  function getSnapshot(): ItemPhotoStateSnapshot {
+    return {
+      removeExisting,
+      selectedFile,
+    };
+  }
+
+  function restoreSnapshot(snapshot: ItemPhotoStateSnapshot) {
+    updateSelectedFile(snapshot.selectedFile);
+    setRemoveExisting(snapshot.removeExisting);
+    clearInput();
+  }
+
   return {
     inputRef,
     imageUrl,
@@ -70,6 +88,8 @@ export function useItemPhotoState(existingImageUrl?: string | null) {
     keepExistingPhoto,
     markExistingForRemoval,
     reset,
+    getSnapshot,
+    restoreSnapshot,
     updateSelectedFile,
   };
 }

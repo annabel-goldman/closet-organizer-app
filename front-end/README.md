@@ -2,7 +2,7 @@
 
 React + Vite client for Curated Closet.
 
-The current frontend supports authenticated closet management, item creation and editing, AI-assisted metadata and image cleanup flows, saved outfits, admin-only user pages, and outfit-photo import that can be reviewed and converted into closet items.
+The current frontend supports authenticated closet management, item creation and editing, item visual descriptions, AI-assisted metadata, image cleanup, outfit generation flows, saved outfits, admin-only user pages, and outfit-photo import that can be reviewed and converted into closet items.
 
 Original design source:
 [Closet Organizer Mockup](https://www.figma.com/design/uZi7nkn4N3N3KNIANPF5yR/Closet-Organizer-Mockup)
@@ -75,14 +75,19 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
 - The app loads the signed-in user through `GET /me`.
 - Non-admin users are blocked from `/users` and `/users/:id` in both backend authorization and frontend navigation.
 - The admin users directory at `/users` is paginated (24 per page) and uses a `clothing_items_count` field per user instead of shipping each user's full items array.
-- The closet page now treats outfit selection like a cart: `Add to Outfit` updates a cart button in the closet action row beside `Add Item`, the selected pieces can be reviewed in a right-side tray, and the tray can capture outfit name, tags, and notes before creating the outfit. The `/outfits` page now focuses on browsing, editing, and deleting saved outfits, and editing opens a modal with the outfit preview on the left, direct collage editing controls (move, resize, rotate, and layer reordering), and editable metadata on the right.
+- The closet page now treats outfit selection like a cart: `Add to Outfit` updates a cart button in the closet action row beside `Add Item`, the selected pieces can be reviewed in a right-side tray, and the tray can capture outfit name, tags, and notes before creating the outfit. The `/outfits` page now focuses on browsing, editing, and deleting saved outfits, and editing opens a modal with the outfit preview on the left, direct collage editing controls (move, resize, rotate, layer reordering, and searchable add-item thumbnails), and editable metadata on the right.
+- The saved outfits collection is cached in `App.tsx` after the first `/outfits` load. Navigating away and back reuses that cache, while outfit creation, edits, deletes, AI generation, and clothing-item edits patch the cached records directly.
 - The saved-outfit collage editor is library-backed: `react-moveable` owns the move/resize/rotate controls, while `OutfitCollageCanvas` keeps the rendered image viewport and persisted collage layout data in sync.
-- The saved card and edit modal intentionally share the same collage-layout math: the editor seeds its layouts from the saved API payload, and both views normalize those layouts through the same render-math helpers so the saved preview matches what the editor shows after save.
+- The saved card and edit modal intentionally share the same collage-layout math: the editor seeds its layouts from the saved API payload, supports adding/removing closet pieces while editing, and both views normalize those layouts through the same render-math helpers so the saved preview matches what the editor shows after save.
 - Item and outfit text inputs are length-capped through `src/app/lib/inputLengthPolicy.ts`, which mirrors the backend `InputLengthPolicy` constants and applies them as `maxLength` on the relevant `<input>` and `<textarea>` controls.
 - Closet filtering, fuzzy search, and sorting are handled through focused helpers in `src/app/lib/closetFilters.ts`. The closet search field shows filter-aware item suggestions while typing (click fills the query, Enter opens the highlighted item).
 - Item create and edit flows send multipart form data so photos can be uploaded, cropped, removed, or sourced from detected outfit-photo regions.
-- The item editor can request AI metadata suggestions for type, name, brand, and tags, and can request cleaned item imagery for catalog-style presentation; the backend now strips the generated white studio background before returning the final cleaned PNG.
-- Image-based item creation submits an outfit photo to `POST /outfit_uploads`, renders detections, and supports promoting a reviewed detection into a closet item.
+- Item create and edit flows use the shared wardrobe taxonomy from `src/app/lib/wardrobeTaxonomy.ts`, so AI suggestions and legacy category aliases are normalized into the canonical type picker before validation.
+- Item edit flows include freeform visual descriptions that are saved with the clothing item and reused by AI outfit generation.
+- The item editor can request AI metadata suggestions for type, name, brand, and tags, and can request cleaned item imagery for catalog-style presentation; the backend now strips the generated white studio background before returning the final cleaned PNG. Manual creation warns before saving while a clean-image request is still pending so the newly created item is not accidentally paired with stale imagery.
+- The `/outfits` page can request an AI-generated saved outfit with an optional uploaded flatlay reference; the backend analyzes the reference into structured target slots, shortlists candidates from closet metadata and visual descriptions while preserving strong matches for required slots and cross-slot visual anchors like sequins, satin, burgundy leather, patent shine, or glam styling, enforces core complete-look rules like available footwear for dress looks, repairs missing required slot matches when possible, refines the final look with all candidate metadata and a capped set of candidate photos, then the frontend opens the generated look in the existing edit modal for review. Generated outfits show a subtle `AI generated` label, and later saves/deletes feed passive backend preference learning so future generations can account for user swaps without adding a separate training UI. If generation fails, the backend returns stage-specific AI error details that the page surfaces through its existing flash message.
+- Image-based item creation submits an outfit photo to `POST /outfit_uploads`, renders detections, supports editing detected-item previews in the expanded image editor, lets each detected item's metadata draft be undone/redone before save, and promotes reviewed detections into closet items.
+- Manual item creation and existing item detail editing expose undo/redo controls outside the expanded image editor, with saved item-detail undo/redo persisting the restored metadata and image attachments back through the API.
 - Outfit drafts are stored per user in local storage through `useOutfitDraftState`.
 
 ## Important Source Files
@@ -94,7 +99,7 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
 - `src/app/lib/api.ts`
   Shared fetch helpers and API error formatting
 - `src/app/lib/closet.ts`
-  Shared types plus frontend-facing API helpers for clothing items, outfits, uploads, clean-image flows, and metadata suggestions
+  Shared types plus frontend-facing API helpers for clothing items, outfits, AI outfit generation, uploads, clean-image flows, and metadata suggestions
 - `src/app/lib/outfitCollage.ts`
   Shared default-layout, layer-order, and layout-normalization helpers for saved outfit collages
 - `src/app/lib/outfitCollageRenderMath.ts`
@@ -105,6 +110,10 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
   Node-based frontend contract tests covering saved-view/editor layout parity and the resize-aspect fallback that prevents reselection drift
 - `src/app/lib/closetFilters.ts`
   Closet search, fuzzy matching, filter-aware suggestion helpers, and sort helpers
+- `src/app/lib/wardrobeTaxonomy.ts`
+  Canonical clothing type options plus category alias normalization for item forms and AI metadata suggestions
+- `src/app/lib/useUndoRedoShortcuts.ts`
+  Shared keyboard shortcut wiring for undo/redo controls outside the image editor
 - `src/app/components/ClosetSearchField.tsx`
   Closet page search input with filter-aware item suggestions (click to fill, Enter to open item)
 - `tests/closetFilters.test.ts`
@@ -128,7 +137,7 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
 - `src/app/components/OutfitCollageLayersPanel.tsx`
   Focused layers sidebar for thumbnail selection plus pointer and keyboard-accessible layer reordering
 - `src/app/components/ItemMetadataFields.tsx`
-  Shared name, size, date, brand, tag, and AI autofill fields
+  Shared name, type, brand, visual descriptions, tag, and AI autofill fields
 - `src/app/components/AiMetadataAutofillButton.tsx`
   Shared AI metadata trigger control
 - `src/app/components/create-item/`

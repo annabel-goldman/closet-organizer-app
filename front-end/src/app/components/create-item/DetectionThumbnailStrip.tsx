@@ -11,6 +11,7 @@ const stripItemClass = "relative size-9 min-h-9 min-w-9 shrink-0 overflow-hidden
 interface DetectionThumbnailStripProps {
   detections: OutfitDetection[];
   focusedTarget: "source" | number;
+  getDetectionPreviewImageUrl?: (detection: OutfitDetection) => string | null;
   isDetecting: boolean;
   onSelectDetection: (detectionId: number) => void;
   onSelectSource: () => void;
@@ -21,6 +22,7 @@ interface DetectionThumbnailStripProps {
 export function DetectionThumbnailStrip({
   detections,
   focusedTarget,
+  getDetectionPreviewImageUrl,
   isDetecting,
   onSelectDetection,
   onSelectSource,
@@ -72,6 +74,9 @@ export function DetectionThumbnailStrip({
                 const label = detection.suggested_name?.trim() || titleize(detection.category);
                 const isSelected = selectedDetectionIds.includes(detection.id);
                 const hoverLabel = isSelected ? "Will add to closet" : label;
+                const previewImageUrl = getDetectionPreviewImageUrl?.(detection)
+                  ?? detection.cleaned_image_url
+                  ?? null;
 
                 return (
                   <button
@@ -84,7 +89,7 @@ export function DetectionThumbnailStrip({
                   >
                     <DetectionPreviewImage
                       alt={`${label} thumbnail`}
-                      cleanedImageUrl={detection.cleaned_image_url ?? null}
+                      cleanedImageUrl={previewImageUrl}
                       cropBox={previewBox}
                       sourceImageUrl={sourceImageUrl}
                       variant="thumbnail"

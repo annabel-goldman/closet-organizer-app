@@ -1,5 +1,5 @@
-import { Dispatch, SetStateAction, useDeferredValue, useEffect, useState } from "react";
-import { motion } from "motion/react";
+import { Dispatch, SetStateAction, useDeferredValue, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { ShoppingBag } from "lucide-react";
 import { AddItemMenu } from "./components/AddItemMenu";
 import { ClothingCard } from "./components/ClothingCard";
@@ -44,10 +44,12 @@ import { ClosetSearchField } from "./components/ClosetSearchField";
 import {
   ClothingItem,
   createOutfit,
+  fetchOutfits,
   fetchCurrentUser,
   formatPossessive,
   formatPreferredStyle,
   logoutSession,
+  Outfit,
   OutfitDraft,
   parseTagInput,
   titleize,
@@ -67,6 +69,7 @@ import {
   getRouteFromLocation,
   isClosetRoute,
   isOutfitRoute,
+  isPublicInfoRoute,
   isProtectedRoute,
   isUsersRoute,
   navigateTo,
@@ -184,6 +187,7 @@ function ClosetFilterMenu({
 export default function App() {
   const [route, setRoute] = useState<AppRoute>(() => getRouteFromLocation());
   const [user, setUser] = useState<User | null>(null);
+  const [hasLoadedSession, setHasLoadedSession] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [homeMessage, setHomeMessage] = useState<HomeMessageState | null>(null);
@@ -195,9 +199,15 @@ export default function App() {
   const [isOutfitCartOpen, setIsOutfitCartOpen] = useState(false);
   const [isOutfitCreatedDialogOpen, setIsOutfitCreatedDialogOpen] = useState(false);
   const [isCreatingOutfitFromCart, setIsCreatingOutfitFromCart] = useState(false);
+  const [outfitsCache, setOutfitsCache] = useState<Outfit[]>([]);
+  const [hasLoadedOutfits, setHasLoadedOutfits] = useState(false);
+  const [isLoadingOutfits, setIsLoadingOutfits] = useState(false);
+  const [outfitsErrorMessage, setOutfitsErrorMessage] = useState("");
   const [outfitCartErrorMessage, setOutfitCartErrorMessage] = useState("");
   const [outfitCartName, setOutfitCartName] = useState("");
   const [outfitCartStatusMessage, setOutfitCartStatusMessage] = useState("");
+  const [isTopOutfitCartButtonVisible, setIsTopOutfitCartButtonVisible] = useState(true);
+  const topOutfitCartButtonRef = useRef<HTMLSpanElement | null>(null);
   const [outfitDraft, setOutfitDraft] = useOutfitDraftState(user);
 
   useEffect(() => {
@@ -223,14 +233,30 @@ export default function App() {
 
   useEffect(() => {
     const shouldLoadSession = route.kind === "home" || isProtectedRoute(route);
+    const unauthorizedMessage = "You do not have permission to view this page. Please log in.";
 
     if (!shouldLoadSession) {
       setIsLoading(false);
       return;
     }
 
+    if (user) {
+      setIsLoading(false);
+      setErrorMessage("");
+      return;
+    }
+
+    if (hasLoadedSession) {
+      setIsLoading(false);
+      setErrorMessage("");
+      if (isProtectedRoute(route)) {
+        setHomeMessage({ kind: "error", text: unauthorizedMessage });
+        navigateTo("/");
+      }
+      return;
+    }
+
     const controller = new AbortController();
-    const unauthorizedMessage = "You do not have permission to view this page. Please log in.";
 
     void (async () => {
       setIsLoading(true);
@@ -240,6 +266,7 @@ export default function App() {
         const nextUser = await fetchCurrentUser(controller.signal);
         if (!nextUser) {
           setUser(null);
+          setHasLoadedSession(true);
           if (isProtectedRoute(route)) {
             setHomeMessage({ kind: "error", text: unauthorizedMessage });
             navigateTo("/");
@@ -249,6 +276,7 @@ export default function App() {
 
         setHomeMessage((current) => (current?.kind === "error" ? null : current));
         setUser(nextUser);
+        setHasLoadedSession(true);
       } catch (error) {
         if (!controller.signal.aborted) {
           setErrorMessage(
@@ -264,7 +292,43 @@ export default function App() {
     })();
 
     return () => controller.abort();
-  }, [route.kind]);
+  }, [hasLoadedSession, route, user]);
+
+  useEffect(() => {
+    setOutfitsCache([]);
+    setHasLoadedOutfits(false);
+    setIsLoadingOutfits(false);
+    setOutfitsErrorMessage("");
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user || route.kind !== "outfits" || hasLoadedOutfits) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    void (async () => {
+      setIsLoadingOutfits(true);
+      setOutfitsErrorMessage("");
+
+      try {
+        const nextOutfits = await fetchOutfits(controller.signal);
+        setOutfitsCache(nextOutfits);
+        setHasLoadedOutfits(true);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setOutfitsErrorMessage(error instanceof Error ? error.message : "Unable to load outfits.");
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoadingOutfits(false);
+        }
+      }
+    })();
+
+    return () => controller.abort();
+  }, [hasLoadedOutfits, route.kind, user]);
 
   useEffect(() => {
     if (!outfitCartStatusMessage) {
@@ -277,6 +341,27 @@ export default function App() {
 
     return () => window.clearTimeout(timeout);
   }, [outfitCartStatusMessage]);
+
+  useEffect(() => {
+    if (!user || !isClosetRoute(route)) {
+      setIsTopOutfitCartButtonVisible(true);
+      return;
+    }
+
+    const node = topOutfitCartButtonRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      setIsTopOutfitCartButtonVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsTopOutfitCartButtonVisible(entry.isIntersecting),
+      { threshold: 0.1 },
+    );
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, [route, user]);
 
   useEffect(() => {
     if (route.kind === "home" && user) {
@@ -337,6 +422,12 @@ export default function App() {
     selectedOtherTags,
     sortOption,
   );
+  const showFloatingOutfitCartButton = Boolean(
+    user && isClosetRoute(route) && !isOutfitCartOpen && !isTopOutfitCartButtonVisible,
+  );
+  const outfitCartStatusMessageClassName = showFloatingOutfitCartButton
+    ? "fixed right-20 top-[calc(30%-1.5rem)] z-[70] max-w-[calc(100vw-7rem)] border border-foreground/15 bg-background/95 px-4 py-3 text-sm text-foreground shadow-lg backdrop-blur sm:max-w-sm"
+    : "fixed bottom-6 right-6 z-[70] max-w-sm border border-foreground/15 bg-background/95 px-4 py-3 text-sm text-foreground shadow-lg backdrop-blur";
 
   function toggleSelectedValue(
     value: string,
@@ -358,7 +449,7 @@ export default function App() {
       return;
     }
 
-    setOutfitCartStatusMessage("Added to outfit cart.");
+    setOutfitCartStatusMessage("Item added successfully.");
     setOutfitCartErrorMessage("");
     setOutfitDraft((current) => ({
       ...current,
@@ -367,11 +458,47 @@ export default function App() {
   }
 
   function removeItemFromOutfitDraft(itemId: number) {
-    setOutfitCartStatusMessage("Removed from outfit cart.");
+    setOutfitCartStatusMessage("Item removed from outfit.");
     setOutfitDraft((current) => ({
       ...current,
       itemIds: current.itemIds.filter((id) => id !== itemId),
     }));
+  }
+
+  function upsertCachedOutfit(nextOutfit: Outfit) {
+    setOutfitsCache((current) => [
+      nextOutfit,
+      ...current.filter((outfit) => outfit.id !== nextOutfit.id),
+    ]);
+  }
+
+  function replaceCachedOutfit(nextOutfit: Outfit) {
+    setOutfitsCache((current) =>
+      current.map((outfit) => (outfit.id === nextOutfit.id ? nextOutfit : outfit)),
+    );
+  }
+
+  function removeCachedOutfit(outfitId: number) {
+    setOutfitsCache((current) => current.filter((outfit) => outfit.id !== outfitId));
+  }
+
+  function syncCachedOutfitItem(nextItem: ClothingItem) {
+    setOutfitsCache((current) =>
+      current.map((outfit) => ({
+        ...outfit,
+        items: outfit.items.map((item) => (item.id === nextItem.id ? nextItem : item)),
+      })),
+    );
+  }
+
+  function removeCachedOutfitItem(itemId: number) {
+    setOutfitsCache((current) =>
+      current.map((outfit) => ({
+        ...outfit,
+        item_ids: outfit.item_ids.filter((id) => id !== itemId),
+        items: outfit.items.filter((item) => item.id !== itemId),
+      })),
+    );
   }
 
   async function handleCreateOutfitFromCart() {
@@ -385,13 +512,17 @@ export default function App() {
     try {
       const tags = parseTagInput(outfitDraft.tagInput);
 
-      await createOutfit({
+      const createdOutfit = await createOutfit({
         userId: user.id,
         name: outfitCartName.trim() || buildCartOutfitName(outfitDraft.itemIds.length),
         itemIds: outfitDraft.itemIds,
         notes: outfitDraft.notes.trim() || undefined,
         tags: tags.length > 0 ? tags : undefined,
       });
+
+      if (hasLoadedOutfits) {
+        upsertCachedOutfit(createdOutfit);
+      }
 
       setOutfitDraft((current) => ({
         ...current,
@@ -431,6 +562,7 @@ export default function App() {
     }
 
     setUser(null);
+    setHasLoadedSession(true);
     setHomeMessage({ kind: "success", text: "Signed out successfully." });
     navigateTo("/");
   }
@@ -524,9 +656,13 @@ export default function App() {
         initialItem={selectedItem}
         onBack={() => navigateTo("/closet")}
         tagSuggestions={closetSuggestions.tagSuggestions}
-        onItemSaved={(nextItem) => setUser((current) => updateUserItem(current, nextItem))}
+        onItemSaved={(nextItem) => {
+          setUser((current) => updateUserItem(current, nextItem));
+          syncCachedOutfitItem(nextItem);
+        }}
         onItemDeleted={(itemId) => {
           setUser((current) => removeUserItem(current, itemId));
+          removeCachedOutfitItem(itemId);
           setOutfitDraft((current: OutfitDraft) => ({
             ...current,
             itemIds: current.itemIds.filter((id) => id !== itemId),
@@ -538,6 +674,12 @@ export default function App() {
   } else if (route.kind === "outfits") {
     pageContent = user ? (
       <MyOutfitsPage
+        isLoading={isLoadingOutfits || (!hasLoadedOutfits && !outfitsErrorMessage)}
+        loadErrorMessage={outfitsErrorMessage}
+        onOutfitDeleted={removeCachedOutfit}
+        onOutfitGenerated={upsertCachedOutfit}
+        onOutfitUpdated={replaceCachedOutfit}
+        outfits={outfitsCache}
         user={user}
       />
     ) : null;
@@ -602,28 +744,30 @@ export default function App() {
                 navigateTo(`/items/new?userId=${user.id}&mode=manual`);
               }}
             />
-            <PrimitiveButton
-              type="button"
-              variant="outline"
-              onClick={() => setIsOutfitCartOpen(true)}
-              disabled={!user}
-              aria-label={`Open outfit cart with ${outfitDraftItems.length} ${
-                outfitDraftItems.length === 1 ? "item" : "items"
-              }`}
-              className="relative h-auto gap-3 px-5 py-3"
-            >
-              <span className="relative inline-flex">
-                <ShoppingBag className="h-4 w-4" />
-                {outfitDraftItems.length > 0 ? (
-                  <span className="absolute -right-2 -top-2 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-[9px] font-semibold leading-none text-background">
-                    {outfitCartBadgeLabel}
-                  </span>
-                ) : null}
-              </span>
-              <PrimitiveText as="span" variant="bodySm">
-                Outfit Cart
-              </PrimitiveText>
-            </PrimitiveButton>
+            <span ref={topOutfitCartButtonRef} className="inline-flex">
+              <PrimitiveButton
+                type="button"
+                variant="outline"
+                onClick={() => setIsOutfitCartOpen(true)}
+                disabled={!user}
+                aria-label={`Open outfit cart with ${outfitDraftItems.length} ${
+                  outfitDraftItems.length === 1 ? "item" : "items"
+                }`}
+                className="relative h-auto gap-3 px-5 py-3"
+              >
+                <span className="relative inline-flex">
+                  <ShoppingBag className="h-4 w-4" />
+                  {outfitDraftItems.length > 0 ? (
+                    <span className="absolute -right-2 -top-2 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-[9px] font-semibold leading-none text-background">
+                      {outfitCartBadgeLabel}
+                    </span>
+                  ) : null}
+                </span>
+                <PrimitiveText as="span" variant="bodySm">
+                  Outfit Cart
+                </PrimitiveText>
+              </PrimitiveButton>
+            </span>
           </motion.div>
         </div>
 
@@ -719,7 +863,6 @@ export default function App() {
                         <PrimitiveSelectItem value="name-asc">Name A-Z</PrimitiveSelectItem>
                         <PrimitiveSelectItem value="newest-added">Newest added</PrimitiveSelectItem>
                         <PrimitiveSelectItem value="oldest-added">Oldest added</PrimitiveSelectItem>
-                        <PrimitiveSelectItem value="recent-purchase">Most recent purchase</PrimitiveSelectItem>
                       </PrimitiveSelectContent>
                     </PrimitiveSelect>
                   </div>
@@ -751,11 +894,10 @@ export default function App() {
 
             {user && filteredClothingItems.length > 0 ? (
               <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-12 lg:grid-cols-4">
-                {filteredClothingItems.map((item, index) => (
+                {filteredClothingItems.map((item) => (
                   <ClothingCard
                     key={item.id}
                     {...item}
-                    index={index}
                     onSelect={(itemId) => navigateTo(`/items/${itemId}`)}
                     isInOutfit={outfitDraft.itemIds.includes(item.id)}
                     onAddToOutfit={addItemToOutfitDraft}
@@ -814,7 +956,10 @@ export default function App() {
 
       <SiteHeader route={route} user={user} onSignOut={() => void handleLogout()} />
 
-      <main id="main-content" className={`flex-1 ${route.kind === "home" ? "flex" : ""}`}>
+      <main
+        id="main-content"
+        className={`${isPublicInfoRoute(route) ? "" : "flex-1"} ${route.kind === "home" ? "flex" : ""}`}
+      >
         {pageContent}
       </main>
 
@@ -851,9 +996,55 @@ export default function App() {
         onOpenChange={setIsOutfitCreatedDialogOpen}
       />
 
+      <AnimatePresence>
+        {showFloatingOutfitCartButton ? (
+          <motion.div
+            initial={{ opacity: 0, x: -12, scale: 0.95 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: -12, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="fixed right-4 top-[calc(30%-1.5rem)] z-[60]"
+          >
+            <PrimitiveButton
+              type="button"
+              size="icon"
+              variant="outline"
+              onClick={() => setIsOutfitCartOpen(true)}
+              aria-label={`Open outfit cart with ${outfitDraftItems.length} ${
+                outfitDraftItems.length === 1 ? "item" : "items"
+              }`}
+              className="relative h-12 w-12 rounded-full border-foreground/15 bg-background/95 shadow-lg backdrop-blur hover:bg-background"
+            >
+              <ShoppingBag className="h-5 w-5" />
+              {outfitDraftItems.length > 0 ? (
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-semibold leading-none text-background">
+                  {outfitCartBadgeLabel}
+                </span>
+              ) : null}
+            </PrimitiveButton>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {outfitCartStatusMessage}
       </div>
+
+      <AnimatePresence>
+        {outfitCartStatusMessage ? (
+          <motion.div
+            key={outfitCartStatusMessage}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className={outfitCartStatusMessageClassName}
+            aria-hidden="true"
+          >
+            {outfitCartStatusMessage}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       <SiteFooter />
     </div>
