@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, LockKeyhole } from "lucide-react";
 import { beginGoogleSignIn } from "../../lib/closet";
 import { PrimitiveButton } from "../primitives/PrimitiveButton";
 import { PrimitiveText } from "../primitives/PrimitiveText";
@@ -38,17 +38,33 @@ export function HomeLanding({ homeMessage }: HomeLandingProps) {
           as="p"
           variant="title"
           tone="muted"
-          className="mb-10"
+          className="mb-6"
           style={{ lineHeight: "1.7" }}
         >
           Find your fit, faster.
         </PrimitiveText>
+        <div
+          role="note"
+          aria-label="Invite-only access"
+          className="mx-auto mb-8 flex max-w-lg gap-4 border border-foreground/20 bg-muted/35 px-5 py-4 text-left"
+        >
+          <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+          <div>
+            <PrimitiveText as="p" variant="overline" weight="semibold" className="mb-2">
+              Invite-only access
+            </PrimitiveText>
+            <PrimitiveText as="p" variant="bodySm" tone="muted">
+              Curated Closet is currently private. Your Google email must be approved before you
+              can sign in. Contact Annabel Goldman to request access.
+            </PrimitiveText>
+          </div>
+        </div>
         <PrimitiveButton
           onClick={() => beginGoogleSignIn()}
           variant="outline"
           className="h-auto px-6 py-3"
         >
-          Sign in with Google
+          Sign in with an approved account
           <ArrowRight className="h-4 w-4" />
         </PrimitiveButton>
 
