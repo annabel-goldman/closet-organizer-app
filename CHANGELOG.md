@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Updated Brakeman to `8.0.5` so the CI security scan continues enforcing the latest scanner release.
-- Updated ERB, Faraday, JWT, and Puma to patched releases that resolve current dependency security advisories.
+- Updated affected Ruby dependencies—including ERB, Faraday, JWT, Puma, Nokogiri, OAuth2, SQLite3, and related transitive gems—to patched releases that resolve current security advisories.
 - Allowed `gabbyggoldman@gmail.com` to create an account and sign in through Google.
 - Added passive AI outfit feedback learning: generated outfits now log recommendation runs, candidate impressions, generated item IDs, save/edit/delete events, and per-user preference signals that gently influence future candidate selection, visual refinement, and reference matching.
 - Documented the Heroku production app, GitHub Actions deploy flow, required config variable names, OAuth URLs, and operational commands in `DEPLOYMENT.md` without committing secret values.
