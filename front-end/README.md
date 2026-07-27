@@ -74,8 +74,8 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
 
 - The app loads the signed-in user through `GET /me`.
 - Selecting sign in opens an invite-only confirmation explaining that Google emails require
-  approval and visitors should contact Annabel Goldman. Google authentication starts only after
-  the visitor selects `Continue to sign in`.
+  administrator approval and visitors should contact `annabel.m.goldman@gmail.com`. Google
+  authentication starts only after the visitor selects `Continue to sign in`.
 - Non-admin users are blocked from `/users` and `/users/:id` in both backend authorization and frontend navigation.
 - The admin users directory at `/users` is paginated (24 per page) and uses a `clothing_items_count` field per user instead of shipping each user's full items array.
 - The closet page now treats outfit selection like a cart: `Add to Outfit` updates a cart button in the closet action row beside `Add Item`, the selected pieces can be reviewed in a right-side tray, and the tray can capture outfit name, tags, and notes before creating the outfit. The `/outfits` page now focuses on browsing, editing, and deleting saved outfits, and editing opens a modal with the outfit preview on the left, direct collage editing controls (move, resize, rotate, layer reordering, and searchable add-item thumbnails), and editable metadata on the right.

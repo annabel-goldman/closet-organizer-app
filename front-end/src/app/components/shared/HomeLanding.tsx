@@ -51,7 +51,7 @@ export function HomeLanding({ homeMessage }: HomeLandingProps) {
           open={isAccessDialogOpen}
           onOpenChange={setIsAccessDialogOpen}
           title="Invite-only access"
-          description="Curated Closet is currently private. Your Google email must be approved by Annabel Goldman before you can use the app. Contact Annabel to request access. If your email is already approved, continue to Google sign in."
+          description="Curated Closet is currently private. Your Google email must be approved by our administrator before you can use the app. Contact annabel.m.goldman@gmail.com to request access. If your email is already approved, continue to Google sign in."
           cancelLabel="Cancel"
           confirmLabel="Continue to sign in"
           onConfirm={() => beginGoogleSignIn()}
