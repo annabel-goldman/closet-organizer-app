@@ -2,13 +2,16 @@
 
 ## Unreleased
 
+- Updated ERB, Faraday, JWT, and Puma to patched releases that resolve current dependency security advisories.
+- Allowed `gabbyggoldman@gmail.com` to create an account and sign in through Google.
 - Added passive AI outfit feedback learning: generated outfits now log recommendation runs, candidate impressions, generated item IDs, save/edit/delete events, and per-user preference signals that gently influence future candidate selection, visual refinement, and reference matching.
+- Documented the Heroku production app, GitHub Actions deploy flow, required config variable names, OAuth URLs, and operational commands in `DEPLOYMENT.md` without committing secret values.
 - Renamed the item editor's user-facing `Style notes` field to `Visual description`, retuned AI metadata suggestions toward objective item descriptions, and added a one-time regeneration task for closet item visual descriptions.
 - Improved flatlay-based AI outfit generation by analyzing uploaded references into structured target slots, preserving strong closet matches for required slots during candidate selection, and repairing final outfits to include missing required reference pieces when available.
 - Tuned flatlay matching to preserve cross-slot visual anchors such as sequins, burgundy leather, patent shine, satin, and glam styling so generated looks can prioritize cohesive vibe over literal item-type matching.
 - Improved reference-slot repair so generated outfits can replace an already-selected weak top or bottom with a stronger palette/silhouette match instead of stopping once the slot is merely filled.
 - Added a root-level `stop.sh` helper that stops local Rails and Vite dev servers without restarting them, using the same port arguments as `start.sh`.
-- Added `accessory` to the canonical frontend item type picker while keeping `bag` as a separate specific option.
+- Added `accessory` to the canonical frontend item type picker and normalized bag-like item types into `accessory`.
 - Added `swimwear` to the canonical frontend item type picker and normalized swimwear aliases such as bikini and swimsuit to that type.
 - Added a sticky round outfit-cart button on the closet page that appears once the top cart button scrolls out of view.
 - Added a lower-right confirmation toast when closet items are added to or removed from the outfit cart.
@@ -26,7 +29,7 @@
 - Reworked AI outfit generation into a two-stage flow: OpenRouter first picks a text-only candidate shortlist from closet metadata and visual descriptions, then refines the final saved outfit with photos for only those candidate items.
 - Randomized the closet item context sent to AI outfit generation so generated looks are less biased toward alphabetically early items such as beige pieces.
 - Added per-item visual descriptions plus an AI outfit generator on `/outfits` that creates a saved look from closet metadata and visual descriptions.
-- Restricted Google sign-in to the two approved personal accounts and added a clear unauthorized-account login message.
+- Restricted Google sign-in to an explicit approved-account allowlist and added a clear unauthorized-account login message.
 - Reused the already-loaded session closet data when navigating between protected pages so returning to `/closet` no longer refetches the full item list during the same app session.
 - Removed size and purchase-date fields from the item create/edit UI, item metadata previews, closet search/sort surfaces, and profile item rows.
 - Added filter-aware closet search suggestions with fuzzy typo matching: typing in the closet search field now opens an item dropdown that respects active tag, color, and brand filters, click fills the search query, and Enter opens the highlighted item.

@@ -18,7 +18,7 @@ class OutfitReferenceMatcherTest < ActiveSupport::TestCase
     )
     bag = create_item(
       name: "Silver Chain Shoulder Bag",
-      category: "bag",
+      category: "accessory",
       tags: %w[silver chain shoulder purse]
     )
 
@@ -32,7 +32,7 @@ class OutfitReferenceMatcherTest < ActiveSupport::TestCase
   test "repairs a selection by adding a missing required bag" do
     hoodie = create_item(name: "Olive Wing Graphic Hoodie", category: "top", tags: %w[olive hoodie wing])
     shorts = create_item(name: "White Denim Distressed Shorts", category: "bottom", tags: %w[white denim shorts distressed])
-    bag = create_item(name: "Silver Chain Shoulder Bag", category: "bag", tags: %w[silver chain shoulder purse])
+    bag = create_item(name: "Silver Chain Shoulder Bag", category: "accessory", tags: %w[silver chain shoulder purse])
 
     matcher = OutfitReferenceMatcher.new(reference_profile)
     repaired_ids = matcher.repair_selection([ hoodie.id, shorts.id ], [ hoodie, shorts, bag ], max_items: 6)
@@ -66,7 +66,7 @@ class OutfitReferenceMatcherTest < ActiveSupport::TestCase
 
   test "does not force a weak accessory match just because the reference has one" do
     hoodie = create_item(name: "Olive Wing Graphic Hoodie", category: "top", tags: %w[olive hoodie wing])
-    random_bag = create_item(name: "Brown Leather Tote", category: "bag", tags: %w[brown leather tote])
+    random_bag = create_item(name: "Brown Leather Tote", category: "accessory", tags: %w[brown leather tote])
 
     matcher = OutfitReferenceMatcher.new({
       "overall_style" => [ "casual glam" ],
@@ -91,7 +91,7 @@ class OutfitReferenceMatcherTest < ActiveSupport::TestCase
   test "keeps cross-slot signature vibe anchors such as sequins and burgundy leather" do
     sequin_top = create_item(name: "Beige Sequin Halter Top", category: "top", tags: %w[beige sequin halter glam])
     white_skirt = create_item(name: "White Mini Skirt with Flap Pockets", category: "bottom", tags: %w[white mini skirt pockets])
-    burgundy_bag = create_item(name: "Burgundy Embossed Leather Shoulder Bag", category: "bag", tags: %w[burgundy embossed leather shoulder bag])
+    burgundy_bag = create_item(name: "Burgundy Embossed Leather Shoulder Bag", category: "accessory", tags: %w[burgundy embossed leather shoulder bag])
     red_mary_janes = create_item(name: "Red Double-Strap Mary Janes", category: "shoes", tags: %w[red burgundy mary janes polished])
     plain_shorts = create_item(name: "Cream Denim Cutoff Shorts", category: "bottom", tags: %w[cream denim shorts])
 
@@ -171,8 +171,8 @@ class OutfitReferenceMatcherTest < ActiveSupport::TestCase
   end
 
   test "uses user preference context as a gentle scoring nudge" do
-    plain_bag = create_item(name: "Brown Leather Shoulder Bag", category: "bag", tags: %w[brown leather shoulder bag])
-    textured_bag = create_item(name: "Beige Textured Chain Strap Bag", category: "bag", tags: %w[beige textured chain strap bag])
+    plain_bag = create_item(name: "Brown Leather Shoulder Bag", category: "accessory", tags: %w[brown leather shoulder bag])
+    textured_bag = create_item(name: "Beige Textured Chain Strap Bag", category: "accessory", tags: %w[beige textured chain strap bag])
 
     matcher = OutfitReferenceMatcher.new(
       {

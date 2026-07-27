@@ -114,6 +114,26 @@ class UserTest < ActiveSupport::TestCase
     assert_equal "real-google-uid-456", user.uid
   end
 
+  test "google auth creates a user for Gabby's approved email" do
+    auth_hash = OpenStruct.new(
+      provider: "google_oauth2",
+      uid: "gabby-google-user",
+      info: OpenStruct.new(
+        email: "gabbyggoldman@gmail.com",
+        name: "Gabby Goldman",
+        image: "https://example.com/gabby.png"
+      )
+    )
+
+    assert_difference "User.count", 1 do
+      user = User.from_google_auth(auth_hash)
+
+      assert_equal "gabbyggoldman@gmail.com", user.email
+      assert_equal "Gabby Goldman", user.username
+      assert_not user.admin?
+    end
+  end
+
   test "google auth rejects unapproved email addresses" do
     auth_hash = OpenStruct.new(
       provider: "google_oauth2",

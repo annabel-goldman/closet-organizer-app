@@ -15,6 +15,7 @@ project-closet-organizer/
 ├── front-end/                  # React + Vite UI app
 ├── Procfile                    # Heroku runtime entrypoint for back-end/
 ├── package.json                # Frontend build glue for deployment
+├── DEPLOYMENT.md               # Heroku/GitHub Actions deployment runbook
 ├── README.md                   # Project overview and setup
 ├── wiki.md                     # Product purpose and problem statement
 ├── PROJECT_INDEX.md            # This structure index
@@ -58,10 +59,12 @@ project-closet-organizer/
 ## CI
 
 - `.github/workflows/ci.yml`: backend lockfile check, security checks, linting, and tests
+- `.github/workflows/deploy.yml`: deploys successful `main` CI runs to the Heroku app `closet-organizer`
 
 ## Docs
 
 - `README.md`: current application overview and setup
+- `DEPLOYMENT.md`: non-secret Heroku, GitHub Actions, OAuth, and production config runbook
 - `AGENTS.md`: repo-specific frontend and documentation maintenance rules
 - `wiki.md`: product purpose and problem statement
 - `back-end/README.md`: backend API and environment details

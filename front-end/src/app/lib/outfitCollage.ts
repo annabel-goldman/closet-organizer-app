@@ -41,10 +41,6 @@ const CATEGORY_COLLAGE_FRAMES: Record<string, NumericCollageFrame[]> = {
     { left: LEFT_COLUMN_X, top: 14, width: LEFT_COLUMN_WIDTH, height: 24, rotate: 0, zIndex: 1 },
     { left: LEFT_COLUMN_X, top: 38, width: LEFT_COLUMN_WIDTH, height: 22, rotate: 0, zIndex: 1 },
   ],
-  bag: [
-    { left: LEFT_COLUMN_X, top: 14, width: LEFT_COLUMN_WIDTH, height: 24, rotate: 0, zIndex: 1 },
-    { left: LEFT_COLUMN_X, top: 38, width: LEFT_COLUMN_WIDTH, height: 22, rotate: 0, zIndex: 1 },
-  ],
   dress: [
     { left: BODY_COLUMN_X, top: 12, width: BODY_COLUMN_WIDTH, height: 72, rotate: 0, zIndex: 2 },
   ],

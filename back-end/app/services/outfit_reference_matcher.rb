@@ -173,7 +173,7 @@ class OutfitReferenceMatcher
     when "bottom"
       %w[bottom jeans shorts skirt pants trouser trousers].include?(item.category.to_s)
     when "bag"
-      item.category.to_s == "bag" || item_tokens.any? { |token| ROLE_TERMS["bag"].include?(token) }
+      item_tokens.any? { |token| ROLE_TERMS["bag"].include?(token) }
     when "shoes"
       item.category.to_s == "shoes"
     when "accessory"

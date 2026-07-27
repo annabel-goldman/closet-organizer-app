@@ -46,6 +46,8 @@ Heroku deployment link:
 
 Production deploys are handled through GitHub Actions. The `CI` workflow runs on pull requests and pushes to `main`; when it succeeds on `main`, `.github/workflows/deploy.yml` pushes the same commit to the Heroku app `closet-organizer`. The deploy workflow requires a GitHub Actions secret named `HEROKU_API_KEY`.
 
+Deployment setup, required config variable names, OAuth URLs, and operational commands are documented in [DEPLOYMENT.md](./DEPLOYMENT.md).
+
 ## Repository Layout
 
 - `front-end/`: React 19 + Vite client application
@@ -53,6 +55,7 @@ Production deploys are handled through GitHub Actions. The `CI` workflow runs on
 - `.github/`: CI workflows and automation
 - `Procfile`: Heroku process definitions that run the app from `back-end/`
 - `package.json`: root deployment glue that builds `front-end/` into `back-end/public`
+- `DEPLOYMENT.md`: Heroku, GitHub Actions, OAuth, and production config runbook
 - `start.sh`: root-level launcher that boots both apps together
 - `PROJECT_INDEX.md`: concise repository structure index
 - `wiki.md`: product purpose and problem statement
@@ -164,6 +167,7 @@ npm run dev
 ## Documentation
 
 - Project overview: [README.md](./README.md)
+- Deployment runbook: [DEPLOYMENT.md](./DEPLOYMENT.md)
 - Structure index: [PROJECT_INDEX.md](./PROJECT_INDEX.md)
 - Project wiki: [wiki.md](./wiki.md)
 - Backend details: [back-end/README.md](./back-end/README.md)

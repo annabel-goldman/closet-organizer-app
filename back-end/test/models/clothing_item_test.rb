@@ -55,6 +55,19 @@ class ClothingItemTest < ActiveSupport::TestCase
     assert_equal "sweater", item.category
   end
 
+  test "normalizes bag category to accessory" do
+    item = ClothingItem.new(
+      user: users(:one),
+      name: "Canvas Tote",
+      size: :na,
+      category: "  Bag  "
+    )
+
+    item.valid?
+
+    assert_equal "accessory", item.category
+  end
+
   test "normalizes tags into a clean list" do
     item = ClothingItem.new(
       user: users(:one),

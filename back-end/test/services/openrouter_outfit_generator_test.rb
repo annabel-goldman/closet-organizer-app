@@ -99,7 +99,7 @@ class OpenrouterOutfitGeneratorTest < ActiveSupport::TestCase
     bag = ClothingItem.create!(
       user: @user,
       name: "Silver Chain Shoulder Bag",
-      category: "bag",
+      category: "accessory",
       size: :na,
       tags: %w[silver chain purse]
     )
@@ -147,7 +147,7 @@ class OpenrouterOutfitGeneratorTest < ActiveSupport::TestCase
     burgundy_bag = ClothingItem.create!(
       user: @user,
       name: "Burgundy Embossed Leather Shoulder Bag",
-      category: "bag",
+      category: "accessory",
       size: :na,
       tags: %w[burgundy embossed leather shoulder bag]
     )
@@ -197,14 +197,14 @@ class OpenrouterOutfitGeneratorTest < ActiveSupport::TestCase
     preferred_item = ClothingItem.create!(
       user: @user,
       name: "Beige Textured Chain Strap Bag",
-      category: "bag",
+      category: "accessory",
       size: :na,
       tags: %w[beige textured chain bag]
     )
     generated_item = ClothingItem.create!(
       user: @user,
       name: "Brown Leather Shoulder Bag",
-      category: "bag",
+      category: "accessory",
       size: :na,
       tags: %w[brown leather shoulder bag]
     )

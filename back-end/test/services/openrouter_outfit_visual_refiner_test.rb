@@ -213,7 +213,7 @@ class OpenrouterOutfitVisualRefinerTest < ActiveSupport::TestCase
     )
     bag = create_candidate_item(
       name: "Silver Chain Shoulder Bag",
-      category: "bag",
+      category: "accessory",
       tags: %w[silver chain purse]
     )
     refiner = OpenrouterOutfitVisualRefiner.new(

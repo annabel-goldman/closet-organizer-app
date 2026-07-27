@@ -85,6 +85,7 @@ class ClothingItem < ApplicationRecord
   end
 
   def normalize_category
-    self.category = category.to_s.strip.downcase.presence
+    normalized_category = category.to_s.strip.downcase.presence
+    self.category = normalized_category == "bag" ? "accessory" : normalized_category
   end
 end

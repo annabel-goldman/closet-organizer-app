@@ -186,7 +186,7 @@ test("mergeMetadataSuggestion normalizes category aliases to canonical item type
     tags: ["canvas"],
   });
 
-  assert.equal(merged.category, "bag");
+  assert.equal(merged.category, "accessory");
 });
 
 test("validateClothingItemForm requires a canonical item type", () => {
@@ -216,7 +216,9 @@ test("normalizeCategory treats accessories as a canonical item type", () => {
   assert.equal(normalizeCategory("accessory"), "accessory");
   assert.equal(normalizeCategory("scarf"), "accessory");
   assert.equal(normalizeCategory("belt"), "accessory");
-  assert.equal(normalizeCategory("handbag"), "bag");
+  assert.equal(normalizeCategory("handbag"), "accessory");
+  assert.equal(normalizeCategory("bag"), "accessory");
+  assert.equal(normalizeCategory("tote"), "accessory");
 });
 
 test("resolveEditableImageFetchUrl keeps local Active Storage fetches same-origin and proxied", () => {

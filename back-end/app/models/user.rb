@@ -2,6 +2,7 @@ class User < ApplicationRecord
   ALLOWED_GOOGLE_EMAILS = %w[
     annabelgoldman2025@u.northwestern.edu
     annabel.m.goldman@gmail.com
+    gabbyggoldman@gmail.com
   ].freeze
 
   class UnauthorizedGoogleEmailError < StandardError; end
