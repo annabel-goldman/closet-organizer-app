@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Updated Brakeman to `8.0.5` so the CI security scan continues enforcing the latest scanner release.
 - Updated ERB, Faraday, JWT, and Puma to patched releases that resolve current dependency security advisories.
 - Allowed `gabbyggoldman@gmail.com` to create an account and sign in through Google.
 - Added passive AI outfit feedback learning: generated outfits now log recommendation runs, candidate impressions, generated item IDs, save/edit/delete events, and per-user preference signals that gently influence future candidate selection, visual refinement, and reference matching.
