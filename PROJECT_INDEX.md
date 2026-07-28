@@ -1,6 +1,6 @@
 # Project Structure Index
 
-Last updated: 2026-06-27
+Last updated: 2026-07-27
 
 This file is intentionally concise and focused on repository structure.
 For the product purpose and problem statement, see `wiki.md`.
@@ -39,6 +39,7 @@ project-closet-organizer/
 - `src/app/App.tsx`: route handling, auth-aware layout, and top-level page composition
 - `src/app/components/primitives/`: shared button, select, dropdown, and typography primitives that frontend work should reuse first
 - `src/app/components/`: routed pages, the closet outfit-cart tray, item editor flows, extracted create-item/restricted-state components, and supporting UI
+- `public/demo/curated-closet-demo.mp4`: production-served product demo linked from the logged-out homepage and repository documentation
 - `src/app/components/OutfitCollageCanvas.tsx`: saved-outfit collage renderer plus the `react-moveable`-backed edit-modal move/resize/rotate interactions and the shared normalized-layout/stage-aspect contract used by both saved and editable outfit previews
 - `src/app/components/OutfitCollageLayersPanel.tsx`: focused layers sidebar for thumbnail selection plus pointer and keyboard-accessible layer reordering
 - `src/app/lib/routes.ts`: route parsing, navigation helpers, and route guards

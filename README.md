@@ -30,6 +30,10 @@ Curated Closet is a monorepo with a Rails JSON API in `back-end/` and a React + 
 - Restrict `/users` and `/users/:id` to admin users only
 - Show frontend not-found and unauthorized states instead of raw backend responses
 
+## Product Demo
+
+Watch the two-minute [Curated Closet product demo](https://closet-organizer-165f918adeda.herokuapp.com/demo/curated-closet-demo.mp4) for a quick tour of closet browsing, outfit building, Date Night AI outfit generation, smart photo import, AI-assisted item editing, and layered filtering.
+
 ## Team Members
 
 - Annabel Goldman

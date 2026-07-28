@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, PlayCircle } from "lucide-react";
 import { beginGoogleSignIn } from "../../lib/closet";
 import { PrimitiveButton } from "../primitives/PrimitiveButton";
 import { PrimitiveConfirmationDialog } from "../primitives/PrimitiveConfirmationDialog";
@@ -47,20 +47,28 @@ export function HomeLanding({ homeMessage }: HomeLandingProps) {
         >
           Find your fit, faster.
         </PrimitiveText>
-        <PrimitiveConfirmationDialog
-          open={isAccessDialogOpen}
-          onOpenChange={setIsAccessDialogOpen}
-          title="Invite-only access"
-          description="Curated Closet is currently private. Your Google email must be approved by our administrator before you can use the app. Contact annabel.m.goldman@gmail.com to request access. If your email is already approved, continue to Google sign in."
-          cancelLabel="Cancel"
-          confirmLabel="Continue to sign in"
-          onConfirm={() => beginGoogleSignIn()}
-        >
-          <PrimitiveButton variant="outline" className="h-auto px-6 py-3">
-            Sign in with an approved account
-            <ArrowRight className="h-4 w-4" />
+        <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <PrimitiveConfirmationDialog
+            open={isAccessDialogOpen}
+            onOpenChange={setIsAccessDialogOpen}
+            title="Invite-only access"
+            description="Curated Closet is currently private. Your Google email must be approved by our administrator before you can use the app. Contact annabel.m.goldman@gmail.com to request access. If your email is already approved, continue to Google sign in."
+            cancelLabel="Cancel"
+            confirmLabel="Continue to sign in"
+            onConfirm={() => beginGoogleSignIn()}
+          >
+            <PrimitiveButton variant="outline" className="h-auto px-6 py-3">
+              Sign in with an approved account
+              <ArrowRight className="h-4 w-4" />
+            </PrimitiveButton>
+          </PrimitiveConfirmationDialog>
+          <PrimitiveButton asChild className="h-auto px-6 py-3">
+            <a href="/demo/curated-closet-demo.mp4" target="_blank" rel="noreferrer">
+              <PlayCircle className="h-4 w-4" />
+              Watch the 2-minute demo
+            </a>
           </PrimitiveButton>
-        </PrimitiveConfirmationDialog>
+        </div>
 
         {homeMessage ? (
           <motion.div

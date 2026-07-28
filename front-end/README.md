@@ -60,7 +60,8 @@ The repo still includes lower-level helpers under `src/app/components/ui/`, but 
 
 Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts`.
 
-- `/` logged-out landing page with an invite-only confirmation before Google sign-in
+- `/` logged-out landing page with an invite-only confirmation before Google sign-in and a
+  [two-minute product demo](https://closet-organizer-165f918adeda.herokuapp.com/demo/curated-closet-demo.mp4)
 - `/closet` signed-in closet home with search, filters, and sorting
 - `/outfits` saved outfit gallery and editor
 - `/users` admin-only users directory
@@ -119,6 +120,8 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
   Shared keyboard shortcut wiring for undo/redo controls outside the image editor
 - `src/app/components/ClosetSearchField.tsx`
   Closet page search input with filter-aware item suggestions (click to fill, Enter to open item)
+- `public/demo/curated-closet-demo.mp4`
+  Public product demo linked from the logged-out landing page and copied into the production build
 - `tests/closetFilters.test.ts`
   Node-based tests for closet fuzzy search and filter-aware suggestions
 - `src/app/lib/usePageData.ts`
