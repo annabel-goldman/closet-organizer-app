@@ -60,7 +60,8 @@ The repo still includes lower-level helpers under `src/app/components/ui/`, but 
 
 Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts`.
 
-- `/` logged-out landing page
+- `/` logged-out landing page with an invite-only confirmation before Google sign-in and a
+  [two-minute product demo](https://closet-organizer-165f918adeda.herokuapp.com/demo/curated-closet-demo.mp4)
 - `/closet` signed-in closet home with search, filters, and sorting
 - `/outfits` saved outfit gallery and editor
 - `/users` admin-only users directory
@@ -73,6 +74,9 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
 ## Current Behavior
 
 - The app loads the signed-in user through `GET /me`.
+- Selecting sign in opens an invite-only confirmation explaining that Google emails require
+  administrator approval and visitors should contact `annabel.m.goldman@gmail.com`. Google
+  authentication starts only after the visitor selects `Continue to sign in`.
 - Non-admin users are blocked from `/users` and `/users/:id` in both backend authorization and frontend navigation.
 - The admin users directory at `/users` is paginated (24 per page) and uses a `clothing_items_count` field per user instead of shipping each user's full items array.
 - The closet page now treats outfit selection like a cart: `Add to Outfit` updates a cart button in the closet action row beside `Add Item`, the selected pieces can be reviewed in a right-side tray, and the tray can capture outfit name, tags, and notes before creating the outfit. The `/outfits` page now focuses on browsing, editing, and deleting saved outfits, and editing opens a modal with the outfit preview on the left, direct collage editing controls (move, resize, rotate, layer reordering, and searchable add-item thumbnails), and editable metadata on the right.
@@ -116,6 +120,8 @@ Routes are coordinated in `src/app/App.tsx` and parsed in `src/app/lib/routes.ts
   Shared keyboard shortcut wiring for undo/redo controls outside the image editor
 - `src/app/components/ClosetSearchField.tsx`
   Closet page search input with filter-aware item suggestions (click to fill, Enter to open item)
+- `public/demo/curated-closet-demo.mp4`
+  Public product demo linked from the logged-out landing page and copied into the production build
 - `tests/closetFilters.test.ts`
   Node-based tests for closet fuzzy search and filter-aware suggestions
 - `src/app/lib/usePageData.ts`

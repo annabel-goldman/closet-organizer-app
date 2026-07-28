@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a two-minute product demo to the public frontend assets and linked it from the logged-out homepage and project documentation.
+- Added an invite-only confirmation before Google sign-in, with approval instructions and an explicit `Continue to sign in` action.
 - Updated Brakeman to `8.0.5` so the CI security scan continues enforcing the latest scanner release.
 - Updated affected Ruby dependencies—including ERB, Faraday, JWT, Puma, Nokogiri, OAuth2, SQLite3, and related transitive gems—to patched releases that resolve current security advisories.
 - Allowed `gabbyggoldman@gmail.com` to create an account and sign in through Google.
