@@ -69,6 +69,16 @@ export interface ClothingItem {
 export interface User extends UserSummary {
   clothing_items: ClothingItem[];
   clothing_items_count: number;
+  model_reference_consent_at?: string | null;
+  model_reference_photo_attached?: boolean;
+  model_reference_photo_count?: number;
+  model_reference_photos?: ModelReferencePhoto[];
+}
+
+export interface ModelReferencePhoto {
+  id: number;
+  position: number;
+  photo_url: string;
 }
 
 export interface PaginationMeta {
@@ -123,6 +133,72 @@ export interface OutfitDetectionBoundingBox {
   height: number;
 }
 
+export type AiWorkflowStageStatus =
+  | "pending"
+  | "processing"
+  | "review"
+  | "approved"
+  | "rejected"
+  | "cancelled"
+  | "failed"
+  | "skipped";
+
+export interface AiWorkflowStage {
+  id?: number;
+  key: string;
+  status: AiWorkflowStageStatus;
+  decision?: "approve" | "reject" | null;
+  attempts?: number;
+  diagnostics?: Record<string, unknown>;
+  error_message?: string | null;
+  artifact_ids?: number[];
+  artifacts?: AiArtifact[];
+}
+
+export interface AiArtifact {
+  id: number;
+  kind: string;
+  status: "pending" | "processing" | "review" | "approved" | "rejected" | "cancelled" | "deleted" | "failed";
+  file_url?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  prompt_version?: string | null;
+  diagnostics?: Record<string, unknown>;
+  error_message?: string | null;
+}
+
+export interface AiWorkflow {
+  id: number;
+  kind: string;
+  status: "pending" | "processing" | "review" | "succeeded" | "rejected" | "deleted" | "failed" | "cancelled";
+  requested_count?: number | null;
+  completed_count: number;
+  failed_count: number;
+  provider?: string | null;
+  model?: string | null;
+  prompt_version?: string | null;
+  metadata?: Record<string, unknown>;
+  error_message?: string | null;
+  stages: AiWorkflowStage[];
+}
+
+export interface AiStatus {
+  provider: string;
+  configured: boolean;
+  model: string;
+  model_reference: {
+    attached: boolean;
+    count: number;
+    consented: boolean;
+  };
+  image_processing: {
+    image_processing_gem: boolean;
+    mini_magick: boolean;
+    vips: boolean;
+  };
+  queue_adapter: string;
+}
+
 export interface OutfitUpload {
   id: number;
   user_id: number;
@@ -132,6 +208,7 @@ export interface OutfitUpload {
   error_message?: string | null;
   detected_at?: string | null;
   source_photo_url?: string | null;
+  ai_workflow?: AiWorkflow | null;
   detections: OutfitDetection[];
   created_at?: string;
   updated_at?: string;
@@ -148,6 +225,7 @@ export interface Outfit {
   generation_id?: number | null;
   generated_by_ai?: boolean;
   generated_item_ids?: number[];
+  modeled_workflow?: AiWorkflow | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -272,6 +350,14 @@ export interface OutfitDraft {
   notes: string;
   tagInput: string;
   itemIds: number[];
+}
+
+export interface OutfitMetadataSuggestion {
+  name: string;
+  notes: string;
+  tags: string[];
+  provider?: string | null;
+  model?: string | null;
 }
 
 export function emptyOutfitDraft(): OutfitDraft {
@@ -479,6 +565,117 @@ export async function fetchCurrentUser(signal?: AbortSignal) {
   return user ? normalizeUserPayload(user) : null;
 }
 
+export async function fetchAiStatus(signal?: AbortSignal) {
+  return requestJson<AiStatus>(`${API_BASE_URL}/ai/status`, { signal });
+}
+
+function normalizeAiWorkflowPayload(workflow: AiWorkflow): AiWorkflow {
+  return {
+    ...workflow,
+    stages: (workflow.stages ?? []).map((stage) => ({
+      ...stage,
+      artifacts: (stage.artifacts ?? []).map((artifact) => ({
+        ...artifact,
+        file_url: normalizeAttachmentUrl(artifact.file_url),
+      })),
+    })),
+  };
+}
+
+export async function createAiWorkflow(input: {
+  kind: AiWorkflow["kind"];
+  requestedCount?: number;
+  promptVersion?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  return requestJson<AiWorkflow>(`${API_BASE_URL}/ai_workflows`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ai_workflow: {
+        kind: input.kind,
+        requested_count: input.requestedCount,
+        prompt_version: input.promptVersion,
+        metadata: input.metadata,
+      },
+    }),
+  }).then(normalizeAiWorkflowPayload);
+}
+
+export async function fetchAiWorkflow(id: number, signal?: AbortSignal) {
+  return requestJson<AiWorkflow>(`${API_BASE_URL}/ai_workflows/${id}`, { signal }).then(normalizeAiWorkflowPayload);
+}
+
+export async function cancelAiWorkflow(id: number) {
+  return requestJson<AiWorkflow>(`${API_BASE_URL}/ai_workflows/${id}/cancel`, {
+    method: "POST",
+  }).then(normalizeAiWorkflowPayload);
+}
+
+export async function deleteModeledPreview(workflowId: number) {
+  return requestJson<AiWorkflow>(`${API_BASE_URL}/ai_workflows/${workflowId}/preview`, {
+    method: "DELETE",
+  }).then(normalizeAiWorkflowPayload);
+}
+
+export async function updateModeledPreview(workflowId: number, photo: File) {
+  const formData = new FormData();
+  formData.append("modeled_preview[photo]", photo);
+
+  return requestJson<AiWorkflow>(`${API_BASE_URL}/ai_workflows/${workflowId}/preview`, {
+    method: "PATCH",
+    body: formData,
+  }).then(normalizeAiWorkflowPayload);
+}
+
+export async function requestModeledImage(itemId: number) {
+  return requestJson<AiWorkflow>(`${API_BASE_URL}/clothing_items/${itemId}/generate_modeled_image`, {
+    method: "POST",
+  }).then(normalizeAiWorkflowPayload);
+}
+
+export async function saveModelReferences(photos: File[]) {
+  const formData = new FormData();
+  photos.forEach((photo) => formData.append("model_reference_images[photos][]", photo));
+
+  return normalizeUserPayload(
+    await requestJson<User>(`${API_BASE_URL}/model_reference_images`, {
+      method: "POST",
+      body: formData,
+    }),
+  );
+}
+
+export async function reorderModelReferences(referenceImageIds: number[]) {
+  return normalizeUserPayload(
+    await requestJson<User>(`${API_BASE_URL}/model_reference_images/reorder`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ reference_image_ids: referenceImageIds }),
+    }),
+  );
+}
+
+export async function destroyModelReferenceImage(id: number) {
+  return normalizeUserPayload(
+    await requestJson<User>(`${API_BASE_URL}/model_reference_images/${id}`, {
+      method: "DELETE",
+    }),
+  );
+}
+
+export async function destroyAllModelReferences() {
+  return normalizeUserPayload(
+    await requestJson<User>(`${API_BASE_URL}/me/model_reference`, {
+      method: "DELETE",
+    }),
+  );
+}
+
 export function beginGoogleSignIn() {
   window.location.assign(`${BACKEND_BASE_URL}/auth/google_oauth2`);
 }
@@ -575,6 +772,12 @@ export async function fetchOutfits(signal?: AbortSignal) {
   return (await requestJson<Outfit[]>(`${API_BASE_URL}/outfits`, { signal })).map(normalizeOutfitPayload);
 }
 
+export async function fetchOutfit(id: number, signal?: AbortSignal) {
+  return normalizeOutfitPayload(
+    await requestJson<Outfit>(`${API_BASE_URL}/outfits/${id}`, { signal }),
+  );
+}
+
 interface CreateOutfitInput {
   userId: number;
   name: string;
@@ -660,19 +863,89 @@ export async function generateOutfit(input: string | GenerateOutfitInput = {}) {
     }
     formData.append("reference_photo", referencePhoto);
 
-    return normalizeOutfitPayload(await requestJson<Outfit>(`${API_BASE_URL}/outfits/generate`, {
+    return requestJson<AiWorkflow>(`${API_BASE_URL}/outfits/generate`, {
       method: "POST",
       body: formData,
-    }));
+    }).then(normalizeAiWorkflowPayload);
   }
 
-  return normalizeOutfitPayload(await requestJson<Outfit>(`${API_BASE_URL}/outfits/generate`, {
+  return requestJson<AiWorkflow>(`${API_BASE_URL}/outfits/generate`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ occasion: occasion?.trim() || undefined }),
-  }));
+  }).then(normalizeAiWorkflowPayload);
+}
+
+export async function generateOutfitMetadataSuggestions(input: {
+  outfitId: number;
+  itemIds: number[];
+  name: string;
+  notes: string;
+  tags: string[];
+}) {
+  return requestJson<OutfitMetadataSuggestion>(
+    `${API_BASE_URL}/outfits/${input.outfitId}/generate_metadata_suggestions`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        outfit: {
+          item_ids: input.itemIds,
+          name: input.name,
+          notes: input.notes,
+          tags: input.tags,
+        },
+      }),
+    },
+  );
+}
+
+export async function requestModeledOutfit(
+  outfitId: number,
+  draft?: {
+    itemIds: number[];
+    name: string;
+    notes: string;
+    tags: string[];
+  },
+  flatlaySnapshot?: File,
+) {
+  if (draft && flatlaySnapshot) {
+    const formData = new FormData();
+    draft.itemIds.forEach((itemId) => formData.append("modeled_outfit[item_ids][]", String(itemId)));
+    draft.tags.forEach((tag) => formData.append("modeled_outfit[tags][]", tag));
+    formData.append("modeled_outfit[name]", draft.name);
+    formData.append("modeled_outfit[notes]", draft.notes);
+    formData.append("flatlay_snapshot", flatlaySnapshot);
+
+    return requestJson<AiWorkflow>(`${API_BASE_URL}/outfits/${outfitId}/generate_modeled_image`, {
+      method: "POST",
+      body: formData,
+    }).then(normalizeAiWorkflowPayload);
+  }
+
+  return requestJson<AiWorkflow>(`${API_BASE_URL}/outfits/${outfitId}/generate_modeled_image`, {
+    method: "POST",
+    headers: draft
+      ? {
+          "Content-Type": "application/json",
+        }
+      : undefined,
+    body: draft
+      ? JSON.stringify({
+          modeled_outfit: {
+            item_ids: draft.itemIds,
+            name: draft.name,
+            notes: draft.notes,
+            tags: draft.tags,
+          },
+        })
+      : undefined,
+  }).then(normalizeAiWorkflowPayload);
 }
 
 export async function destroyClothingItem(id: number) {
@@ -685,10 +958,10 @@ export async function generateClothingItemCleanImage(
   id: number,
   metadata?: ClothingItemFormValues,
 ) {
-  return requestJson<ClothingItem>(`${API_BASE_URL}/clothing_items/${id}/generate_clean_image`, {
+  return requestJson<AiWorkflow>(`${API_BASE_URL}/clothing_items/${id}/generate_clean_image`, {
     method: "POST",
     body: buildAiContextFormData(metadata),
-  });
+  }).then(normalizeAiWorkflowPayload);
 }
 
 export async function generateOutfitDetectionCleanImage(
@@ -885,6 +1158,9 @@ function normalizeOutfitPayload(outfit: Outfit): Outfit {
     ...outfit,
     generated_by_ai: Boolean(outfit.generated_by_ai),
     generated_item_ids: Array.isArray(outfit.generated_item_ids) ? outfit.generated_item_ids : [],
+    modeled_workflow: outfit.modeled_workflow
+      ? normalizeAiWorkflowPayload(outfit.modeled_workflow)
+      : null,
     items: (outfit.items ?? []).map(normalizeClothingItemPayload),
   };
 }
@@ -904,6 +1180,17 @@ function normalizeMetadataSuggestionPayload(
 
 function normalizeUserPayload(user: User): User {
   const clothing_items = (user.clothing_items ?? []).map(normalizeClothingItemPayload);
+  const model_reference_photos = (user.model_reference_photos ?? [])
+    .map((referencePhoto) => ({
+      ...referencePhoto,
+      photo_url: normalizeApiResourceUrl(referencePhoto.photo_url),
+    }))
+    .sort((left, right) => left.position - right.position || left.id - right.id);
+  const rawReferenceCount = (user as User & { model_reference_photo_count?: unknown }).model_reference_photo_count;
+  const model_reference_photo_count =
+    typeof rawReferenceCount === "number" && Number.isFinite(rawReferenceCount)
+      ? rawReferenceCount
+      : model_reference_photos.length;
   const rawCount = (user as User & { clothing_items_count?: unknown }).clothing_items_count;
   const clothing_items_count =
     typeof rawCount === "number" && Number.isFinite(rawCount)
@@ -914,7 +1201,18 @@ function normalizeUserPayload(user: User): User {
     ...user,
     clothing_items,
     clothing_items_count,
+    model_reference_photo_attached: model_reference_photo_count > 0 || Boolean(user.model_reference_photo_attached),
+    model_reference_photo_count,
+    model_reference_photos,
   };
+}
+
+function normalizeApiResourceUrl(rawUrl: string) {
+  if (!rawUrl.startsWith("/")) {
+    return rawUrl;
+  }
+
+  return `${API_BASE_URL}${rawUrl}`;
 }
 
 function buildAiContextFormData(metadata?: ClothingItemFormValues) {

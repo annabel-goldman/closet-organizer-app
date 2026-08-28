@@ -1,12 +1,21 @@
 require "test_helper"
 
 class OutfitsFlowTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   setup do
     @user = users(:one)
     @other_user = users(:two)
     @outfit = outfits(:one)
     @user_item = clothing_items(:one)
     @other_user_item = clothing_items(:two)
+    clear_enqueued_jobs
+    clear_performed_jobs
+  end
+
+  teardown do
+    clear_enqueued_jobs
+    clear_performed_jobs
   end
 
   test "outfits index only returns current user outfits" do
@@ -59,26 +68,36 @@ class OutfitsFlowTest < ActionDispatch::IntegrationTest
         item_ids: [ @user_item.id ]
       }
     ) do
-      assert_difference("Outfit.count", 1) do
-        assert_difference("OutfitGenerationRun.count", 1) do
-          assert_difference("OutfitGenerationEvent.count", 2) do
+      assert_no_difference("Outfit.count") do
+        assert_enqueued_with(job: OutfitGenerationJob) do
             post generate_outfits_url, params: {
               occasion: "gallery afternoon",
               reference_photo: reference_photo
             }, headers: auth_headers(@user)
+        end
+      end
+
+      assert_response :accepted
+      workflow_id = response_json.fetch("id")
+
+      assert_difference("Outfit.count", 1) do
+        assert_difference("OutfitGenerationRun.count", 1) do
+          assert_difference("OutfitGenerationEvent.count", 2) do
+            perform_enqueued_jobs only: OutfitGenerationJob
           end
         end
       end
+
+      get ai_workflow_url(workflow_id), headers: auth_headers(@user), as: :json
     end
 
-    assert_response :created
-    assert_equal "Gallery Afternoon", response_json["name"]
-    assert_equal [ @user_item.id ], response_json["item_ids"]
-    assert_equal true, response_json["generated_by_ai"]
-    assert_equal [ @user_item.id ], response_json["generated_item_ids"]
-    assert_equal OutfitGenerationRun.last.id, response_json["generation_id"]
+    assert_response :success
+    assert_equal "succeeded", response_json["status"]
+    assert_equal "Gallery Afternoon", response_json.dig("metadata", "result_name")
+    generated_outfit = Outfit.find(response_json.dig("metadata", "outfit_id"))
+    assert_equal [ @user_item.id ], generated_outfit.clothing_item_ids
     assert_equal "gallery afternoon", captured[:occasion]
-    assert_equal "image/png", captured[:reference_photo].content_type
+    assert_equal "image/png", captured[:reference_photo_content_type]
     assert_equal [ @user_item.id ], captured[:items].map(&:id)
     assert_equal @user, captured[:user]
 
@@ -123,11 +142,16 @@ class OutfitsFlowTest < ActionDispatch::IntegrationTest
     ) do
       assert_no_difference("Outfit.count") do
         post generate_outfits_url, headers: auth_headers(@user), as: :json
+        assert_response :accepted
+        workflow_id = response_json.fetch("id")
+        perform_enqueued_jobs only: OutfitGenerationJob
+        get ai_workflow_url(workflow_id), headers: auth_headers(@user), as: :json
       end
     end
 
-    assert_response :unprocessable_content
-    assert_equal "AI generator did not return any owned closet items.", response_json["error"]
+    assert_response :success
+    assert_equal "failed", response_json["status"]
+    assert_equal "AI generator did not return any owned closet items.", response_json["error_message"]
   end
 
   test "outfit generation surfaces AI failure details" do
@@ -140,15 +164,87 @@ class OutfitsFlowTest < ActionDispatch::IntegrationTest
     ) do
       assert_no_difference("Outfit.count") do
         post generate_outfits_url, headers: auth_headers(@user), as: :json
+        assert_response :accepted
+        workflow_id = response_json.fetch("id")
+        perform_enqueued_jobs only: OutfitGenerationJob
+        get ai_workflow_url(workflow_id), headers: auth_headers(@user), as: :json
       end
     end
 
+    assert_response :success
+    assert_equal "failed", response_json["status"]
+    assert_equal "AI outfit generation failed during candidate selection: OpenRouter timed out", response_json["error_message"]
+  end
+
+  test "can cancel a queued outfit generation without creating an outfit" do
+    post generate_outfits_url, params: { occasion: "dinner" }, headers: auth_headers(@user), as: :json
+
+    assert_response :accepted
+    workflow_id = response_json.fetch("id")
+
+    post cancel_ai_workflow_url(workflow_id), headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal "cancelled", response_json["status"]
+    assert_no_difference("Outfit.count") do
+      perform_enqueued_jobs only: OutfitGenerationJob
+    end
+  end
+
+  test "suggests outfit details from the current draft items without saving" do
+    captured = {}
+    original_name = @outfit.name
+
+    with_outfit_metadata_suggester_stub(
+      capture: captured,
+      result: {
+        name: "Ivory Gallery Afternoon",
+        tags: %w[ivory polished gallery],
+        notes: "A polished ivory look for a gallery afternoon.",
+        provider: "openrouter",
+        model: "test/metadata"
+      }
+    ) do
+      post generate_metadata_suggestions_outfit_url(@outfit), params: {
+        outfit: {
+          item_ids: [ @user_item.id ],
+          name: "Outfit Aug 28",
+          tags: [ "casual" ],
+          notes: ""
+        }
+      }, headers: auth_headers(@user), as: :json
+    end
+
+    assert_response :success
+    assert_equal "Ivory Gallery Afternoon", response_json["name"]
+    assert_equal %w[ivory polished gallery], response_json["tags"]
+    assert_equal [ @user_item.id ], captured.fetch(:items).map(&:id)
+    assert_equal "Outfit Aug 28", captured.dig(:current_metadata, :name)
+    assert_equal original_name, @outfit.reload.name
+  end
+
+  test "outfit detail suggestions reject another user's item" do
+    post generate_metadata_suggestions_outfit_url(@outfit), params: {
+      outfit: {
+        item_ids: [ @other_user_item.id ],
+        name: @outfit.name
+      }
+    }, headers: auth_headers(@user), as: :json
+
     assert_response :unprocessable_content
-    assert_equal "AI outfit generation failed during candidate selection: OpenRouter timed out", response_json["error"]
-    assert_equal "candidate_selection", response_json["stage"]
-    assert_equal "openrouter", response_json["provider"]
-    assert_equal "RuntimeError", response_json["cause_class"]
-    assert_equal "OpenRouter timed out", response_json["cause"]
+    assert_equal "Outfit details can only use items from your closet.", response_json["error"]
+  end
+
+  test "outfit detail suggestions require at least one draft item" do
+    post generate_metadata_suggestions_outfit_url(@outfit), params: {
+      outfit: {
+        item_ids: [],
+        name: @outfit.name
+      }
+    }, headers: auth_headers(@user), as: :json
+
+    assert_response :unprocessable_content
+    assert_equal "Add at least one item before filling outfit details.", response_json["error"]
   end
 
   test "cannot create an outfit using another user's item" do
@@ -432,7 +528,13 @@ class OutfitsFlowTest < ActionDispatch::IntegrationTest
     original = OpenrouterOutfitGenerator.method(:call)
 
     OpenrouterOutfitGenerator.singleton_class.send(:define_method, :call) do |items:, occasion: nil, reference_photo: nil, user: nil|
-      capture&.replace(items: items, occasion: occasion, reference_photo: reference_photo, user: user)
+      capture&.replace(
+        items: items,
+        occasion: occasion,
+        reference_photo: reference_photo,
+        reference_photo_content_type: reference_photo&.content_type,
+        user: user
+      )
       raise error if error
 
       result
@@ -441,5 +543,18 @@ class OutfitsFlowTest < ActionDispatch::IntegrationTest
     yield
   ensure
     OpenrouterOutfitGenerator.singleton_class.send(:define_method, :call, original)
+  end
+
+  def with_outfit_metadata_suggester_stub(result:, capture: nil)
+    original = OpenrouterOutfitMetadataSuggester.method(:call)
+
+    OpenrouterOutfitMetadataSuggester.singleton_class.send(:define_method, :call) do |items:, current_metadata: {}|
+      capture&.replace(items: items, current_metadata: current_metadata)
+      result
+    end
+
+    yield
+  ensure
+    OpenrouterOutfitMetadataSuggester.singleton_class.send(:define_method, :call, original)
   end
 end

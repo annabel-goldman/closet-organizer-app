@@ -14,6 +14,8 @@ import { PrimitiveButton } from "../primitives/PrimitiveButton";
 import { PrimitiveText } from "../primitives/PrimitiveText";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { DetectionPreviewImage } from "./DetectionPreview";
+import { AiArtifactComparison } from "../shared/ai/AiArtifactComparison";
+import { AiStageTimeline, type AiStageStatus } from "../shared/ai/AiStageTimeline";
 
 interface DetectionReviewCardProps {
   brandSuggestions?: string[];
@@ -62,6 +64,26 @@ export function DetectionReviewCard({
   const suggestedName = detection.suggested_name?.trim() || titleize(detection.category);
   const previewBox = preferredDetectionBox(detection);
   const canSave = Boolean(previewBox);
+  const cropStatus: AiStageStatus =
+    detection.crop_status === "verified"
+      ? "approved"
+      : detection.crop_status === "failed"
+        ? "failed"
+        : detection.crop_status === "rejected"
+          ? "rejected"
+          : detection.crop_status === "refined"
+            ? "review"
+            : previewBox
+              ? "review"
+              : "processing";
+  const cleanStatus: AiStageStatus =
+    detection.clean_image_status === "succeeded" && cleanedImageUrl
+      ? "review"
+      : detection.clean_image_status === "processing" || isCleaningImage
+        ? "processing"
+        : detection.clean_image_status === "failed" || cleanImageError
+          ? "failed"
+          : "pending";
 
   return (
     <motion.div
@@ -125,28 +147,44 @@ export function DetectionReviewCard({
         </Tooltip>
       </div>
 
-      {cleanedImageUrl ? (
-        <div className="overflow-hidden border border-border bg-muted">
+      <AiArtifactComparison
+        before={sourceImageUrl && previewBox ? (
+          <DetectionPreviewImage
+            alt={`${suggestedName} automated crop preview`}
+            cropBox={previewBox}
+            sourceImageUrl={sourceImageUrl}
+          />
+        ) : undefined}
+        after={cleanedImageUrl ? (
           <DetectionPreviewImage
             alt={`${suggestedName} AI cleaned preview`}
             cleanedImageUrl={cleanedImageUrl}
           />
-        </div>
-      ) : sourceImageUrl && previewBox ? (
-        <div className="space-y-3">
-          <div className="overflow-hidden border border-border bg-muted">
-            <DetectionPreviewImage
-              alt={`${suggestedName} automated crop preview`}
-              cropBox={previewBox}
-              sourceImageUrl={sourceImageUrl}
-            />
-          </div>
-        </div>
-      ) : (
+        ) : undefined}
+      />
+
+      {!cleanedImageUrl && !sourceImageUrl && !previewBox ? (
         <div className="border border-dashed border-border p-4 text-sm text-muted-foreground">
           No crop preview is available for this detection yet.
         </div>
-      )}
+      ) : null}
+
+      <AiStageTimeline
+        stages={[
+          {
+            key: "crop",
+            label: "Crop",
+            status: cropStatus,
+            detail: detection.crop_notes || undefined,
+          },
+          {
+            key: "clean",
+            label: "Catalog image",
+            status: cleanStatus,
+            detail: cleanImageError || undefined,
+          },
+        ]}
+      />
 
       {cleanImageError && (
         <div className="border border-destructive/20 bg-destructive/5 px-3 py-3 text-sm">

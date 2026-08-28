@@ -6,6 +6,19 @@ class OutfitUploadsController < ApplicationController
     @outfit_upload = OutfitUpload.new(outfit_upload_params)
 
     if @outfit_upload.save
+      workflow = current_user.ai_workflows.create!(
+        kind: :outfit_upload,
+        subject: @outfit_upload,
+        provider: "openrouter",
+        model: ENV.fetch("OPENROUTER_MODEL", "openai/gpt-4.1-mini"),
+        prompt_version: "outfit-upload-v1",
+        metadata: {
+          upload_id: @outfit_upload.id,
+          upload_name: @outfit_upload.source_photo.filename.to_s
+        }
+      )
+      workflow.initialize_stages!
+
       begin
         OutfitUploadAnalysisJob.perform_later(@outfit_upload.id)
       rescue StandardError => error

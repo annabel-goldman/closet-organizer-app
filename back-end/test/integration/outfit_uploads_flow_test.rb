@@ -97,6 +97,10 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
 
       assert_response :created
       assert_equal "pending", response_json["status"]
+      assert_equal "outfit_upload", response_json.dig("ai_workflow", "kind")
+      assert_equal response_json["id"], response_json.dig("ai_workflow", "metadata", "upload_id")
+      assert_equal "item-photo.png", response_json.dig("ai_workflow", "metadata", "upload_name")
+      assert_equal %w[detect crop], response_json.dig("ai_workflow", "stages").map { |stage| stage.fetch("key") }
       assert_nil response_json["vision_model"]
       assert_equal [], response_json["detections"]
       assert_match %r{/rails/active_storage/}, response_json["source_photo_url"]
@@ -146,6 +150,65 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
     assert_equal "failed", response_json["status"]
     assert_equal "OPENROUTER_API_KEY is not configured.", response_json["error_message"]
     assert_equal [], response_json["detections"]
+  end
+
+  test "can cancel queued outfit-photo detection" do
+    post outfit_uploads_url, params: {
+      outfit_upload: {
+        user_id: @user.id,
+        source_photo: item_photo_upload
+      }
+    }, headers: auth_headers(@user)
+
+    assert_response :created
+    upload_id = response_json.fetch("id")
+    workflow_id = response_json.dig("ai_workflow", "id")
+
+    post cancel_ai_workflow_url(workflow_id), headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal "cancelled", response_json["status"]
+    perform_enqueued_jobs only: OutfitUploadAnalysisJob
+
+    get outfit_upload_url(upload_id), headers: auth_headers(@user), as: :json
+    assert_response :success
+    assert_equal "cancelled", response_json["status"]
+    assert_equal [], response_json["detections"]
+  end
+
+  test "a cancelled outfit-photo workflow discards a late analyzer failure" do
+    post outfit_uploads_url, params: {
+      outfit_upload: {
+        user_id: @user.id,
+        source_photo: item_photo_upload
+      }
+    }, headers: auth_headers(@user)
+
+    assert_response :created
+    upload_id = response_json.fetch("id")
+    workflow_id = response_json.dig("ai_workflow", "id")
+
+    analyzer = lambda do |upload|
+      AiWorkflow.find(workflow_id).cancel!
+      upload.update!(status: :failed, error_message: "Late provider failure")
+      raise "Late provider failure"
+    end
+
+    original_analyzer = OutfitUploadAnalyzer.method(:call)
+    OutfitUploadAnalyzer.singleton_class.send(:define_method, :call, analyzer)
+
+    begin
+      perform_enqueued_jobs only: OutfitUploadAnalysisJob
+    ensure
+      OutfitUploadAnalyzer.singleton_class.send(:define_method, :call, original_analyzer)
+    end
+
+    get outfit_upload_url(upload_id), headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal "cancelled", response_json["status"]
+    assert_nil response_json["error_message"]
+    assert_equal "cancelled", AiWorkflow.find(workflow_id).status
   end
 
   test "can fetch an existing outfit upload" do

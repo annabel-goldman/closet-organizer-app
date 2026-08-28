@@ -4,14 +4,16 @@ import { isClosetRoute, isOutfitRoute, isUsersRoute, navigateTo } from "../../li
 import type { User } from "../../lib/closet";
 import { beginGoogleSignIn } from "../../lib/closet";
 import { PrimitiveButton } from "../primitives/PrimitiveButton";
+import { ModelReferenceDialog } from "./ModelReferenceDialog";
 
 interface SiteHeaderProps {
   route: AppRoute;
   user: User | null;
   onSignOut: () => void;
+  onUserUpdated: (user: User) => void;
 }
 
-export function SiteHeader({ route, user, onSignOut }: SiteHeaderProps) {
+export function SiteHeader({ route, user, onSignOut, onUserUpdated }: SiteHeaderProps) {
   const globalAction = user ? (
     <PrimitiveButton onClick={onSignOut} variant="outline">
       <Users className="h-4 w-4" />
@@ -71,6 +73,7 @@ export function SiteHeader({ route, user, onSignOut }: SiteHeaderProps) {
               ) : null}
             </nav>
           ) : null}
+          {user ? <ModelReferenceDialog user={user} onUserUpdated={onUserUpdated} /> : null}
           {globalAction}
         </div>
       </div>

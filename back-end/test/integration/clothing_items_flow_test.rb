@@ -1,9 +1,18 @@
 require "test_helper"
 
 class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   setup do
     @clothing_item = clothing_items(:one)
     @user = users(:one)
+    clear_enqueued_jobs
+    clear_performed_jobs
+  end
+
+  teardown do
+    clear_enqueued_jobs
+    clear_performed_jobs
   end
 
   test "clothing items index loads" do
@@ -270,25 +279,53 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     captured = {}
 
     with_image_cleaner_stub(capture: captured) do
-      post generate_clean_image_clothing_item_url(@clothing_item), params: {
-        ai_context: {
-          name: "Ivory Silk Blouse",
-          brand: "Maison North",
-          style_notes: "Best with relaxed trousers.",
-          tags: [ "ivory", "silk", "blouse" ]
-        }
-      }, headers: auth_headers(@user)
+      assert_enqueued_with(job: CleanImageGenerationJob) do
+        post generate_clean_image_clothing_item_url(@clothing_item), params: {
+          ai_context: {
+            name: "Ivory Silk Blouse",
+            brand: "Maison North",
+            style_notes: "Best with relaxed trousers.",
+            tags: [ "ivory", "silk", "blouse" ]
+          }
+        }, headers: auth_headers(@user)
+      end
+
+      assert_response :accepted
+      workflow_id = response_json.fetch("id")
+      assert_equal "item_clean", response_json["kind"]
+
+      perform_enqueued_jobs only: CleanImageGenerationJob
+      get ai_workflow_url(workflow_id), headers: auth_headers(@user), as: :json
     end
 
     assert_response :success
 
     @clothing_item.reload
     assert_predicate @clothing_item.cleaned_photo, :attached?
-    assert_equal "succeeded", response_json["clean_image_status"]
-    assert_equal response_json["cleaned_image_url"], response_json["image_url"]
+    assert_equal "succeeded", response_json["status"]
+    assert response_json.fetch("stages").all? { |stage| stage.fetch("status") == "approved" }
     assert_equal "Ivory Silk Blouse", captured.dig(:metadata_context, :name)
     assert_equal "Maison North", captured.dig(:metadata_context, :brand)
     assert_equal "Best with relaxed trousers.", captured.dig(:metadata_context, :style_notes)
+  end
+
+  test "can cancel a queued clean image workflow without publishing a result" do
+    @clothing_item.photo.attach(item_photo_upload_png)
+
+    post generate_clean_image_clothing_item_url(@clothing_item), headers: auth_headers(@user)
+
+    assert_response :accepted
+    workflow_id = response_json.fetch("id")
+    assert_equal "processing", @clothing_item.reload.clean_image_status
+
+    post cancel_ai_workflow_url(workflow_id), headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal "cancelled", response_json["status"]
+    assert_equal "idle", @clothing_item.reload.clean_image_status
+
+    perform_enqueued_jobs only: CleanImageGenerationJob
+    assert_not @clothing_item.reload.cleaned_photo.attached?
   end
 
   test "can generate metadata suggestions for an existing clothing item photo" do

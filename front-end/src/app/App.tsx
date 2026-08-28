@@ -40,10 +40,19 @@ import { HomeLanding } from "./components/shared/HomeLanding";
 import { NotFoundPage } from "./components/shared/NotFoundPage";
 import { SiteFooter } from "./components/shared/SiteFooter";
 import { SiteHeader } from "./components/shared/SiteHeader";
+import {
+  GenerationTaskToasts,
+} from "./components/shared/GenerationTaskToasts";
+import type { GenerationTask } from "./lib/generationTasks";
 import { ClosetSearchField } from "./components/ClosetSearchField";
 import {
+  cancelAiWorkflow,
   ClothingItem,
   createOutfit,
+  AiWorkflow,
+  fetchClothingItem,
+  fetchAiWorkflow,
+  fetchOutfit,
   fetchOutfits,
   fetchCurrentUser,
   formatPossessive,
@@ -200,6 +209,9 @@ export default function App() {
   const [isOutfitCreatedDialogOpen, setIsOutfitCreatedDialogOpen] = useState(false);
   const [isCreatingOutfitFromCart, setIsCreatingOutfitFromCart] = useState(false);
   const [outfitsCache, setOutfitsCache] = useState<Outfit[]>([]);
+  const [generationTasks, setGenerationTasks] = useState<
+    Record<number, GenerationTask>
+  >({});
   const [hasLoadedOutfits, setHasLoadedOutfits] = useState(false);
   const [isLoadingOutfits, setIsLoadingOutfits] = useState(false);
   const [outfitsErrorMessage, setOutfitsErrorMessage] = useState("");
@@ -296,10 +308,78 @@ export default function App() {
 
   useEffect(() => {
     setOutfitsCache([]);
+    setGenerationTasks({});
     setHasLoadedOutfits(false);
     setIsLoadingOutfits(false);
     setOutfitsErrorMessage("");
   }, [user?.id]);
+
+  const activeGenerationTaskKey = Object.values(generationTasks)
+    .filter((task) => ["pending", "processing"].includes(task.workflow.status))
+    .map((task) => task.workflow.id)
+    .sort((left, right) => left - right)
+    .join(":");
+
+  useEffect(() => {
+    if (!activeGenerationTaskKey) {
+      return;
+    }
+
+    const workflowIds = activeGenerationTaskKey.split(":").map(Number);
+    const controller = new AbortController();
+    const interval = window.setInterval(() => {
+      void Promise.all(
+        workflowIds.map(async (workflowId) => {
+          try {
+            const nextWorkflow = await fetchAiWorkflow(workflowId, controller.signal);
+            if (nextWorkflow.kind === "modeled_outfit") {
+              setOutfitsCache((current) => current.map((outfit) => (
+                outfit.id === nextWorkflow.metadata?.outfit_id
+                  ? { ...outfit, modeled_workflow: nextWorkflow }
+                  : outfit
+              )));
+            }
+
+            if (nextWorkflow.status === "succeeded" && nextWorkflow.kind === "item_clean") {
+              const itemId = Number(nextWorkflow.metadata?.item_id);
+              if (itemId) {
+                const nextItem = await fetchClothingItem(itemId, controller.signal);
+                setUser((current) => updateUserItem(current, nextItem));
+                syncCachedOutfitItem(nextItem);
+              }
+            }
+
+            if (nextWorkflow.status === "succeeded" && nextWorkflow.kind === "outfit_generation") {
+              const outfitId = Number(nextWorkflow.metadata?.outfit_id);
+              if (outfitId) {
+                upsertCachedOutfit(await fetchOutfit(outfitId, controller.signal));
+                setHasLoadedOutfits(true);
+              }
+            }
+
+            setGenerationTasks((current) => {
+              const task = current[workflowId];
+              if (!task) {
+                return current;
+              }
+
+              return {
+                ...current,
+                [workflowId]: { ...task, workflow: nextWorkflow },
+              };
+            });
+          } catch {
+            // A temporary refresh error should not end a background generation task.
+          }
+        }),
+      );
+    }, 1400);
+
+    return () => {
+      controller.abort();
+      window.clearInterval(interval);
+    };
+  }, [activeGenerationTaskKey]);
 
   useEffect(() => {
     if (!user || route.kind !== "outfits" || hasLoadedOutfits) {
@@ -395,6 +475,26 @@ export default function App() {
     route.kind === "item"
       ? clothingItems.find((item) => item.id === route.itemId) ?? null
       : null;
+  const selectedItemModeledWorkflow = route.kind === "item"
+    ? Object.values(generationTasks).find((task) => (
+        task.workflow.kind === "modeled_item"
+        && Number(task.workflow.metadata?.item_id) === route.itemId
+      ))?.workflow ?? null
+    : null;
+  const selectedItemCleanWorkflow = route.kind === "item"
+    ? Object.values(generationTasks).find((task) => (
+        task.workflow.kind === "item_clean"
+        && Number(task.workflow.metadata?.item_id) === route.itemId
+      ))?.workflow ?? null
+    : null;
+  const resumableOutfitUploadId = Object.values(generationTasks)
+    .filter((task) => (
+      task.workflow.kind === "outfit_upload"
+      && !["failed", "cancelled"].includes(task.workflow.status)
+    ))
+    .map((task) => Number(task.workflow.metadata?.upload_id))
+    .filter((uploadId) => uploadId > 0)
+    .at(-1) ?? null;
   const isAdminRoute = route.kind === "users" || route.kind === "user";
   const isUnauthorizedAdminRoute = Boolean(user && !user.admin && isAdminRoute);
   const groupedTagOptions = buildGroupedTagOptions(clothingItems);
@@ -476,6 +576,127 @@ export default function App() {
     setOutfitsCache((current) =>
       current.map((outfit) => (outfit.id === nextOutfit.id ? nextOutfit : outfit)),
     );
+  }
+
+  function updateCachedOutfitModeledWorkflow(outfitId: number, workflow: AiWorkflow) {
+    const outfitName = outfitsCache.find((outfit) => outfit.id === outfitId)?.name ?? `Outfit ${outfitId}`;
+
+    setOutfitsCache((current) =>
+      current.map((outfit) => (
+        outfit.id === outfitId ? { ...outfit, modeled_workflow: workflow } : outfit
+      )),
+    );
+
+    setGenerationTasks((current) => {
+      if (["rejected", "deleted"].includes(workflow.status)) {
+        const next = { ...current };
+        delete next[workflow.id];
+        return next;
+      }
+
+      const existing = current[workflow.id];
+      if (!existing && !["pending", "processing"].includes(workflow.status)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [workflow.id]: {
+          label: existing?.label ?? outfitName,
+          workflow,
+        },
+      };
+    });
+  }
+
+  function trackGenerationTask(workflow: AiWorkflow, label: string) {
+    setGenerationTasks((current) => {
+      if (["deleted", "rejected"].includes(workflow.status)) {
+        const next = { ...current };
+        delete next[workflow.id];
+        return next;
+      }
+
+      return {
+        ...current,
+        [workflow.id]: {
+          label: current[workflow.id]?.label ?? label,
+          workflow,
+        },
+      };
+    });
+  }
+
+  async function handleCancelGenerationTask(workflowId: number) {
+    setGenerationTasks((current) => {
+      const task = current[workflowId];
+      return task
+        ? { ...current, [workflowId]: { ...task, isCancelling: true, cancelError: undefined } }
+        : current;
+    });
+
+    try {
+      const workflow = await cancelAiWorkflow(workflowId);
+      if (workflow.kind === "modeled_outfit") {
+        const outfitId = Number(workflow.metadata?.outfit_id);
+        if (outfitId) {
+          setOutfitsCache((current) => current.map((outfit) => (
+            outfit.id === outfitId ? { ...outfit, modeled_workflow: workflow } : outfit
+          )));
+        }
+      }
+
+      if (workflow.kind === "item_clean") {
+        const itemId = Number(workflow.metadata?.item_id);
+        if (itemId) {
+          const nextItem = await fetchClothingItem(itemId);
+          setUser((current) => updateUserItem(current, nextItem));
+          syncCachedOutfitItem(nextItem);
+        }
+      }
+
+      setGenerationTasks((current) => {
+        const task = current[workflowId];
+        return task ? { ...current, [workflowId]: { ...task, workflow, isCancelling: false } } : current;
+      });
+    } catch (error) {
+      setGenerationTasks((current) => {
+        const task = current[workflowId];
+        return task
+          ? {
+              ...current,
+              [workflowId]: {
+                ...task,
+                isCancelling: false,
+                cancelError: error instanceof Error ? error.message : "Unable to cancel this task.",
+              },
+            }
+          : current;
+      });
+    }
+  }
+
+  function dismissGenerationTask(workflowId: number) {
+    setGenerationTasks((current) => {
+      const next = { ...current };
+      delete next[workflowId];
+      return next;
+    });
+  }
+
+  function openGenerationResult(workflow: AiWorkflow) {
+    if (["item_clean", "modeled_item"].includes(workflow.kind)) {
+      const itemId = Number(workflow.metadata?.item_id);
+      navigateTo(itemId ? `/items/${itemId}` : "/closet");
+      return;
+    }
+
+    if (workflow.kind === "outfit_upload") {
+      navigateTo("/items/new/image");
+      return;
+    }
+
+    navigateTo("/outfits");
   }
 
   function removeCachedOutfit(outfitId: number) {
@@ -621,7 +842,9 @@ export default function App() {
         userId={targetUserId}
         initialMode={route.mode}
         initialUser={targetUser}
+        initialOutfitUploadId={route.mode === "image" ? resumableOutfitUploadId : null}
         onBack={() => navigateTo("/closet")}
+        onGenerationTaskStarted={trackGenerationTask}
         onItemsCreated={(nextItems) => {
           setUser((current) => {
             if (!current || current.id !== targetUserId || nextItems.length === 0) {
@@ -652,9 +875,13 @@ export default function App() {
     pageContent = (
       <ItemDetailPage
         brandSuggestions={closetSuggestions.brandSuggestions}
+        backgroundCleanWorkflow={selectedItemCleanWorkflow}
+        backgroundModeledWorkflow={selectedItemModeledWorkflow}
+        canUseModeledPreview={Boolean(user?.model_reference_photo_attached && user.model_reference_consent_at)}
         itemId={route.itemId}
         initialItem={selectedItem}
         onBack={() => navigateTo("/closet")}
+        onGenerationTaskStarted={trackGenerationTask}
         tagSuggestions={closetSuggestions.tagSuggestions}
         onItemSaved={(nextItem) => {
           setUser((current) => updateUserItem(current, nextItem));
@@ -677,9 +904,11 @@ export default function App() {
         isLoading={isLoadingOutfits || (!hasLoadedOutfits && !outfitsErrorMessage)}
         loadErrorMessage={outfitsErrorMessage}
         onOutfitDeleted={removeCachedOutfit}
-        onOutfitGenerated={upsertCachedOutfit}
+        onGenerationTaskStarted={trackGenerationTask}
+        onOutfitModeledWorkflowUpdated={updateCachedOutfitModeledWorkflow}
         onOutfitUpdated={replaceCachedOutfit}
         outfits={outfitsCache}
+        canUseModeledPreview={Boolean(user.model_reference_photo_attached && user.model_reference_consent_at)}
         user={user}
       />
     ) : null;
@@ -954,7 +1183,12 @@ export default function App() {
         Skip to main content
       </a>
 
-      <SiteHeader route={route} user={user} onSignOut={() => void handleLogout()} />
+      <SiteHeader
+        route={route}
+        user={user}
+        onSignOut={() => void handleLogout()}
+        onUserUpdated={setUser}
+      />
 
       <main
         id="main-content"
@@ -1045,6 +1279,13 @@ export default function App() {
           </motion.div>
         ) : null}
       </AnimatePresence>
+
+      <GenerationTaskToasts
+        tasks={Object.values(generationTasks)}
+        onCancel={(workflowId) => void handleCancelGenerationTask(workflowId)}
+        onDismiss={dismissGenerationTask}
+        onOpen={openGenerationResult}
+      />
 
       <SiteFooter />
     </div>

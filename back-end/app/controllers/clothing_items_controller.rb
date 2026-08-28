@@ -36,15 +36,28 @@ class ClothingItemsController < ApplicationController
       ai_metadata_context_from_params(params[:ai_context])
     )
 
-    CleanImageAttachmentGenerator.call(
-      record: @clothing_item,
-      source_photo: @clothing_item.source_photo_for_cleaning,
-      prompt_context: ImageCleanPromptBuilder.for_clothing_item(@clothing_item),
-      reference_photos: clothing_item_reference_photos,
-      metadata_context: metadata_context
+    workflow = current_user.ai_workflows.create!(
+      kind: "item_clean",
+      subject: @clothing_item,
+      requested_count: 1,
+      provider: "openrouter",
+      model: ENV.fetch("OPENROUTER_IMAGE_CLEAN_MODEL", OpenrouterImageCleaner::DEFAULT_MODEL),
+      prompt_version: "item-clean-v1",
+      metadata: {
+        source: "item-detail",
+        item_id: @clothing_item.id,
+        item_name: @clothing_item.name,
+        metadata_context: metadata_context,
+        prompt_context: ImageCleanPromptBuilder.for_clothing_item(@clothing_item)
+      }
     )
+    workflow.initialize_stages!
+    @clothing_item.update!(clean_image_status: :processing, clean_image_error_message: nil)
+    CleanImageGenerationJob.perform_later(workflow.id)
 
-    render json: payloads.clothing_item(@clothing_item.reload)
+    render json: payloads.ai_workflow(workflow), status: :accepted
+  rescue ActiveRecord::RecordInvalid => error
+    render_validation_errors(error.record)
   rescue StandardError => error
     render json: { error: error.message }, status: :unprocessable_content
   end

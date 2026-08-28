@@ -24,6 +24,8 @@ Rails 8 JSON backend for Curated Closet.
 - AI outfit generation from closet item metadata, visual descriptions, uploaded flatlay reference analysis, shortlisted candidate photos, and passive per-user feedback from saved edits/deletions
 - outfit photo upload, detection persistence, crop refinement, and review support
 - AI-assisted image cleanup and metadata suggestion flows for clothing items and outfit detections, including transparent-background post-processing on generated clean images
+- persisted staged AI workflows and versioned artifacts for outfit imports and on-demand modeled item previews
+- private per-user model reference photos with explicit consent, validation, and purge support
 - HTML fallback routes for the SPA frontend
 
 ## Local Setup
@@ -63,6 +65,15 @@ The root `Gemfile.lock` is used during deploy, and `back-end/Gemfile.lock` is us
 GET     /up
 GET     /me
 DELETE  /session
+DELETE  /me/model_reference
+GET     /ai/status
+POST    /ai_workflows
+GET     /ai_workflows/:id
+POST    /ai_workflows/:id/cancel
+PATCH   /ai_workflows/:id/preview
+DELETE  /ai_workflows/:id/preview
+POST    /ai_workflows/:id/stages/:stage/approve
+POST    /ai_workflows/:id/stages/:stage/reject
 POST    /auth/:provider/callback
 GET     /auth/failure
 GET     /users
@@ -70,6 +81,11 @@ POST    /users
 GET     /users/:id
 PATCH   /users/:id
 DELETE  /users/:id
+POST    /model_reference_images
+PATCH   /model_reference_images/reorder
+GET     /model_reference_images/:id/photo
+DELETE  /model_reference_images/:id
+DELETE  /me/model_reference
 GET     /clothing_items
 POST    /clothing_items
 GET     /clothing_items/:id
@@ -77,12 +93,15 @@ PATCH   /clothing_items/:id
 DELETE  /clothing_items/:id
 POST    /clothing_items/:id/generate_clean_image
 POST    /clothing_items/:id/generate_metadata_suggestions
+POST    /clothing_items/:id/generate_modeled_image
+POST    /outfits/:id/generate_modeled_image
 GET     /outfits
 POST    /outfits
 POST    /outfits/generate
 GET     /outfits/:id
 PATCH   /outfits/:id
 DELETE  /outfits/:id
+POST    /outfits/:id/generate_metadata_suggestions
 POST    /outfit_uploads
 GET     /outfit_uploads/:id
 POST    /outfit_detections/:id/generate_clean_image
@@ -100,8 +119,17 @@ Notes:
 - Text input length is capped at every layer: `app/models/concerns/input_length_policy.rb` exposes the limits (username 60, email 254, item name 120, brand 80, category 60, outfit name 120, notes 2_000, tag 40 chars × 30 per record); the `User`/`ClothingItem`/`Outfit` models validate against the same constants and surface friendly errors; the `AddInputLengthConstraints` migration enforces matching `limit:` and `null: false` constraints at the database. SQL injection is mitigated by ActiveRecord's parameterized queries — the only raw SQL fragment in the app (`where("lower(email) = ?", ...)` in `User`) uses bound placeholders.
 - `GET /users` is paginated via Kaminari. It accepts `page` and `per_page` query params (default 24, max 100) and returns `{ users: [...], meta: { page, per_page, total_pages, total_count } }`. The index payload omits each user's `clothing_items` array and only includes a `clothing_items_count` field; per-user `GET /users/:id` still returns the full items array.
 - Outfit payloads now preserve per-piece collage presentation through `outfit_items`: each embedded outfit item can include `outfit_item_id`, `layer_order`, and `collage_layout` (`x`, `y`, `width`, `height`, `rotation`) so the frontend can reopen and edit saved collages faithfully. AI-generated outfits also include optional `generation_id`, `generated_by_ai`, and `generated_item_ids` fields. The outfit integration suite covers the round-trip contract that the collage layout returned by `PATCH /outfits/:id` matches the subsequent `GET /outfits/:id` payload used by the saved gallery.
-- `POST /outfits/generate` accepts JSON `{ "occasion": "optional vibe or event" }` or multipart form data with `occasion` plus an optional `reference_photo` flatlay image. It creates a saved outfit from owned item IDs only and returns the normal outfit payload with AI generation metadata. When a reference flatlay is present, the backend first analyzes it into structured target slots such as hoodie, white denim shorts, chain shoulder bag, or sneakers. For larger closets, generation then sends randomized closet metadata, visual descriptions, the reference flatlay, the target profile, and compact per-user feedback examples to select up to 20 candidate items while preserving strong matches for required target slots plus cross-slot signature anchors such as sequins, satin, burgundy leather, patent shine, metallic hardware, or glam mood. Final visual refinement receives all candidate metadata, the reference flatlay when present, the target profile, per-user feedback signals, and a capped set of attached display photos, then repairs the final item list to include missing required target-slot matches when available. The prompts and structured schema still require core complete looks when the candidate set supports them: dress-based outfits must include available footwear, top-based outfits should include compatible bottoms, and bag-like accessories are encouraged when they complement the look. Closets of 20 items or fewer skip the broad selector and go straight to refinement. Items without photos remain eligible through metadata and visual descriptions. If any AI stage fails, the JSON error includes `stage`, `provider`, `cause_class`, and `cause` fields to aid debugging.
+- `POST /outfits/generate` accepts JSON `{ "occasion": "optional vibe or event" }` or multipart form data with `occasion` plus an optional `reference_photo` flatlay image. It snapshots the current owned closet item IDs, persists the optional reference on an `outfit_generation` workflow, queues `OutfitGenerationJob`, and immediately returns the workflow with `202 Accepted`. The job analyzes a reference into structured target slots, shortlists candidates while preserving required slots and cross-slot visual anchors, applies complete-look rules, and performs visual refinement. It creates the outfit and preference-learning run only after the provider returns and a final cancellation check succeeds, then stores `outfit_id` and `result_name` in workflow metadata. A cancelled late response never creates an outfit, and the temporary reference attachment is purged when the job reaches a terminal state.
+- `POST /outfits/:id/generate_metadata_suggestions` accepts the editor's current `item_ids`, title, tags, and notes, verifies that every draft item belongs to the authenticated user, and returns a structured title/tag/note suggestion grounded in those pieces. It never persists the suggestion; the normal outfit update endpoint remains the only save step.
 - AI outfit feedback is stored as recommender-style logs. Each generated outfit creates an `outfit_generation_run` with candidate item IDs, generated item IDs, the structured reference profile, and generator version. Save/delete behavior appends `outfit_generation_events`: unchanged saves become positive keep signals, item-list edits become added/removed/kept correction signals, layout-only edits do not become item-change feedback, and deletes become weak negative feedback for the generated combination. Runs survive outfit deletion through a nullable `outfit_id`.
+- `AiWorkflow` is the durable lifecycle for multi-step AI work. Current kinds are `outfit_upload`, `item_clean`, `outfit_generation`, `modeled_item`, `modeled_outfit`, and `lookbook`; each initializes explicit stages and can report pending, processing, review, succeeded, rejected, deleted, failed, or cancelled state. `POST /ai_workflows/:id/cancel` marks unfinished stages and artifacts cancelled and resets subject state for item cleaning or outfit-photo detection. All durable generation jobs re-check cancellation before publishing, so an external provider response that arrives after cancellation is discarded. Successful jobs automatically approve their generated artifacts/stages where applicable. `PATCH /ai_workflows/:id/preview` accepts an edited image for an authenticated user's completed modeled workflow, replaces only the generated artifact attachment, and records the manual edit timestamp/count without altering the source item or outfit. `DELETE /ai_workflows/:id/preview` purges that generated attachment, marks the artifact and workflow deleted, and likewise leaves the source unchanged; both endpoints also accept legacy `review` workflows created before automatic approval. `AiArtifact` records provider/model/prompt provenance and keeps generated files behind the authenticated workflow payload. Artifact file URLs use Active Storage's proxy route so private generated previews stream through the app instead of redirecting the browser directly to object storage.
+- Outfit-photo creation stores `upload_id` and `upload_name` in the `outfit_upload` workflow metadata so the frontend can reopen the persisted upload after background detection finishes. The analysis job serializes startup against cancellation and restores cancelled state if a late provider failure arrives.
+
+- `POST /clothing_items/:id/generate_clean_image` now queues `CleanImageGenerationJob` and returns an `item_clean` workflow with `202 Accepted`. The job generates and removes the background off-request, publishes the cleaned attachment only after a cancellation-safe lock, updates the item cache-facing clean-image state, and records an approved artifact for provenance.
+- A user can keep up to three ordered `ModelReferenceImage` records. Uploading the first reference records consent, the first image is the primary identity anchor, individual references can be removed or reordered, and removing the final reference clears consent. Existing single-photo attachments are migrated into position one. Thumbnail bytes are served only through `GET /model_reference_images/:id/photo`, which scopes lookup to the authenticated user rather than exposing a direct storage URL.
+- `POST /clothing_items/:id/generate_modeled_image` requires the current user to have at least one validated private model reference and a consent timestamp. It queues `ModeledImageGenerationJob`, which labels and sends all ordered references to the existing OpenRouter modeled-preview prompt, requests a vertical `4:5` head-to-toe portrait on a seamless plain white studio background, and automatically publishes the finished artifact as an approved preview.
+- `POST /outfits/:id/generate_modeled_image` uses the same consent gate and queues `ModeledOutfitGenerationJob`. An optional multipart `modeled_outfit` payload can snapshot the editor's current `item_ids`, `name`, `tags`, and `notes` plus a temporary `flatlay_snapshot`; item IDs are ownership-checked and the worker generates from that immutable request snapshot rather than re-reading later-saved outfit links. Requests without a draft remain backward-compatible and use the saved outfit. Every requested item must have a display photo, and the combined identity, garment, and flat-lay inputs are limited to the provider's 14-reference maximum. Full-outfit modeling uses Seedream 4.5 through OpenRouter's dedicated `/images` API by default, sends ordered private identity references first, garment references next, and the styled flat lay last as composition-only guidance, then requests a `2K` vertical `4:5` plain-white studio result and records returned usage/cost data on the artifact. The flat-lay input is purged at terminal workflow state. The persisted `modeled_outfit` workflow moves directly to `succeeded` when ready, and outfit payloads include that workflow so the frontend can reopen or delete its preview.
+- Production defaults Active Job to Solid Queue and connects it to the `queue` database role. `config/queue.yml`, `config/recurring.yml`, `bin/jobs`, and `db/queue_schema.rb` are checked in for the worker lifecycle; `ACTIVE_JOB_QUEUE_ADAPTER` can still override the adapter for controlled environments.
 
 ## Important Internal Files
 
@@ -113,14 +141,20 @@ Notes:
   Handles detection-based clean-image and metadata suggestion requests
 - `app/controllers/image_variants_controller.rb`
   Handles temporary AI preview generation and metadata suggestions for uploaded but unsaved images
+- `app/controllers/ai_status_controller.rb`, `app/controllers/ai_workflows_controller.rb`, `app/controllers/modeled_images_controller.rb`, and `app/controllers/modeled_outfit_images_controller.rb`
+  Expose authenticated AI readiness, workflow lifecycle, and on-demand modeled item/full-outfit preview requests
 - `app/services/openrouter_image_cleaner.rb`
-  Calls OpenRouter image generation for cleaned item imagery
+  Calls OpenRouter image generation for cleaned catalog imagery, private modeled item previews, and labeled full-outfit previews
+- `app/jobs/clean_image_generation_job.rb`, `app/jobs/outfit_generation_job.rb`, `app/jobs/modeled_image_generation_job.rb`, and `app/jobs/modeled_outfit_generation_job.rb`
+  Run cancellation-safe saved-item cleaning, outfit creation, and prepare/generate/verify modeled-preview lifecycles outside request threads
 - `app/services/clean_image_background_remover.rb`
   Removes the white studio backdrop from generated clean images and produces the final transparent PNG attachment
 - `app/services/openrouter_metadata_suggester.rb`
   Calls OpenRouter structured vision responses for item metadata suggestions
 - `app/services/openrouter_outfit_generator.rb`
   Orchestrates reference-aware saved outfit generation from closet item context and wraps AI failures with stage-specific error details
+- `app/services/openrouter_outfit_metadata_suggester.rb`
+  Produces structured title, tag, and note drafts for the exact pieces currently selected in the saved-outfit editor
 - `app/services/openrouter_outfit_reference_analyzer.rb`
   Converts an uploaded flatlay reference into structured target slots used by candidate selection and final refinement
 - `app/services/outfit_reference_matcher.rb`
@@ -154,6 +188,14 @@ Notes:
 - `has_many :outfits`
 - `has_many :outfit_generation_runs`
 - `has_many :outfit_uploads`
+- `has_many :ai_workflows`
+- `has_many :model_reference_images`, with `model_reference_consent_at`
+
+### `ModelReferenceImage`
+
+- belongs to one user and stores a zero-based position
+- has one private `photo` via Active Storage
+- validates image content type, a 10 MB per-photo limit, unique ordering, and a maximum of three references per user
 
 ### `ClothingItem`
 
@@ -253,6 +295,12 @@ Supported `status` enum values:
 - `cleaned_photo` via Active Storage
 - crop-status and clean-image status metadata
 
+### `AiWorkflow`, `AiWorkflowStage`, and `AiArtifact`
+
+- `AiWorkflow`: user, kind, status, provider/model/prompt version, progress counters, optional polymorphic subject, and lifecycle timestamps
+- `AiWorkflowStage`: workflow, stable stage key, status, decision, attempts, diagnostics, and error state
+- `AiArtifact`: stage, kind/status, provider/model/prompt provenance, diagnostics, optional polymorphic subject, and generated `file` via Active Storage
+
 ## Environment
 
 See [back-end/.env.example](./.env.example) for expected variables.
@@ -264,6 +312,10 @@ See [back-end/.env.example](./.env.example) for expected variables.
 - `AI_CLEAN_SHARPEN` optionally adjusts the sharpen pass that restores edge definition on the final transparent PNG.
 - `OPENROUTER_METADATA_MODEL` can override the metadata suggestion model independently.
 - `OPENROUTER_OUTFIT_MODEL` can override the AI outfit generator model independently.
+- `OPENROUTER_IMAGE_CLEAN_MODEL` controls catalog cleaning and individual modeled-item previews; it defaults to `google/gemini-2.5-flash-image`.
+- `OPENROUTER_MODELED_OUTFIT_MODEL` independently controls full-outfit modeling through OpenRouter's Images API and defaults to `bytedance-seed/seedream-4.5`.
+- `OPENROUTER_MODELED_OUTFIT_RESOLUTION` controls full-outfit output resolution and defaults to `2K`.
+- `ACTIVE_JOB_QUEUE_ADAPTER` defaults to `solid_queue` in production and can be set to `async` or another supported adapter when needed.
 - `AI_CLEAN_BACKGROUND_FUZZ` optionally tunes how aggressively the clean-image post-process removes near-white edge background pixels. It defaults to `12%`.
 - `AI_CLEAN_SHARPEN` optionally adds a light sharpen pass after background removal to recover edge crispness in the final transparent PNG. It defaults to `0x0.8`.
 - `OUTFIT_CROP_CYCLE_LIMIT` controls refinement and verification retries.

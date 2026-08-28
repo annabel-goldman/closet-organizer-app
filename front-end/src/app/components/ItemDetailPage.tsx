@@ -1,20 +1,24 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, RotateCcw, RotateCw, Save, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, RotateCcw, RotateCw, Save, Sparkles, Trash2, Upload } from "lucide-react";
 import {
   buildItemPreviewMetadata,
   createCleanPreviewFile,
   ClothingItem,
   ClothingItemFormValues,
+  deleteModeledPreview,
   destroyClothingItem,
   fetchImageFileFromUrl,
   fetchClothingItem,
   generateClothingItemCleanImage,
   generateClothingItemMetadataSuggestions,
+  fetchAiWorkflow,
   mergeMetadataSuggestion,
   parseTagInput,
   previewMetadataSuggestions,
+  requestModeledImage,
   saveClothingItem,
   toClothingItemFormValues,
+  AiWorkflow,
 } from "../lib/closet";
 import {
   ClothingItemFormErrors,
@@ -29,6 +33,7 @@ import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import { ItemEditorWorkspace } from "./ItemEditorWorkspace";
 import { ItemMetadataFields } from "./ItemMetadataFields";
 import { ItemMetadataPanel } from "./ItemMetadataPanel";
+import { ModeledPreviewPanel } from "./shared/ModeledPreviewPanel";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import type { ExpandedImageEditorApplyContext } from "./ExpandedImageEditor";
@@ -53,6 +58,10 @@ interface ItemDetailPageProps {
   onItemDeleted: (itemId: number) => void;
   onItemSaved: (item: ClothingItem) => void;
   tagSuggestions?: string[];
+  canUseModeledPreview?: boolean;
+  backgroundCleanWorkflow?: AiWorkflow | null;
+  backgroundModeledWorkflow?: AiWorkflow | null;
+  onGenerationTaskStarted: (workflow: AiWorkflow, label: string) => void;
 }
 
 export function ItemDetailPage({
@@ -63,6 +72,10 @@ export function ItemDetailPage({
   onItemDeleted,
   onItemSaved,
   tagSuggestions = [],
+  canUseModeledPreview = false,
+  backgroundCleanWorkflow,
+  backgroundModeledWorkflow,
+  onGenerationTaskStarted,
 }: ItemDetailPageProps) {
   const shouldUseInitialItem = Boolean(initialItem?.id === itemId);
   const photoState = useItemPhotoState(initialItem?.image_url);
@@ -82,6 +95,9 @@ export function ItemDetailPage({
     useState<ExpandedImageEditorApplyContext["imageKind"]>("base");
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [modeledWorkflow, setModeledWorkflow] = useState<AiWorkflow | null>(null);
+  const [isRequestingModeledPreview, setIsRequestingModeledPreview] = useState(false);
+  const [isDeletingModeledPreview, setIsDeletingModeledPreview] = useState(false);
   const {
     data: item,
     errorMessage,
@@ -105,10 +121,37 @@ export function ItemDetailPage({
     }
 
     setFormValues(toClothingItemFormValues(item));
+    setModeledWorkflow(null);
     photoState.reset();
     originalUploadedPhotoRef.current = null;
     setSelectedImageKind("base");
   }, [item]);
+
+  useEffect(() => {
+    if (backgroundModeledWorkflow) {
+      setModeledWorkflow(backgroundModeledWorkflow);
+    }
+  }, [backgroundModeledWorkflow]);
+
+  useEffect(() => {
+    if (!modeledWorkflow || !["pending", "processing"].includes(modeledWorkflow.status)) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      try {
+        setModeledWorkflow(await fetchAiWorkflow(modeledWorkflow.id, controller.signal));
+      } catch {
+        // The main item editor remains usable if a background status refresh fails.
+      }
+    }, 1400);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [modeledWorkflow]);
 
   const isDirty = useMemo(() => {
     if (!item || !formValues) {
@@ -125,7 +168,8 @@ export function ItemDetailPage({
   const previewMetadata = formValues
     ? buildItemPreviewMetadata(parseTagInput(formValues.tags))
     : "";
-  const persistedHistoryDisabled = isSaving || isDeleting || isUndoing || isCleaningImage || isAutofillingMetadata;
+  const isBackgroundCleaning = ["pending", "processing"].includes(backgroundCleanWorkflow?.status ?? "");
+  const persistedHistoryDisabled = isSaving || isDeleting || isUndoing || isCleaningImage || isBackgroundCleaning || isAutofillingMetadata;
   const canUndoSavedChange = undoHistory.length > 0;
   const canRedoSavedChange = redoHistory.length > 0;
 
@@ -256,12 +300,9 @@ export function ItemDetailPage({
         photoState.updateSelectedFile(cleanedFile);
         setSuccessMessage("AI-cleaned preview ready. Save changes to keep it.");
       } else {
-        const updatedItem = await generateClothingItemCleanImage(item.id, formValues);
-        setUndoHistory((current) => [...current, item]);
-        setRedoHistory([]);
-        setItem(updatedItem);
-        setSuccessMessage("AI-cleaned image saved to this item.");
-        onItemSaved(updatedItem);
+        const workflow = await generateClothingItemCleanImage(item.id, formValues);
+        onGenerationTaskStarted(workflow, item.name);
+        setSuccessMessage("Image cleaning started. You can leave this page while it runs.");
       }
     } catch (error) {
       setErrorMessage(
@@ -319,6 +360,47 @@ export function ItemDetailPage({
       );
     } finally {
       setIsAutofillingMetadata(false);
+    }
+  }
+
+  async function handleRequestModeledPreview() {
+    if (!item) {
+      return;
+    }
+
+    setIsRequestingModeledPreview(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const workflow = await requestModeledImage(item.id);
+      setModeledWorkflow(workflow);
+      onGenerationTaskStarted(workflow, item.name);
+      setSuccessMessage("Modeled preview queued. It will appear here when it is ready.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to create a modeled preview.");
+    } finally {
+      setIsRequestingModeledPreview(false);
+    }
+  }
+
+  async function handleDeleteModeledPreview() {
+    if (!modeledWorkflow) {
+      return;
+    }
+
+    setIsDeletingModeledPreview(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      const workflow = await deleteModeledPreview(modeledWorkflow.id);
+      setModeledWorkflow(workflow);
+      onGenerationTaskStarted(workflow, item?.name ?? "modeled item preview");
+      setSuccessMessage("Modeled preview deleted.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to delete the modeled preview.");
+    } finally {
+      setIsDeletingModeledPreview(false);
     }
   }
 
@@ -498,6 +580,18 @@ export function ItemDetailPage({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+          {canUseModeledPreview ? (
+            <PrimitiveButton
+              type="button"
+              onClick={() => void handleRequestModeledPreview()}
+              disabled={isRequestingModeledPreview || isCleaningImage || isBackgroundCleaning || !item.image_url}
+              variant="outline"
+              className="border-foreground/30"
+            >
+              <Sparkles className="h-4 w-4" />
+              {isRequestingModeledPreview ? "Queueing..." : "Model on me"}
+            </PrimitiveButton>
+          ) : null}
         </div>
       }
       imageUrl={photoState.imageUrl}
@@ -521,13 +615,13 @@ export function ItemDetailPage({
           strokeWidth={1.1}
         />
       }
-      isPreviewProcessing={isCleaningImage}
+      isPreviewProcessing={isCleaningImage || isBackgroundCleaning}
       previewTopAction={
         <AiCleanImageButton
           className="size-11 border border-white/75 shadow-sm bg-white/70 p-0 backdrop-blur-sm hover:bg-white/85"
           disabled={photoState.removeExisting || (!photoState.selectedFile && !item.image_url)}
           iconOnly
-          isLoading={isCleaningImage}
+          isLoading={isCleaningImage || isBackgroundCleaning}
           label="AI clean PNG"
           onClick={() => void handleCleanImage()}
         />
@@ -571,6 +665,19 @@ export function ItemDetailPage({
           {successMessage}
         </div>
       )}
+
+      {canUseModeledPreview && modeledWorkflow && modeledWorkflow.status !== "deleted" ? (
+        <ModeledPreviewPanel
+          workflow={modeledWorkflow}
+          isDeleting={isDeletingModeledPreview}
+          onDelete={() => void handleDeleteModeledPreview()}
+          onWorkflowUpdated={(workflow) => {
+            setModeledWorkflow(workflow);
+            onGenerationTaskStarted(workflow, item.name);
+            setSuccessMessage("Modeled preview edits saved.");
+          }}
+        />
+      ) : null}
 
       <ItemMetadataPanel
         action={

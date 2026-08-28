@@ -31,7 +31,10 @@ class UsersController < ApplicationController
 
   def update
     if @user.update(user_params)
-      render json: payloads.user(@user)
+      render json: payloads.user(
+        @user,
+        include_model_references: @user == current_user
+      )
     else
       render_validation_errors(@user)
     end
@@ -49,7 +52,12 @@ class UsersController < ApplicationController
   end
 
   def user_params
-    permitted = params.require(:user).permit(:username, :preferred_style, :password, :password_confirmation)
+    permitted = params.require(:user).permit(
+      :username,
+      :preferred_style,
+      :password,
+      :password_confirmation
+    )
 
     if permitted[:password].blank? && permitted[:password_confirmation].blank?
       permitted.except(:password, :password_confirmation)

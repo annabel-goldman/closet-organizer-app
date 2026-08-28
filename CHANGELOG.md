@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- Added the current styled flat-lay canvas as a temporary composition reference for full-outfit model generation, preserving the user's item sizing, rotation, layering, and visual arrangement as wearable styling guidance while keeping individual garment images authoritative for item identity.
+- Generalized the lower-right generation task toast across modeled outfits, modeled items, saved-item image cleaning, AI outfit creation, and outfit-photo detection, allowing navigation during processing and cancellation from any signed-in page; completed notices link back to their result, including restoring a finished outfit-photo import, while durable jobs discard late provider results after cancellation.
+- Reused the existing full-screen item image editor for generated modeled item and outfit previews, adding crop presets, rotation, magic-wand background erasure, edit-level undo/redo, and authenticated persistence of the edited preview.
+- Allowed `Model this look` to run immediately against the outfit editor's current unsaved pieces, order, title, tags, and notes by snapshotting the validated draft into the background workflow.
+- Added a page-level `Model view` toggle to the saved-outfits gallery so every card switches from its flat lay to its modeled image, with a consistent neutral model placeholder when no generated preview exists; card actions read `Model this look` for empty previews and `Regenerate model` for existing previews, with replacement confirmation before regeneration.
+- Added an icon-only `AI fill details` action with a descriptive tooltip to the saved-outfit editor, generating a draft title, tags, and notes from the editor's current owned closet pieces without saving until the user reviews and confirms the changes.
+- Aligned the model-reference dialog heading and supporting copy with the app's shared Cormorant Garamond display and Outfit body typography primitives.
+- Simplified modeled previews so successful item and outfit generations are approved automatically and immediately available; users now discard unwanted previews with the existing confirmed delete control, and the internal prepare/generate/verify status card is no longer shown.
+- Split full-outfit modeling from the catalog-cleaning model and moved it to Seedream 4.5 through OpenRouter's dedicated Images API, sending private identity references first, supporting up to 14 total references, requesting `2K` vertical output, and recording provider usage/cost diagnostics.
+- Fixed modeled item and outfit generation to request a vertical `4:5` portrait canvas with head-to-toe framing instead of allowing landscape output.
+- Moved modeled-outfit generation into a global lower-right task toast that persists across page navigation, supports cancellation from any signed-in page, and changes to a generated-preview notice when the artifact is ready; cancelled provider responses are now discarded instead of being attached late.
+- Added a confirmed delete control directly on approved modeled item and outfit images, permanently purging the generated file while preserving the underlying closet item, outfit, and flat lay.
+- Updated modeled item and outfit prompts to place the person against a seamless plain white studio background with neutral lighting and only a subtle grounding shadow.
+- Fixed modeled-preview rejection so it rejects the generated artifact, removes it from the outfit carousel and item preview, and persists the workflow as rejected instead of leaving the image in review.
+- Expanded private model references from one photo to an ordered set of up to three, with authenticated thumbnails, primary-reference ordering, individual/all removal, existing-photo migration, and multi-angle identity context for item and outfit generation.
+- Fixed generated modeled-preview images to stream through the app's same-origin Active Storage proxy instead of relying on a browser-visible storage redirect.
+- Added a flat-lay/modeled carousel to the saved-outfit editor, revealing directional controls and touch-swipe navigation as soon as a modeled artifact is available, keeping its page indicator below the image canvas, and avoiding redundant labels over the imagery.
+- Added outfit-first `Model this look` previews on saved outfit cards and the outfit editor, generating one private full-look image from every outfit piece plus the user's model reference photo.
+- Added persisted `modeled_outfit` workflow payloads, background generation, automatic artifact publication, and deletion lifecycle support while retaining the item-level modeled preview.
+- Reused the shared modeled-preview image treatment across item and outfit surfaces, with generated full looks tied to the requested editor snapshot.
+- Added durable staged AI workflow, stage, and artifact records with user-scoped status payloads for outfit imports and modeled previews.
+- Added a private per-user model-reference photo with validation, explicit consent timestamp, and purge endpoint; no model-reference URL is exposed in user payloads.
+- Added an on-demand `Model on me` surface to the existing item editor, backed by Solid Queue and an OpenRouter modeled-preview prompt, with in-place polling and automatic publication when generation succeeds.
+- Added shared AI stage timeline and before/after comparison primitives for future review surfaces while keeping active generation status in the global toast instead of a separate AI workspace.
+- Added production Solid Queue configuration, worker entrypoint, queue schema, and queue adapter readiness reporting.
+- Updated architecture documentation and project index for the new workflow, artifact, queue, and private-reference boundaries.
 - Added a two-minute product demo to the public frontend assets and linked it from the logged-out homepage and project documentation.
 - Added an invite-only confirmation before Google sign-in, with approval instructions and an explicit `Continue to sign in` action.
 - Updated Brakeman to `8.0.5` so the CI security scan continues enforcing the latest scanner release.

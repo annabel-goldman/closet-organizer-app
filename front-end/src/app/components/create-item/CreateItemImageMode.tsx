@@ -15,6 +15,7 @@ import { ItemMetadataFields } from "../ItemMetadataFields";
 import { ItemMetadataPanel } from "../ItemMetadataPanel";
 import { PrimitiveButton } from "../primitives/PrimitiveButton";
 import { PrimitiveConfirmationDialog } from "../primitives/PrimitiveConfirmationDialog";
+import { PrimitiveText } from "../primitives/PrimitiveText";
 import { AiActionLoadingNotice } from "../shared/AiActionLoadingNotice";
 import { UploadWorkspace } from "../UploadWorkspace";
 import type {

@@ -10,6 +10,8 @@ Curated Closet is a monorepo with a Rails JSON API in `back-end/` and a React + 
 - Search, filter, and sort on the closet page
 - Saved outfits built from closet items
 - Outfit-photo upload and detection review flow
+- Staged AI workflows for upload review and on-demand private modeled item previews
+- Explicit per-user private model-reference consent and removal
 - Flash/error/empty-state handling across the main user journey
 - Heroku deployment from the repository root
 
@@ -21,6 +23,8 @@ Curated Closet is a monorepo with a Rails JSON API in `back-end/` and a React + 
 - Choose item types from the canonical wardrobe taxonomy while AI and legacy aliases normalize into those supported types
 - Generate AI metadata suggestions for item type, name, brand, and tags
 - Generate cleaned catalog-style item images
+- Keep a private model reference photo for optional modeled item previews, with an explicit consent/removal flow
+- Queue and review modeled item previews through the existing item-detail surface
 - Undo or redo manual add-item, detected-item draft, and saved item-detail edits from the main item workflows
 - Build outfits from the closet cart and browse/edit saved outfits at `/outfits`
 - Add or remove closet pieces directly while editing a saved outfit
@@ -152,9 +156,10 @@ npm run dev
 
 `back-end/db/seeds.rb` currently creates:
 
-- one admin Google-backed user: `annabel_goldman`
-- the Northwestern email `annabelgoldman2025@u.northwestern.edu`
+- one admin Google-backed user: `annabel_goldman` with the Northwestern email
+  `annabelgoldman2025@u.northwestern.edu`
 - a 20-item demo closet with realistic wardrobe tags
+- approximately 1,050 additional generated users, 5,200 clothing items, and 2,100 outfits for pagination and performance testing
 
 ## Testing And CI
 

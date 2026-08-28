@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Plus, RotateCcw, RotateCw, Upload } from "lucide-react";
 import {
   buildItemPreviewMetadata,
+  AiWorkflow,
   ClothingItem,
   ClothingItemFormValues,
   createClothingItem,
@@ -60,8 +61,10 @@ interface CreateItemPageProps {
   userId: number | null;
   initialMode?: CreateItemMode;
   initialUser?: User | null;
+  initialOutfitUploadId?: number | null;
   onBack: () => void;
   onItemsCreated: (items: ClothingItem[]) => void;
+  onGenerationTaskStarted: (workflow: AiWorkflow, label: string) => void;
 }
 
 interface ManualCreateUndoSnapshot {
@@ -77,10 +80,13 @@ export function CreateItemPage({
   userId,
   initialMode = "manual",
   initialUser,
+  initialOutfitUploadId = null,
   onBack,
   onItemsCreated,
+  onGenerationTaskStarted,
 }: CreateItemPageProps) {
   const detectionPollControllerRef = useRef<AbortController | null>(null);
+  const resumedOutfitUploadIdRef = useRef<number | null>(null);
   const detectionMetadataRunRef = useRef(0);
   const originalUploadedPhotoRef = useRef<File | null>(null);
   const pendingManualCleanPromiseRef = useRef<Promise<File> | null>(null);
@@ -265,7 +271,7 @@ export function CreateItemPage({
       const nextUpload = await fetchOutfitUpload(uploadId, signal);
       setOutfitUpload(nextUpload);
 
-      if (nextUpload.status === "succeeded" || nextUpload.status === "failed") {
+      if (["succeeded", "failed", "cancelled"].includes(nextUpload.status)) {
         return nextUpload;
       }
 
@@ -287,6 +293,54 @@ export function CreateItemPage({
     throw new DOMException("Aborted", "AbortError");
   }
 
+  useEffect(() => {
+    if (!initialOutfitUploadId || resumedOutfitUploadIdRef.current === initialOutfitUploadId) {
+      return;
+    }
+
+    resumedOutfitUploadIdRef.current = initialOutfitUploadId;
+    if (outfitUpload?.id === initialOutfitUploadId) {
+      return;
+    }
+
+    detectionPollControllerRef.current?.abort();
+    const controller = new AbortController();
+    detectionPollControllerRef.current = controller;
+
+    void (async () => {
+      setIsDetecting(true);
+      setErrorMessage("");
+
+      try {
+        let restoredUpload = await fetchOutfitUpload(initialOutfitUploadId, controller.signal);
+        setOutfitUpload(restoredUpload);
+
+        if (["pending", "processing"].includes(restoredUpload.status)) {
+          restoredUpload = await waitForOutfitUpload(restoredUpload.id, controller.signal);
+        }
+
+        if (restoredUpload.status === "failed" && restoredUpload.error_message) {
+          setErrorMessage(restoredUpload.error_message);
+        } else if (restoredUpload.status === "succeeded") {
+          await autofillDetectedMetadata(restoredUpload.detections);
+        }
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setErrorMessage(
+            error instanceof Error ? error.message : "Unable to restore this analyzed outfit photo.",
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          detectionPollControllerRef.current = null;
+          setIsDetecting(false);
+        }
+      }
+    })();
+
+    return () => controller.abort();
+  }, [initialOutfitUploadId]);
+
   async function detectItems(file: File) {
     if (!userId) {
       setErrorMessage("A user is required before you can upload from an image.");
@@ -301,6 +355,9 @@ export function CreateItemPage({
     try {
       const nextUpload = await createOutfitUpload(userId, { photo: file });
       setOutfitUpload(nextUpload);
+      if (nextUpload.ai_workflow) {
+        onGenerationTaskStarted(nextUpload.ai_workflow, file.name);
+      }
 
       if (nextUpload.status === "pending" || nextUpload.status === "processing") {
         const controller = new AbortController();

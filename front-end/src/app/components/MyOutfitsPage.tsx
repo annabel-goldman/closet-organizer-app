@@ -1,23 +1,34 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Pencil, Shirt, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { Pencil, Shirt, Sparkles, Trash2, Upload, UserRound, X } from "lucide-react";
 import {
   ClothingItem,
+  deleteModeledPreview,
   destroyOutfit,
+  formatTagInput,
   generateOutfit,
+  generateOutfitMetadataSuggestions,
   OutfitDraft,
   Outfit,
   parseTagInput,
+  requestModeledOutfit,
   updateOutfit,
   User,
+  AiWorkflow,
 } from "../lib/closet";
 import { OutfitCollageCanvas } from "./OutfitCollageCanvas";
 import { OutfitCollageLayersPanel } from "./OutfitCollageLayersPanel";
+import { OutfitPreviewCarousel } from "./OutfitPreviewCarousel";
 import {
   OutfitCollageLayout,
   reorderCollageLayers,
   resolveOutfitCollageLayouts,
 } from "../lib/outfitCollage";
+import {
+  resolveModeledWorkflowImageUrl,
+  resolveOutfitGalleryModelPreview,
+} from "../lib/modeledPreview";
+import { createOutfitFlatlaySnapshot } from "../lib/outfitFlatlaySnapshot";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import {
@@ -29,23 +40,29 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
+import { PrimitiveConfirmationDialog } from "./primitives/PrimitiveConfirmationDialog";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import { MAX_OUTFIT_NAME, MAX_OUTFIT_NOTES } from "../lib/inputLengthPolicy";
 
 interface MyOutfitsPageProps {
   isLoading: boolean;
   loadErrorMessage: string;
   onOutfitDeleted: (outfitId: number) => void;
-  onOutfitGenerated: (outfit: Outfit) => void;
+  onGenerationTaskStarted: (workflow: AiWorkflow, label: string) => void;
+  onOutfitModeledWorkflowUpdated: (outfitId: number, workflow: AiWorkflow) => void;
   onOutfitUpdated: (outfit: Outfit) => void;
   outfits: Outfit[];
   user: User;
+  canUseModeledPreview: boolean;
 }
 
 interface FlashState {
   kind: "success" | "error";
   message: string;
 }
+
+type OutfitGalleryView = "flatlay" | "modeled";
 
 function outfitToFormState(outfit: Outfit): OutfitDraft {
   return {
@@ -60,10 +77,12 @@ export function MyOutfitsPage({
   isLoading,
   loadErrorMessage,
   onOutfitDeleted,
-  onOutfitGenerated,
+  onGenerationTaskStarted,
+  onOutfitModeledWorkflowUpdated,
   onOutfitUpdated,
   outfits,
   user,
+  canUseModeledPreview,
 }: MyOutfitsPageProps) {
   const [flash, setFlash] = useState<FlashState | null>(null);
   const [editingOutfitId, setEditingOutfitId] = useState<number | null>(null);
@@ -80,6 +99,13 @@ export function MyOutfitsPage({
   const [generationOccasion, setGenerationOccasion] = useState("");
   const [generationReferencePhoto, setGenerationReferencePhoto] = useState<File | null>(null);
   const [isGeneratingOutfit, setIsGeneratingOutfit] = useState(false);
+  const [modeledWorkflow, setModeledWorkflow] = useState<AiWorkflow | null>(null);
+  const [isRequestingModeledPreview, setIsRequestingModeledPreview] = useState(false);
+  const [isDeletingModeledPreview, setIsDeletingModeledPreview] = useState(false);
+  const [isAutofillingOutfitDetails, setIsAutofillingOutfitDetails] = useState(false);
+  const [galleryView, setGalleryView] = useState<OutfitGalleryView>("flatlay");
+  const [regenerationConfirmationOutfitId, setRegenerationConfirmationOutfitId] = useState<number | null>(null);
+  const outfitDetailsRequestIdRef = useRef(0);
 
   const sortedItems = useMemo(
     () => [...user.clothing_items].sort((left, right) => left.name.localeCompare(right.name)),
@@ -101,6 +127,8 @@ export function MyOutfitsPage({
   const editingOutfit = editingOutfitId
     ? outfits.find((outfit) => outfit.id === editingOutfitId) ?? null
     : null;
+  const selectedItemsCanBeModeled = selectedItems.length > 0 && selectedItems.every((item) => Boolean(item.image_url));
+  const modeledImageUrl = resolveModeledWorkflowImageUrl(modeledWorkflow);
 
   function showFlash(kind: FlashState["kind"], message: string) {
     setFlash({ kind, message });
@@ -136,8 +164,18 @@ export function MyOutfitsPage({
     return () => window.clearTimeout(timeout);
   }, [flash]);
 
+  useEffect(() => {
+    if (editingOutfitId) {
+      setModeledWorkflow(editingOutfit?.modeled_workflow ?? null);
+    }
+  }, [editingOutfit?.modeled_workflow, editingOutfitId]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (isAutofillingOutfitDetails) {
+      return;
+    }
 
     const trimmedName = formState.name.trim();
     if (!trimmedName) {
@@ -200,17 +238,17 @@ export function MyOutfitsPage({
     setFlash(null);
 
     try {
-      const generatedOutfit = await generateOutfit({
+      const occasionLabel = generationOccasion.trim() || "a new outfit";
+      const workflow = await generateOutfit({
         occasion: generationOccasion,
         referencePhoto: generationReferencePhoto,
       });
 
-      onOutfitGenerated(generatedOutfit);
+      onGenerationTaskStarted(workflow, occasionLabel);
       setGenerationOccasion("");
       setGenerationReferencePhoto(null);
       setIsGenerateDialogOpen(false);
-      startEditing(generatedOutfit);
-      showFlash("success", "AI outfit generated.");
+      showFlash("success", "Outfit generation started. You can leave this page while it runs.");
     } catch (error) {
       showFlash("error", error instanceof Error ? error.message : "Unable to generate an outfit.");
     } finally {
@@ -224,10 +262,13 @@ export function MyOutfitsPage({
     const nextLayouts = resolveOutfitCollageLayouts(outfit.items);
     setEditorLayouts(nextLayouts);
     setSelectedCollageItemId(outfit.items[0]?.id ?? null);
+    setModeledWorkflow(outfit.modeled_workflow ?? null);
     setFlash(null);
   }
 
   function resetForm() {
+    outfitDetailsRequestIdRef.current += 1;
+    setIsAutofillingOutfitDetails(false);
     setEditingOutfitId(null);
     setFormState({
       name: "",
@@ -237,6 +278,119 @@ export function MyOutfitsPage({
     });
     setEditorLayouts({});
     setSelectedCollageItemId(null);
+    setModeledWorkflow(null);
+  }
+
+  async function handleRequestModeledPreview(
+    outfitId: number,
+    draft: OutfitDraft,
+    layouts: Record<number, OutfitCollageLayout>,
+  ) {
+    if (!canUseModeledPreview) {
+      showFlash("error", "Add a private model photo before modeling an outfit.");
+      return;
+    }
+
+    const draftItems = resolveItemsById(draft.itemIds);
+    if (
+      draftItems.length === 0 ||
+      draftItems.length !== draft.itemIds.length ||
+      !draftItems.every((item) => item.image_url)
+    ) {
+      showFlash("error", "Every item in this outfit needs a photo before modeling the full look.");
+      return;
+    }
+
+    setIsRequestingModeledPreview(true);
+    setFlash(null);
+
+    try {
+      const flatlaySnapshot = await createOutfitFlatlaySnapshot({
+        items: draftItems,
+        layouts,
+        outfitName: draft.name,
+      });
+      const workflow = await requestModeledOutfit(outfitId, {
+        itemIds: draft.itemIds,
+        name: draft.name,
+        notes: draft.notes,
+        tags: parseTagInput(draft.tagInput),
+      }, flatlaySnapshot);
+      setModeledWorkflow(workflow);
+      onOutfitModeledWorkflowUpdated(outfitId, workflow);
+    } catch (error) {
+      showFlash("error", error instanceof Error ? error.message : "Unable to create a modeled outfit preview.");
+    } finally {
+      setIsRequestingModeledPreview(false);
+    }
+  }
+
+  function handleStartModeling(outfit: Outfit) {
+    const draft = outfitToFormState(outfit);
+    const layouts = resolveOutfitCollageLayouts(outfit.items);
+    startEditing(outfit);
+    void handleRequestModeledPreview(outfit.id, draft, layouts);
+  }
+
+  async function handleDeleteModeledPreview() {
+    if (!modeledWorkflow || !editingOutfitId) {
+      return;
+    }
+
+    setIsDeletingModeledPreview(true);
+    setFlash(null);
+    try {
+      const nextWorkflow = await deleteModeledPreview(modeledWorkflow.id);
+      setModeledWorkflow(nextWorkflow);
+      onOutfitModeledWorkflowUpdated(editingOutfitId, nextWorkflow);
+      showFlash("success", "Modeled outfit preview deleted.");
+    } catch (error) {
+      showFlash("error", error instanceof Error ? error.message : "Unable to delete the modeled outfit preview.");
+    } finally {
+      setIsDeletingModeledPreview(false);
+    }
+  }
+
+  async function handleAutofillOutfitDetails() {
+    if (!editingOutfit || formState.itemIds.length === 0) {
+      showFlash("error", "Add at least one item before filling outfit details.");
+      return;
+    }
+
+    setIsAutofillingOutfitDetails(true);
+    setFlash(null);
+    const requestId = outfitDetailsRequestIdRef.current + 1;
+    outfitDetailsRequestIdRef.current = requestId;
+    try {
+      const suggestion = await generateOutfitMetadataSuggestions({
+        outfitId: editingOutfit.id,
+        itemIds: formState.itemIds,
+        name: formState.name,
+        notes: formState.notes,
+        tags: parseTagInput(formState.tagInput),
+      });
+      if (outfitDetailsRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setFormState((current) => ({
+        ...current,
+        name: suggestion.name || current.name,
+        notes: suggestion.notes,
+        tagInput: formatTagInput(suggestion.tags),
+      }));
+      showFlash("success", "AI filled the outfit details. Review them before saving.");
+    } catch (error) {
+      if (outfitDetailsRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      showFlash("error", error instanceof Error ? error.message : "Unable to fill the outfit details.");
+    } finally {
+      if (outfitDetailsRequestIdRef.current === requestId) {
+        setIsAutofillingOutfitDetails(false);
+      }
+    }
   }
 
   function closeGenerateDialog() {
@@ -301,6 +455,17 @@ export function MyOutfitsPage({
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
           <PrimitiveButton
             type="button"
+            variant={galleryView === "modeled" ? "default" : "outline"}
+            className="h-auto px-5 py-3"
+            aria-pressed={galleryView === "modeled"}
+            onClick={() => setGalleryView((current) => current === "modeled" ? "flatlay" : "modeled")}
+            title={galleryView === "modeled" ? "Show outfit flat lays" : "Show modeled outfits"}
+          >
+            <UserRound className="h-4 w-4" />
+            Model view
+          </PrimitiveButton>
+          <PrimitiveButton
+            type="button"
             variant="outline"
             className="h-auto px-5 py-3"
             onClick={() => setIsGenerateDialogOpen(true)}
@@ -346,85 +511,151 @@ export function MyOutfitsPage({
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {outfits.map((outfit, index) => (
-              <motion.article
-                key={outfit.id}
-                initial={{ opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: index * 0.04 }}
-                className="mx-auto w-full max-w-[22rem] overflow-hidden border border-border bg-card"
-              >
-                <div className="px-5 pt-5">
-                  <OutfitCollageCanvas
-                    items={outfit.items}
-                    maxVisibleItems={6}
-                    className="mx-auto w-full max-w-[15.5rem]"
-                  />
-                </div>
+            {outfits.map((outfit, index) => {
+              const galleryModelPreview = resolveOutfitGalleryModelPreview(outfit.modeled_workflow);
 
-                <div className="space-y-4 p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
-                        Saved Look
-                      </PrimitiveText>
-                      {outfit.generated_by_ai ? (
-                        <PrimitiveText
-                          as="p"
-                          variant="caption"
-                          tone="muted"
-                          className="mb-2 inline-flex items-center gap-1 uppercase tracking-[0.18em]"
-                        >
-                          <Sparkles className="h-3 w-3" />
-                          AI generated
+              return (
+                <motion.article
+                  key={outfit.id}
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: index * 0.04 }}
+                  className="mx-auto w-full max-w-[22rem] overflow-hidden border border-border bg-card"
+                >
+                  <div className="px-5 pt-5">
+                    {galleryView === "modeled" ? (
+                      galleryModelPreview.kind === "image" ? (
+                        <div className="relative mx-auto aspect-[4/5] w-full max-w-[15.5rem] overflow-hidden bg-stone-100">
+                          <img
+                            src={galleryModelPreview.imageUrl}
+                            alt={`Modeled version of ${outfit.name}`}
+                            className="h-full w-full object-contain"
+                          />
+                        </div>
+                      ) : (
+                        <div className="relative mx-auto flex aspect-[4/5] w-full max-w-[15.5rem] flex-col items-center justify-center overflow-hidden border border-border/70 bg-stone-100 px-6 text-center">
+                          <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/80 to-transparent" aria-hidden="true" />
+                          <UserRound className="relative mb-5 h-16 w-16 stroke-[1.1] text-muted-foreground/55" aria-hidden="true" />
+                          <PrimitiveText as="p" variant="title" font="serif" className="relative mb-2">
+                            Model preview
+                          </PrimitiveText>
+                          <PrimitiveText as="p" variant="caption" tone="muted" className="relative max-w-40">
+                            No modeled version has been created yet.
+                          </PrimitiveText>
+                        </div>
+                      )
+                    ) : (
+                      <OutfitCollageCanvas
+                        items={outfit.items}
+                        maxVisibleItems={6}
+                        className="mx-auto w-full max-w-[15.5rem]"
+                      />
+                    )}
+                  </div>
+
+                  <div className="space-y-4 p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
+                          Saved Look
                         </PrimitiveText>
-                      ) : null}
-                      <PrimitiveText as="h3" variant="display" font="serif" className="break-words">
-                        {outfit.name}
-                      </PrimitiveText>
-                      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-                        <PrimitiveText as="p" variant="bodySm" tone="muted">
-                          <Shirt className="mr-1 inline h-3 w-3" />
-                          {outfit.items.length} {outfit.items.length === 1 ? "piece" : "pieces"}
-                        </PrimitiveText>
-                        {outfit.tags && outfit.tags.length > 0 ? (
-                          <PrimitiveText as="p" variant="bodySm" tone="muted">
-                            {outfit.tags.join(" · ")}
+                        {outfit.generated_by_ai ? (
+                          <PrimitiveText
+                            as="p"
+                            variant="caption"
+                            tone="muted"
+                            className="mb-2 inline-flex items-center gap-1 uppercase tracking-[0.18em]"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            AI generated
                           </PrimitiveText>
                         ) : null}
+                        <PrimitiveText as="h3" variant="display" font="serif" className="break-words">
+                          {outfit.name}
+                        </PrimitiveText>
+                        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+                          <PrimitiveText as="p" variant="bodySm" tone="muted">
+                            <Shirt className="mr-1 inline h-3 w-3" />
+                            {outfit.items.length} {outfit.items.length === 1 ? "piece" : "pieces"}
+                          </PrimitiveText>
+                          {outfit.tags && outfit.tags.length > 0 ? (
+                            <PrimitiveText as="p" variant="bodySm" tone="muted">
+                              {outfit.tags.join(" · ")}
+                            </PrimitiveText>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <PrimitiveButton
+                          onClick={() => startEditing(outfit)}
+                          variant="outline"
+                          size="icon"
+                          aria-label="Edit outfit"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </PrimitiveButton>
+                        <PrimitiveButton
+                          onClick={() => void handleDelete(outfit.id)}
+                          variant="outline"
+                          size="icon"
+                          className="hover:border-destructive"
+                          aria-label="Delete outfit"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </PrimitiveButton>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <PrimitiveButton
-                        onClick={() => startEditing(outfit)}
-                        variant="outline"
-                        size="icon"
-                        aria-label="Edit outfit"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </PrimitiveButton>
-                      <PrimitiveButton
-                        onClick={() => void handleDelete(outfit.id)}
-                        variant="outline"
-                        size="icon"
-                        className="hover:border-destructive"
-                        aria-label="Delete outfit"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </PrimitiveButton>
-                    </div>
+                    {outfit.notes ? (
+                      <PrimitiveText as="p" variant="bodySm" tone="muted" className="line-clamp-3">
+                        {outfit.notes}
+                      </PrimitiveText>
+                    ) : null}
+
+                    {canUseModeledPreview && galleryView === "modeled" ? (
+                      galleryModelPreview.kind === "image" ? (
+                        <PrimitiveConfirmationDialog
+                          open={regenerationConfirmationOutfitId === outfit.id}
+                          onOpenChange={(open) => setRegenerationConfirmationOutfitId(open ? outfit.id : null)}
+                          title="Replace modeled image?"
+                          description={`Regenerating will replace the existing modeled image for “${outfit.name}”.`}
+                          cancelLabel="Keep existing image"
+                          confirmLabel="Regenerate model"
+                          onConfirm={() => {
+                            setRegenerationConfirmationOutfitId(null);
+                            handleStartModeling(outfit);
+                          }}
+                        >
+                          <PrimitiveButton
+                            type="button"
+                            variant="outline"
+                            className="w-full"
+                            disabled={isRequestingModeledPreview || !outfit.items.length || !outfit.items.every((item) => item.image_url)}
+                            title={!outfit.items.every((item) => item.image_url) ? "Every outfit item needs a photo" : undefined}
+                          >
+                            <UserRound className="h-4 w-4" />
+                            Regenerate model
+                          </PrimitiveButton>
+                        </PrimitiveConfirmationDialog>
+                      ) : (
+                        <PrimitiveButton
+                          type="button"
+                          variant="outline"
+                          className="w-full"
+                          disabled={isRequestingModeledPreview || !outfit.items.length || !outfit.items.every((item) => item.image_url)}
+                          onClick={() => handleStartModeling(outfit)}
+                          title={!outfit.items.every((item) => item.image_url) ? "Every outfit item needs a photo" : undefined}
+                        >
+                          <UserRound className="h-4 w-4" />
+                          Model this look
+                        </PrimitiveButton>
+                      )
+                    ) : null}
                   </div>
-
-                  {outfit.notes ? (
-                    <PrimitiveText as="p" variant="bodySm" tone="muted" className="line-clamp-3">
-                      {outfit.notes}
-                    </PrimitiveText>
-                  ) : null}
-
-                </div>
-              </motion.article>
-            ))}
+                </motion.article>
+              );
+            })}
           </div>
         )}
       </section>
@@ -477,15 +708,29 @@ export function MyOutfitsPage({
                       </div>
                       <div className="min-w-0">
                         <div className="mx-auto w-full max-w-[min(20rem,calc((100vh-20rem)*0.8))] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.16)] sm:max-w-[min(32rem,calc((100vh-22rem)*0.8))] lg:max-w-[min(72rem,calc((100vh-16rem)*0.8))]">
-                        <OutfitCollageCanvas
-                          items={selectedItems}
-                          layouts={editorLayouts}
-                          editable
-                          selectedItemId={selectedCollageItemId}
-                          onSelectItem={setSelectedCollageItemId}
-                          onLayoutsChange={setEditorLayouts}
-                          className="w-full"
-                        />
+                          <OutfitPreviewCarousel
+                            modeledImageUrl={modeledImageUrl}
+                            modeledWorkflow={modeledWorkflow}
+                            canDeleteModeledImage={modeledWorkflow?.status === "succeeded" || modeledWorkflow?.status === "review"}
+                            isDeletingModeledImage={isDeletingModeledPreview}
+                            onDeleteModeledImage={() => void handleDeleteModeledPreview()}
+                            onModeledWorkflowUpdated={(workflow) => {
+                              setModeledWorkflow(workflow);
+                              onOutfitModeledWorkflowUpdated(editingOutfit.id, workflow);
+                              showFlash("success", "Modeled preview edits saved.");
+                            }}
+                            flatlay={(
+                              <OutfitCollageCanvas
+                                items={selectedItems}
+                                layouts={editorLayouts}
+                                editable
+                                selectedItemId={selectedCollageItemId}
+                                onSelectItem={setSelectedCollageItemId}
+                                onLayoutsChange={setEditorLayouts}
+                                className="w-full"
+                              />
+                            )}
+                          />
                         </div>
                       </div>
                     </div>
@@ -528,6 +773,15 @@ export function MyOutfitsPage({
               ) : null}
 
               <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="flex justify-end">
+                  <AiMetadataAutofillButton
+                    label="AI fill details"
+                    isLoading={isAutofillingOutfitDetails}
+                    disabled={isSaving || formState.itemIds.length === 0}
+                    onClick={() => void handleAutofillOutfitDetails()}
+                  />
+                </div>
+
                 <label className="block space-y-2">
                   <PrimitiveText as="span" variant="bodySm" tone="muted">
                     Title
@@ -582,7 +836,23 @@ export function MyOutfitsPage({
                 ) : null}
 
                 <DialogFooter className="pt-2 sm:justify-start">
-                  <PrimitiveButton type="submit" disabled={isSaving} variant="outline">
+                  {canUseModeledPreview ? (
+                    <PrimitiveButton
+                      type="button"
+                      variant="outline"
+                      disabled={isRequestingModeledPreview || !selectedItemsCanBeModeled}
+                      onClick={() => editingOutfit && void handleRequestModeledPreview(
+                        editingOutfit.id,
+                        formState,
+                        editorLayouts,
+                      )}
+                      title={!selectedItemsCanBeModeled ? "Every outfit item needs a photo" : undefined}
+                    >
+                      <UserRound className="h-4 w-4" />
+                      {isRequestingModeledPreview ? "Queueing..." : "Model this look"}
+                    </PrimitiveButton>
+                  ) : null}
+                  <PrimitiveButton type="submit" disabled={isSaving || isAutofillingOutfitDetails} variant="outline">
                     Save Changes
                   </PrimitiveButton>
                   <PrimitiveButton type="button" onClick={resetForm} variant="outline">

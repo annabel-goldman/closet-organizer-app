@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_01_190000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_28_013000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -39,6 +39,68 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_190000) do
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
   end
 
+  create_table "ai_artifacts", force: :cascade do |t|
+    t.integer "ai_workflow_stage_id", null: false
+    t.datetime "approved_at"
+    t.datetime "created_at", null: false
+    t.json "diagnostics", default: {}, null: false
+    t.text "error_message"
+    t.string "kind", null: false
+    t.json "metadata", default: {}, null: false
+    t.string "model"
+    t.string "prompt_version"
+    t.string "provider"
+    t.datetime "rejected_at"
+    t.string "source_fingerprint"
+    t.string "status", default: "pending", null: false
+    t.integer "subject_id"
+    t.string "subject_type"
+    t.datetime "updated_at", null: false
+    t.index ["ai_workflow_stage_id"], name: "index_ai_artifacts_on_ai_workflow_stage_id"
+    t.index ["subject_type", "subject_id", "kind"], name: "index_ai_artifacts_on_subject_type_and_subject_id_and_kind"
+    t.index ["subject_type", "subject_id"], name: "index_ai_artifacts_on_subject"
+  end
+
+  create_table "ai_workflow_stages", force: :cascade do |t|
+    t.integer "ai_workflow_id", null: false
+    t.integer "attempts", default: 0, null: false
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.string "decision"
+    t.json "diagnostics", default: {}, null: false
+    t.text "error_message"
+    t.string "key", null: false
+    t.text "prompt"
+    t.datetime "started_at"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ai_workflow_id", "key"], name: "index_ai_workflow_stages_on_ai_workflow_id_and_key", unique: true
+    t.index ["ai_workflow_id"], name: "index_ai_workflow_stages_on_ai_workflow_id"
+  end
+
+  create_table "ai_workflows", force: :cascade do |t|
+    t.datetime "completed_at"
+    t.integer "completed_count", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.text "error_message"
+    t.integer "failed_count", default: 0, null: false
+    t.string "kind", null: false
+    t.json "metadata", default: {}, null: false
+    t.string "model"
+    t.string "prompt_version"
+    t.string "provider"
+    t.integer "requested_count"
+    t.datetime "started_at"
+    t.string "status", default: "pending", null: false
+    t.integer "subject_id"
+    t.string "subject_type"
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["subject_type", "subject_id"], name: "index_ai_workflows_on_subject"
+    t.index ["user_id", "status"], name: "index_ai_workflows_on_user_id_and_status"
+    t.index ["user_id"], name: "index_ai_workflows_on_user_id"
+  end
+
   create_table "clothing_items", force: :cascade do |t|
     t.string "brand", limit: 80
     t.string "category", limit: 60
@@ -62,6 +124,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_190000) do
     t.index ["source_outfit_detection_id"], name: "index_clothing_items_on_source_outfit_detection_id"
     t.index ["source_outfit_upload_id"], name: "index_clothing_items_on_source_outfit_upload_id"
     t.index ["user_id"], name: "index_clothing_items_on_user_id"
+  end
+
+  create_table "model_reference_images", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "position", null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["user_id", "position"], name: "index_model_reference_images_on_user_id_and_position", unique: true
+    t.index ["user_id"], name: "index_model_reference_images_on_user_id"
   end
 
   create_table "outfit_detections", force: :cascade do |t|
@@ -178,6 +249,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_190000) do
     t.string "avatar_url"
     t.datetime "created_at", null: false
     t.string "email", limit: 254
+    t.datetime "model_reference_consent_at"
     t.string "password_digest"
     t.string "preferred_style", limit: 40
     t.string "provider", limit: 60, null: false
@@ -190,7 +262,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_190000) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "ai_artifacts", "ai_workflow_stages"
+  add_foreign_key "ai_workflow_stages", "ai_workflows"
+  add_foreign_key "ai_workflows", "users"
   add_foreign_key "clothing_items", "users"
+  add_foreign_key "model_reference_images", "users"
   add_foreign_key "outfit_detections", "outfit_uploads"
   add_foreign_key "outfit_generation_events", "outfit_generation_runs"
   add_foreign_key "outfit_generation_runs", "outfits", on_delete: :nullify
