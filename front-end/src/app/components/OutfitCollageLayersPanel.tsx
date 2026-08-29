@@ -7,6 +7,7 @@ import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { Input } from "./ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 interface OutfitCollageLayersPanelProps {
   availableItems: ClothingItem[];
@@ -305,19 +306,23 @@ export function OutfitCollageLayersPanel({
             }
           }}
         >
-          <PopoverTrigger asChild>
-            <PrimitiveButton
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 border-dashed"
-              disabled={availableItems.length === 0}
-              aria-label="Add item to outfit"
-              title="Add item"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </PrimitiveButton>
-          </PopoverTrigger>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <PrimitiveButton
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 border-dashed"
+                  disabled={availableItems.length === 0}
+                  aria-label="Add item to outfit"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </PrimitiveButton>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={6}>Add item</TooltipContent>
+          </Tooltip>
           <PopoverContent
             side="right"
             align="start"

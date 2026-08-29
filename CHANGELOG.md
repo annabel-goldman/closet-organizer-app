@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Distinguished the outfit layers rail's adjacent add actions with a plus icon for closet pieces, a reusable sticker icon for decorations, and hover/focus tooltips explaining both controls.
 - Removed the redundant supporting sentence beneath the saved-outfit editor heading.
 - Unified outfit decorations with the flat-lay collage editor: decorations now appear in the layers rail, use the same direct drag/corner-resize/rotation handles as clothing pieces, and render from their measured visible PNG bounds instead of showing a padded miniature copy with separate controls.
 - Fixed the outfit editor's first resize gesture so image controls wait for visible garment bounds to finish measuring, preventing the initial resize from briefly using the source canvas's incorrect dimensions before later edits snap to the proper proportions.

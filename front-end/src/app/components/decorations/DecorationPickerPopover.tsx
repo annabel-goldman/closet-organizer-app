@@ -1,11 +1,12 @@
 import { useEffect, useId, useMemo, useState } from "react";
-import { ImagePlus, LoaderCircle, Plus, Search } from "lucide-react";
+import { ImagePlus, LoaderCircle, Search, Sticker } from "lucide-react";
 import { fetchDecorations, type Decoration } from "../../lib/closet";
 import { navigateTo } from "../../lib/routes";
 import { PrimitiveButton } from "../primitives/PrimitiveButton";
 import { PrimitiveText } from "../primitives/PrimitiveText";
 import { Input } from "../ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 interface DecorationPickerPopoverProps {
   buttonClassName?: string;
@@ -51,11 +52,16 @@ export function DecorationPickerPopover({
 
   return (
     <Popover open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) setQuery(""); }}>
-      <PopoverTrigger asChild>
-        <PrimitiveButton type="button" variant="outline" size="icon" className={buttonClassName} aria-label={buttonLabel}>
-          <Plus />
-        </PrimitiveButton>
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <PrimitiveButton type="button" variant="outline" size="icon" className={buttonClassName} aria-label={buttonLabel}>
+              <Sticker />
+            </PrimitiveButton>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top" sideOffset={6}>{buttonLabel}</TooltipContent>
+      </Tooltip>
       <PopoverContent side={side} align="end" collisionPadding={16} className="w-[19rem] border-border p-0 shadow-xl">
         <div className="border-b border-border p-3">
           <PrimitiveText as="p" variant="overline" tone="muted" className="mb-2">Add Decoration</PrimitiveText>
