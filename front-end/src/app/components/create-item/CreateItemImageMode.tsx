@@ -47,7 +47,9 @@ interface CreateItemImageModeProps {
     context: ExpandedImageEditorApplyContext,
   ) => Promise<void> | void;
   onBack: () => void;
-  onClearImageSelection: () => void;
+  onRemoveSourceImage: () => void;
+  onReplaceSourceImage: (file: File) => void;
+  onSelectSourceImage: (index: number) => void;
   getDetectionEditedImageFile?: (detection: OutfitDetection) => File | null;
   getDetectionEditedImageKind?: (detection: OutfitDetection) => ExpandedImageEditorApplyContext["imageKind"] | null;
   onApplyDetectionImageEdits?: (
@@ -70,8 +72,10 @@ interface CreateItemImageModeProps {
   selectedDetectionIds: number[];
   selectedFileCount: number;
   selectedFileName?: string;
+  selectedSourceIndex: number;
   sourceImageEditorActions?: ExpandedImageEditorImageActions;
   sourceImageUrl: string | null;
+  sourceImages: Array<{ id: string; imageUrl: string | null; label: string }>;
   tagSuggestions?: string[];
   user: User;
 }
@@ -96,7 +100,9 @@ export function CreateItemImageMode({
   inputRef,
   onApplySourceImageEdits,
   onBack,
-  onClearImageSelection,
+  onRemoveSourceImage,
+  onReplaceSourceImage,
+  onSelectSourceImage,
   getDetectionEditedImageFile,
   getDetectionEditedImageKind,
   onApplyDetectionImageEdits,
@@ -115,8 +121,10 @@ export function CreateItemImageMode({
   selectedDetectionIds,
   selectedFileCount,
   selectedFileName,
+  selectedSourceIndex,
   sourceImageEditorActions,
   sourceImageUrl,
+  sourceImages,
   tagSuggestions = [],
   user,
 }: CreateItemImageModeProps) {
@@ -126,6 +134,7 @@ export function CreateItemImageMode({
   const [isRedetectDialogOpen, setIsRedetectDialogOpen] = useState(false);
   const [isSaveWarningDialogOpen, setIsSaveWarningDialogOpen] = useState(false);
   const previousDetectionCountRef = useRef(0);
+  const replacementInputRef = useRef<HTMLInputElement | null>(null);
   const hasStartedDetectionFlow = Boolean(selectedFileCount || isDetecting || hasOutfitUploads);
 
   useEffect(() => {
@@ -271,8 +280,8 @@ export function CreateItemImageMode({
         imageUrl={previewEditedImageUrl ?? previewDetection?.cleaned_image_url ?? (isSourceFocused ? sourceImageUrl : null)}
         isPreviewProcessing={focusedIsCleaning}
         onPreviewClick={() => inputRef.current?.click()}
-        onPreviewClear={selectedFileName ? onClearImageSelection : undefined}
-        onPreviewEdit={selectedFileName ? () => inputRef.current?.click() : undefined}
+        onPreviewClear={selectedFileName ? onRemoveSourceImage : undefined}
+        onPreviewEdit={selectedFileName ? () => replacementInputRef.current?.click() : undefined}
         previewEditor={
           previewDetection && onGetDetectionImageEditorFile && onApplyDetectionImageEdits
             ? {
@@ -290,7 +299,6 @@ export function CreateItemImageMode({
                   ?? `detection-${previewDetection.id}`,
               }
             : isSourceFocused
-              && selectedFileCount === 1
               && selectedFileName
               && onGetSourceImageEditorFile
               && onApplySourceImageEdits
@@ -336,6 +344,17 @@ export function CreateItemImageMode({
           }}
           className="sr-only"
         />
+        <input
+          ref={replacementInputRef}
+          type="file"
+          accept="image/*"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) onReplaceSourceImage(file);
+            event.currentTarget.value = "";
+          }}
+          className="sr-only"
+        />
 
         <DetectionThumbnailStrip
           detections={detections}
@@ -349,9 +368,14 @@ export function CreateItemImageMode({
             setPreviewTarget(detectionId);
             setDetailsDetectionId(detectionId);
           }}
-          onSelectSource={() => setPreviewTarget("source")}
+          onSelectSource={(index) => {
+            onSelectSourceImage(index);
+            setPreviewTarget("source");
+            setDetailsDetectionId(null);
+          }}
           selectedDetectionIds={selectedDetectionIds}
-          sourceImageUrl={sourceImageUrl}
+          selectedSourceIndex={selectedSourceIndex}
+          sourceImages={sourceImages}
         />
 
         {isDetecting ? (

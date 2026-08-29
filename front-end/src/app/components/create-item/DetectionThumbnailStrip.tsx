@@ -3,7 +3,6 @@ import { OutfitDetection, preferredDetectionBox, titleize } from "../../lib/clos
 import { DetectionPreviewImage } from "./DetectionPreview";
 
 const stripFrameClass = "flex h-14 min-h-14 max-h-14 items-center overflow-hidden border border-border bg-card px-4 lg:-mt-20";
-const stripShellClass = "grid h-full w-full grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3";
 const stripContentViewportClass = "min-w-0 overflow-x-auto";
 const stripContentClass = "flex h-full items-center gap-3";
 const stripItemClass = "relative size-9 min-h-9 min-w-9 shrink-0 overflow-hidden border box-border appearance-none bg-transparent p-0 outline-none";
@@ -15,9 +14,10 @@ interface DetectionThumbnailStripProps {
   getDetectionSourceImageUrl?: (detection: OutfitDetection) => string | null;
   isDetecting: boolean;
   onSelectDetection: (detectionId: number) => void;
-  onSelectSource: () => void;
+  onSelectSource: (index: number) => void;
   selectedDetectionIds: number[];
-  sourceImageUrl: string | null;
+  selectedSourceIndex: number;
+  sourceImages: Array<{ id: string; imageUrl: string | null; label: string }>;
 }
 
 export function DetectionThumbnailStrip({
@@ -29,7 +29,8 @@ export function DetectionThumbnailStrip({
   onSelectDetection,
   onSelectSource,
   selectedDetectionIds,
-  sourceImageUrl,
+  selectedSourceIndex,
+  sourceImages,
 }: DetectionThumbnailStripProps) {
   function itemClass(isActive: boolean) {
     return `${stripItemClass} ${
@@ -41,31 +42,36 @@ export function DetectionThumbnailStrip({
 
   return (
     <div className={stripFrameClass}>
-      <div className={stripShellClass}>
-        {sourceImageUrl ? (
-          <button
-            type="button"
-            onClick={onSelectSource}
-            className={itemClass(focusedTarget === "source")}
-            aria-label="Show original image"
-            title="Original image"
-          >
-            <img
-              src={sourceImageUrl}
-              alt="Original source thumbnail"
-              className="block h-full w-full object-cover"
-            />
-          </button>
-        ) : null}
-        {sourceImageUrl ? null : (
-          <div
-            aria-hidden="true"
-            className={`${itemClass(false)} bg-muted/35`}
-          />
-        )}
-
+      <div className="h-full min-w-0 w-full">
         <div className={stripContentViewportClass}>
           <div className={stripContentClass}>
+            {sourceImages.length > 0 ? sourceImages.map((source, index) => (
+              <button
+                key={source.id}
+                type="button"
+                onClick={() => onSelectSource(index)}
+                className={itemClass(focusedTarget === "source" && selectedSourceIndex === index)}
+                aria-label={`Show source photo ${index + 1}: ${source.label}`}
+                title={source.label}
+              >
+                {source.imageUrl ? (
+                  <img
+                    src={source.imageUrl}
+                    alt=""
+                    className="block h-full w-full object-cover"
+                  />
+                ) : (
+                  <span aria-hidden="true" className="block h-full w-full bg-muted/35" />
+                )}
+              </button>
+            )) : (
+              <div aria-hidden="true" className={`${itemClass(false)} bg-muted/35`} />
+            )}
+
+            {sourceImages.length > 0 && detections.length > 0 ? (
+              <span aria-hidden="true" className="h-7 w-px shrink-0 bg-border" />
+            ) : null}
+
             {detections.length === 0 ? (
               <p className="shrink-0 text-sm text-muted-foreground">
                 {isDetecting ? "Detecting items..." : "Detected items will appear here"}
@@ -93,7 +99,7 @@ export function DetectionThumbnailStrip({
                       alt={`${label} thumbnail`}
                       cleanedImageUrl={previewImageUrl}
                       cropBox={previewBox}
-                      sourceImageUrl={getDetectionSourceImageUrl?.(detection) ?? sourceImageUrl}
+                      sourceImageUrl={getDetectionSourceImageUrl?.(detection) ?? null}
                       variant="thumbnail"
                     />
                     {isSelected ? (

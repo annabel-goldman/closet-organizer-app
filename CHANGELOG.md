@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Updated multi-photo item detection so every selected source photo appears in the upload strip before analysis; users can focus each source independently and replace, delete, crop, or erase its background without collapsing the rest of the batch.
 - Simplified the shared image-editing screen by removing the dynamic `Adjust …` heading and redundant crop/background-removal instructional copy while retaining the tool labels and controls.
 - Removed 40 unreachable frontend modules—including the retired staged-AI review surfaces and unused generated UI-kit components—and removed the 27 direct packages used only by that dead subtree, reducing maintained frontend source without changing the production feature graph.
 - Refactored the AI and image workflow foundations without changing their user-facing behavior: a single app-level task manager now owns durable workflow polling and cancellation, repeated OpenRouter request setup and Rails job terminal-state handling are centralized, and image downloads share one authenticated Active Storage proxy pipeline.

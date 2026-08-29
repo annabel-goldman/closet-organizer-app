@@ -112,7 +112,13 @@ export function CreateItemPage({
   const [detectionRedoHistory, setDetectionRedoHistory] = useState<DetectionDraftHistory>({});
   const [outfitUploads, setOutfitUploads] = useState<OutfitUpload[]>([]);
   const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
+  const [selectedImageKinds, setSelectedImageKinds] = useState<
+    ExpandedImageEditorApplyContext["imageKind"][]
+  >([]);
+  const [originalSelectedImageFiles, setOriginalSelectedImageFiles] = useState<File[]>([]);
+  const [activeSourceIndex, setActiveSourceIndex] = useState(0);
   const [pendingReplacementFiles, setPendingReplacementFiles] = useState<File[]>([]);
+  const [pendingReplacementActiveIndex, setPendingReplacementActiveIndex] = useState(0);
   const [selectedDetectionIds, setSelectedDetectionIds] = useState<number[]>([]);
   const [cleaningDetectionIds, setCleaningDetectionIds] = useState<number[]>([]);
   const [detectionCleanErrors, setDetectionCleanErrors] = useState<Record<number, string>>({});
@@ -142,7 +148,24 @@ export function CreateItemPage({
 
   const isImageMode = initialMode === "image";
   const closetSuggestions = collectClosetSuggestions(user?.clothing_items ?? []);
-  const sourceImageUrl = photoState.imageUrl ?? outfitUploads[0]?.source_photo_url ?? null;
+  const selectedImageUrls = useFileObjectUrls(selectedImageFiles);
+  const activeLocalSourceFile = selectedImageFiles[activeSourceIndex] ?? null;
+  const activeRestoredUpload = outfitUploads[activeSourceIndex] ?? outfitUploads[0] ?? null;
+  const sourceImageUrl = photoState.imageUrl
+    ?? selectedImageUrls[activeSourceIndex]
+    ?? activeRestoredUpload?.source_photo_url
+    ?? null;
+  const sourceImages = selectedImageFiles.length > 0
+    ? selectedImageFiles.map((file, index) => ({
+        id: `local-${index}-${file.name}-${file.lastModified}`,
+        imageUrl: selectedImageUrls[index] ?? null,
+        label: file.name,
+      }))
+    : outfitUploads.map((upload, index) => ({
+        id: `upload-${upload.id}`,
+        imageUrl: upload.source_photo_url ?? null,
+        label: `Photo ${index + 1}`,
+      }));
   const detections = outfitUploads.flatMap((upload) => upload.detections);
   const selectedDetections = detections.filter((detection) => selectedDetectionIds.includes(detection.id));
   const selectedCount = selectedDetections.length;
@@ -154,12 +177,8 @@ export function CreateItemPage({
   const completedFileCount = outfitUploads.filter((upload) =>
     ["succeeded", "failed", "cancelled"].includes(upload.status),
   ).length;
-  const selectedFileName = selectedImageFiles.length > 1
-    ? `${selectedImageFiles.length} photos selected`
-    : selectedImageFiles[0]?.name
-      ?? (outfitUploads.length > 0
-        ? `${outfitUploads.length} uploaded photo${outfitUploads.length === 1 ? "" : "s"}`
-        : undefined);
+  const selectedFileName = activeLocalSourceFile?.name
+    ?? (activeRestoredUpload ? `Photo ${activeSourceIndex + 1}` : undefined);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -287,18 +306,103 @@ export function CreateItemPage({
     setErrorMessage("");
   }
 
-  function applyImageFilesSelection(files: File[]) {
-    const firstFile = files[0];
-    if (!firstFile) {
+  function focusSourceImage(
+    index: number,
+    files = selectedImageFiles,
+    imageKinds = selectedImageKinds,
+    originalFiles = originalSelectedImageFiles,
+  ) {
+    const boundedIndex = Math.max(0, Math.min(index, Math.max(0, files.length - 1)));
+    const file = files[boundedIndex] ?? null;
+
+    setActiveSourceIndex(boundedIndex);
+    setSelectedImageKind(imageKinds[boundedIndex] ?? "base");
+    originalUploadedPhotoRef.current = originalFiles[boundedIndex] ?? file;
+    photoState.updateSelectedFile(file);
+  }
+
+  function applyImageFilesSelection(files: File[], nextActiveIndex = 0) {
+    if (files.length === 0) {
       return;
     }
 
     pushManualUndoSnapshot();
     abortDetectionPolling();
-    originalUploadedPhotoRef.current = firstFile;
+    const imageKinds = files.map(() => "base" as const);
     setSelectedImageFiles(files);
-    setSelectedImageKind("base");
-    photoState.updateSelectedFile(firstFile);
+    setSelectedImageKinds(imageKinds);
+    setOriginalSelectedImageFiles(files);
+    focusSourceImage(nextActiveIndex, files, imageKinds, files);
+    resetDetectionState();
+    setErrorMessage("");
+  }
+
+  function replaceActiveSourceImage(file: File) {
+    const nextFiles = [...selectedImageFiles];
+    if (nextFiles.length === 0) {
+      if (outfitUploads.length > 0) {
+        setPendingReplacementFiles([file]);
+        setPendingReplacementActiveIndex(0);
+        setIsReplaceImageWarningOpen(true);
+        return;
+      }
+      applyImageFilesSelection([file]);
+      return;
+    }
+
+    nextFiles[activeSourceIndex] = file;
+    if (outfitUploads.length > 0) {
+      setPendingReplacementFiles(nextFiles);
+      setPendingReplacementActiveIndex(activeSourceIndex);
+      setIsReplaceImageWarningOpen(true);
+      return;
+    }
+
+    applyImageFilesSelection(nextFiles, activeSourceIndex);
+  }
+
+  function removeActiveSourceImage() {
+    if (selectedImageFiles.length <= 1) {
+      clearImageSelection();
+      return;
+    }
+
+    const nextFiles = selectedImageFiles.filter((_, index) => index !== activeSourceIndex);
+    const nextImageKinds = selectedImageKinds.filter((_, index) => index !== activeSourceIndex);
+    const nextOriginalFiles = originalSelectedImageFiles.filter((_, index) => index !== activeSourceIndex);
+    const nextActiveIndex = Math.min(activeSourceIndex, nextFiles.length - 1);
+
+    abortDetectionPolling();
+    setSelectedImageFiles(nextFiles);
+    setSelectedImageKinds(nextImageKinds);
+    setOriginalSelectedImageFiles(nextOriginalFiles);
+    focusSourceImage(nextActiveIndex, nextFiles, nextImageKinds, nextOriginalFiles);
+    resetDetectionState();
+    setErrorMessage("");
+  }
+
+  function applyActiveSourceImageEdits(
+    file: File,
+    context: ExpandedImageEditorApplyContext,
+  ) {
+    if (!selectedImageFiles[activeSourceIndex]) {
+      return;
+    }
+
+    const nextFiles = [...selectedImageFiles];
+    const nextImageKinds = [...selectedImageKinds];
+    const nextOriginalFiles = [...originalSelectedImageFiles];
+    nextFiles[activeSourceIndex] = file;
+    nextImageKinds[activeSourceIndex] = context.imageKind;
+    if (context.imageKind === "base" || !nextOriginalFiles[activeSourceIndex]) {
+      nextOriginalFiles[activeSourceIndex] = file;
+    }
+
+    abortDetectionPolling();
+    setSelectedImageFiles(nextFiles);
+    setSelectedImageKinds(nextImageKinds);
+    setOriginalSelectedImageFiles(nextOriginalFiles);
+    focusSourceImage(activeSourceIndex, nextFiles, nextImageKinds, nextOriginalFiles);
     resetDetectionState();
     setErrorMessage("");
   }
@@ -308,6 +412,7 @@ export function CreateItemPage({
 
     if (!open) {
       setPendingReplacementFiles([]);
+      setPendingReplacementActiveIndex(0);
       if (photoState.inputRef.current) {
         photoState.inputRef.current.value = "";
       }
@@ -316,10 +421,11 @@ export function CreateItemPage({
 
   function confirmReplaceImage() {
     if (pendingReplacementFiles.length > 0) {
-      applyImageFilesSelection(pendingReplacementFiles);
+      applyImageFilesSelection(pendingReplacementFiles, pendingReplacementActiveIndex);
     }
 
     setPendingReplacementFiles([]);
+    setPendingReplacementActiveIndex(0);
     setIsReplaceImageWarningOpen(false);
   }
 
@@ -530,6 +636,7 @@ export function CreateItemPage({
 
     if (shouldWarnBeforeReplacingImage) {
       setPendingReplacementFiles(files);
+      setPendingReplacementActiveIndex(0);
       setIsReplaceImageWarningOpen(true);
       return;
     }
@@ -544,6 +651,9 @@ export function CreateItemPage({
     abortDetectionPolling();
     originalUploadedPhotoRef.current = null;
     setSelectedImageFiles([]);
+    setSelectedImageKinds([]);
+    setOriginalSelectedImageFiles([]);
+    setActiveSourceIndex(0);
     setSelectedImageKind("base");
     photoState.clearSelectedFile();
     resetDetectionState();
@@ -1038,7 +1148,9 @@ export function CreateItemPage({
           getDetectionSourceImageUrl={getDetectionSourceImageUrl}
           hasOutfitUploads={outfitUploads.length > 0}
           onBack={onBack}
-          onClearImageSelection={clearImageSelection}
+          onRemoveSourceImage={removeActiveSourceImage}
+          onReplaceSourceImage={replaceActiveSourceImage}
+          onSelectSourceImage={(index) => focusSourceImage(index)}
           onDetectItems={() => void detectItems(selectedImageFiles)}
           onDraftChange={updateDetectionDraft}
           getDetectionEditedImageFile={(detection) => editedDetectionPhotos[detection.id]?.file ?? null}
@@ -1047,9 +1159,7 @@ export function CreateItemPage({
           onCleanDetectionEditorImage={(detection, file) => createDetectionEditorCleanImage(detection, file)}
           onGetDetectionImageEditorFile={getDetectionEditorFile}
           onRedoDetectionDraft={handleDetectionRedo}
-          onApplySourceImageEdits={(file, context) => {
-            applyImageFileSelection(file, context.imageKind);
-          }}
+          onApplySourceImageEdits={applyActiveSourceImageEdits}
           onGetSourceImageEditorFile={getPreviewEditorFile}
           onRequestDetectionAutofill={(detection) => void handleAutofillDetectionMetadata(detection)}
           onFileChange={handleImageFileChange}
@@ -1058,6 +1168,7 @@ export function CreateItemPage({
           onUndoDetectionDraft={handleDetectionUndo}
           selectedCount={selectedCount}
           selectedDetectionIds={selectedDetectionIds}
+          selectedSourceIndex={activeSourceIndex}
           selectedFileCount={selectedFileCount}
           selectedFileName={selectedFileName}
           sourceImageEditorActions={{
@@ -1065,6 +1176,7 @@ export function CreateItemPage({
             onClean: createPreviewEditorCleanImage,
           }}
           sourceImageUrl={sourceImageUrl}
+          sourceImages={sourceImages}
           tagSuggestions={closetSuggestions.tagSuggestions}
           user={user}
         />
@@ -1255,6 +1367,19 @@ export function CreateItemPage({
       </AlertDialog>
     </ItemEditorWorkspace>
   );
+}
+
+function useFileObjectUrls(files: File[]) {
+  const [objectUrls, setObjectUrls] = useState<string[]>([]);
+
+  useEffect(() => {
+    const nextUrls = files.map((file) => URL.createObjectURL(file));
+    setObjectUrls(nextUrls);
+
+    return () => nextUrls.forEach((url) => URL.revokeObjectURL(url));
+  }, [files]);
+
+  return objectUrls;
 }
 
 async function cropDetectionImageFile(
