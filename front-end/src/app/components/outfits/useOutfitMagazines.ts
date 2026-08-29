@@ -12,7 +12,6 @@ import {
 export interface OutfitFolderDraft {
   name: string;
   notes: string;
-  theme: OutfitFolder["theme"];
   outfitIds: number[];
 }
 

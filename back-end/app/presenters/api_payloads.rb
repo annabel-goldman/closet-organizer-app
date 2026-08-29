@@ -196,7 +196,6 @@ class ApiPayloads
       name: folder.name,
       occasion: folder.occasion,
       notes: folder.notes,
-      theme: folder.theme,
       outfit_ids: folder.memberships.sort_by { |membership| [ membership.position, membership.id ] }.map(&:outfit_id),
       outfits: folder.memberships.sort_by { |membership| [ membership.position, membership.id ] }.map do |membership|
         outfit(membership.outfit)

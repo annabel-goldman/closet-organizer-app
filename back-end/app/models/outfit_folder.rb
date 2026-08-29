@@ -1,6 +1,4 @@
 class OutfitFolder < ApplicationRecord
-  THEMES = %w[editorial scrapbook minimal].freeze
-
   belongs_to :user
   has_many :memberships,
     -> { order(:position, :id) },
@@ -17,5 +15,4 @@ class OutfitFolder < ApplicationRecord
   validates :name, presence: true, length: { maximum: InputLengthPolicy::MAX_OUTFIT_NAME }
   validates :occasion, length: { maximum: InputLengthPolicy::MAX_OUTFIT_NAME }, allow_blank: true
   validates :notes, length: { maximum: InputLengthPolicy::MAX_OUTFIT_NOTES }, allow_blank: true
-  validates :theme, inclusion: { in: THEMES }
 end

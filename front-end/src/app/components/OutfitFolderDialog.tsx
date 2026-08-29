@@ -13,13 +13,6 @@ import {
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
-import {
-  PrimitiveSelect,
-  PrimitiveSelectContent,
-  PrimitiveSelectItem,
-  PrimitiveSelectTrigger,
-  PrimitiveSelectValue,
-} from "./primitives/PrimitiveSelect";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import type { OutfitFolderDraft } from "./outfits/useOutfitMagazines";
 
@@ -35,7 +28,6 @@ interface OutfitFolderDialogProps {
 const EMPTY_DRAFT: OutfitFolderDraft = {
   name: "",
   notes: "",
-  theme: "editorial",
   outfitIds: [],
 };
 
@@ -55,7 +47,6 @@ export function OutfitFolderDialog({
     setDraft(folder ? {
       name: folder.name,
       notes: folder.notes ?? "",
-      theme: folder.theme,
       outfitIds: folder.outfit_ids,
     } : EMPTY_DRAFT);
   }, [folder, open]);
@@ -117,21 +108,6 @@ export function OutfitFolderDialog({
               maxLength={120}
               required
             />
-          </label>
-
-          <label className="block space-y-2">
-            <PrimitiveText as="span" variant="bodySm" tone="muted">Magazine style</PrimitiveText>
-            <PrimitiveSelect
-              value={draft.theme}
-              onValueChange={(theme: OutfitFolder["theme"]) => setDraft((current) => ({ ...current, theme }))}
-            >
-              <PrimitiveSelectTrigger><PrimitiveSelectValue /></PrimitiveSelectTrigger>
-              <PrimitiveSelectContent>
-                <PrimitiveSelectItem value="editorial">Editorial</PrimitiveSelectItem>
-                <PrimitiveSelectItem value="scrapbook">Scrapbook</PrimitiveSelectItem>
-                <PrimitiveSelectItem value="minimal">Minimal</PrimitiveSelectItem>
-              </PrimitiveSelectContent>
-            </PrimitiveSelect>
           </label>
 
           <label className="block space-y-2">

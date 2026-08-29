@@ -260,7 +260,7 @@ Supported `size` enum values:
 
 ### `OutfitFolder`
 
-- belongs to one user and stores a name, optional occasion/notes, and an editorial, scrapbook, or minimal theme
+- belongs to one user and stores a name plus optional occasion/notes; presentation is the frontend's single minimal magazine style
 - has ordered `OutfitFolderMembership` records so outfits can be reused across multiple folders
 - has page-scoped `OutfitFolderDecoration` records whose private Active Storage images carry percentage layout and layer data
 

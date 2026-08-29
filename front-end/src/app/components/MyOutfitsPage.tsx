@@ -580,7 +580,7 @@ export function MyOutfitsPage({
                 Create your first magazine
               </PrimitiveText>
               <PrimitiveText as="p" tone="muted" className="mx-auto max-w-lg">
-                Choose saved outfits, arrange the page order, and pick a visual style for your trip or occasion.
+                Choose saved outfits and arrange the page order for your trip or occasion.
               </PrimitiveText>
               <PrimitiveButton type="button" className="mt-6" onClick={openCreateFolderDialog}>
                 <Plus className="h-4 w-4" />
@@ -600,7 +600,7 @@ export function MyOutfitsPage({
                   <div className="flex aspect-[4/3] w-full flex-col items-center justify-center bg-stone-100 px-8 text-center">
                     <BookOpen className="mb-5 h-12 w-12 stroke-[1.2] text-muted-foreground" aria-hidden="true" />
                     <PrimitiveText as="span" variant="overline" tone="muted">
-                      {folder.theme} magazine
+                      Magazine
                     </PrimitiveText>
                     <PrimitiveText as="span" variant="display" font="serif" className="mt-2 break-words">
                       {folder.name}

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Simplified magazines to one minimal white presentation, removing the style selector and the retired editorial/scrapbook theme field across the frontend and backend.
 - Open the outfit editor on the modeled preview when editing from Model view, with left-arrow navigation back to the flat lay.
 - Updated multi-photo item detection so every selected source photo appears in the upload strip before analysis; users can focus each source independently and replace, delete, crop, or erase its background without collapsing the rest of the batch.
 - Simplified the shared image-editing screen by removing the dynamic `Adjust …` heading and redundant crop/background-removal instructional copy while retaining the tool labels and controls.
@@ -18,7 +19,7 @@
 - Updated modeled item and outfit generation to request a photorealistic isolated person cutout on an opaque, uniformly pure-white background with no floor, tonal falloff, cast/contact shadow, reflection, or halo, making the background easier to remove with the image editor's magic wand.
 - Fixed the shared image editor to fit source images with one proportional scale, preserve the intrinsic aspect ratio through crop and magic-wand views, and avoid independent width/height rounding that could make portrait images look slightly stretched horizontally.
 - Fixed transparent modeled-outfit previews in both the outfit carousel and modeled gallery cards so their empty background renders pure white instead of light gray.
-- Added user-owned outfit folders for trips and occasions, with ordered many-to-many outfit membership, folder filtering on `/outfits`, three magazine themes, an animated cover-and-look magazine viewer that favors modeled previews, and private page-specific clip-art uploads that can be moved, resized, rotated, or deleted without changing the source outfits.
+- Added user-owned outfit folders for trips and occasions, with ordered many-to-many outfit membership, folder filtering on `/outfits`, a minimal animated cover-and-look magazine viewer that favors modeled previews, and private page-specific clip-art uploads that can be moved, resized, rotated, or deleted without changing the source outfits.
 - Added the current styled flat-lay canvas as a temporary composition reference for full-outfit model generation, preserving the user's item sizing, rotation, layering, and visual arrangement as wearable styling guidance while keeping individual garment images authoritative for item identity.
 - Fixed modeled-outfit requests that could stop before queueing by routing every item download used for the flat-lay snapshot and image-bounds measurement through the app's same-origin Active Storage proxy.
 - Generalized the lower-right generation task toast across modeled outfits, modeled items, saved-item image cleaning, AI outfit creation, and outfit-photo detection, allowing navigation during processing and cancellation from any signed-in page; successful notices turn pale green and dismiss automatically after three seconds, while failed notices remain light red with a one-click error-copy action. Completed notices link back to their result, including restoring a finished outfit-photo import, while durable jobs discard late provider results after cancellation.

@@ -33,11 +33,11 @@ class OutfitFoldersController < ApplicationController
   end
 
   def outfit_folder_params
-    params.require(:outfit_folder).permit(:name, :occasion, :notes, :theme, outfit_ids: [])
+    params.require(:outfit_folder).permit(:name, :occasion, :notes, outfit_ids: [])
   end
 
   def persist_folder(folder, status: :ok)
-    folder.assign_attributes(outfit_folder_params.slice(:name, :occasion, :notes, :theme))
+    folder.assign_attributes(outfit_folder_params.slice(:name, :occasion, :notes))
     outfit_ids = requested_outfit_ids
     validate_owned_outfits(folder, outfit_ids) if outfit_ids
 

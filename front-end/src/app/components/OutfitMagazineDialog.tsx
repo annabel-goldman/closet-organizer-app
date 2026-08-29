@@ -50,12 +50,6 @@ interface DecorationDrag {
   pointerY: number;
 }
 
-const THEME_CLASSES: Record<OutfitFolder["theme"], string> = {
-  editorial: "bg-[#f6f0e7] text-[#1f1b18]",
-  scrapbook: "bg-[#f3e7d2] text-[#29221a]",
-  minimal: "bg-white text-black",
-};
-
 export function OutfitMagazineDialog({
   folder,
   onFolderUpdated,
@@ -303,11 +297,11 @@ export function OutfitMagazineDialog({
                 >
                   <div
                     ref={pageRef}
-                    className={`relative aspect-[4/5] h-full max-w-full overflow-hidden shadow-[0_28px_90px_rgba(0,0,0,0.5)] ${THEME_CLASSES[folder.theme]}`}
+                    className="relative aspect-[4/5] h-full max-w-full overflow-hidden bg-white text-black shadow-[0_28px_90px_rgba(0,0,0,0.5)]"
                     onPointerDown={() => setSelectedDecorationId(null)}
                   >
                     {page.outfit ? (
-                      <OutfitMagazinePage outfit={page.outfit} pageNumber={safePageIndex} theme={folder.theme} />
+                      <OutfitMagazinePage outfit={page.outfit} pageNumber={safePageIndex} />
                     ) : (
                       <MagazineCover folder={folder} />
                     )}
@@ -401,14 +395,11 @@ function MagazineCover({ folder }: { folder: OutfitFolder }) {
 function OutfitMagazinePage({
   outfit,
   pageNumber,
-  theme,
 }: {
   outfit: Outfit;
   pageNumber: number;
-  theme: OutfitFolder["theme"];
 }) {
   const modeledImageUrl = resolveModeledWorkflowImageUrl(outfit.modeled_workflow);
-  const imageClassName = theme === "scrapbook" ? "rotate-[-1.5deg] border-[10px] border-white shadow-xl" : "";
 
   return (
     <div className="grid h-full grid-rows-[auto_1fr_auto] gap-[3%] p-[6%]">
@@ -427,7 +418,7 @@ function OutfitMagazinePage({
           <img
             src={modeledImageUrl}
             alt={`Modeled version of ${outfit.name}`}
-            className={`h-full w-full object-contain ${imageClassName}`}
+            className="h-full w-full object-contain"
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center border border-current/20 bg-black/[0.025] text-center">

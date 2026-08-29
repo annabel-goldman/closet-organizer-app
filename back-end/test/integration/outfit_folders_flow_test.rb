@@ -17,7 +17,6 @@ class OutfitFoldersFlowTest < ActionDispatch::IntegrationTest
           name: "Paris Weekend",
           occasion: "Paris · September",
           notes: "Three days of walking and dinner reservations.",
-          theme: "scrapbook",
           outfit_ids: [ second_outfit.id, @outfit.id ]
         }
       }, headers: auth_headers(@user), as: :json
@@ -27,6 +26,7 @@ class OutfitFoldersFlowTest < ActionDispatch::IntegrationTest
     folder_id = response_json.fetch("id")
     assert_equal [ second_outfit.id, @outfit.id ], response_json.fetch("outfit_ids")
     assert_equal [ "Dinner Look", @outfit.name ], response_json.fetch("outfits").map { |outfit| outfit.fetch("name") }
+    assert_not response_json.key?("theme")
 
     get outfit_folders_url, headers: auth_headers(@user), as: :json
 
@@ -38,7 +38,6 @@ class OutfitFoldersFlowTest < ActionDispatch::IntegrationTest
         name: "Paris Weekend",
         occasion: "Paris · September",
         notes: "Updated notes",
-        theme: "editorial",
         outfit_ids: [ @outfit.id, second_outfit.id ]
       }
     }, headers: auth_headers(@user), as: :json

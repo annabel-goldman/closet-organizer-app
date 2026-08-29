@@ -175,7 +175,6 @@ export interface OutfitFolder {
   name: string;
   occasion?: string | null;
   notes?: string | null;
-  theme: "editorial" | "scrapbook" | "minimal";
   outfit_ids: number[];
   outfits: Outfit[];
   decorations: OutfitFolderDecoration[];
@@ -668,7 +667,6 @@ interface SaveOutfitFolderInput {
   name: string;
   occasion?: string;
   notes?: string;
-  theme?: OutfitFolder["theme"];
   outfitIds: number[];
 }
 
@@ -678,7 +676,6 @@ function outfitFolderPayload(input: SaveOutfitFolderInput) {
       name: input.name,
       occasion: input.occasion,
       notes: input.notes,
-      theme: input.theme ?? "editorial",
       outfit_ids: input.outfitIds,
     },
   };

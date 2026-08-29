@@ -68,7 +68,6 @@ test("outfit folder APIs preserve magazine order and upload page-specific clip a
     name: "Paris Weekend",
     occasion: "Paris · September",
     notes: "Three days",
-    theme: "scrapbook",
     outfit_ids: [19, 12],
     outfits: [],
     decorations: [],
@@ -113,7 +112,6 @@ test("outfit folder APIs preserve magazine order and upload page-specific clip a
       name: "Paris Weekend",
       occasion: "Paris · September",
       notes: "Three days",
-      theme: "scrapbook",
       outfitIds: [19, 12],
     });
     const folders = await fetchOutfitFolders();
@@ -128,13 +126,11 @@ test("outfit folder APIs preserve magazine order and upload page-specific clip a
     const movedDecoration = await updateOutfitFolderDecoration(folder.id, decoration.id, { x: 42 });
 
     assert.deepEqual(folder.outfit_ids, [19, 12]);
-    assert.equal(folders[0].theme, "scrapbook");
     assert.deepEqual(JSON.parse(String(requests[0].init?.body)), {
       outfit_folder: {
         name: "Paris Weekend",
         occasion: "Paris · September",
         notes: "Three days",
-        theme: "scrapbook",
         outfit_ids: [19, 12],
       },
     });
