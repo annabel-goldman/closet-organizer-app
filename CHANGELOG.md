@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Simplified the shared image-editing screen by removing the dynamic `Adjust …` heading and redundant crop/background-removal instructional copy while retaining the tool labels and controls.
 - Removed 40 unreachable frontend modules—including the retired staged-AI review surfaces and unused generated UI-kit components—and removed the 27 direct packages used only by that dead subtree, reducing maintained frontend source without changing the production feature graph.
 - Refactored the AI and image workflow foundations without changing their user-facing behavior: a single app-level task manager now owns durable workflow polling and cancellation, repeated OpenRouter request setup and Rails job terminal-state handling are centralized, and image downloads share one authenticated Active Storage proxy pipeline.
 - Fixed the item image editor so unrelated app updates—including background generation polling—no longer reload the source image or leave the editor stuck behind its loading state; editor sources now have explicit stable identities and component regression coverage.

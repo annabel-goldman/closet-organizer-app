@@ -694,15 +694,9 @@ export function ExpandedImageEditor({
       </div>
 
       <div className="flex h-full max-h-full w-full shrink-0 flex-col gap-5 overflow-y-auto border border-white/12 bg-black/45 p-5 text-white lg:w-[24rem] xl:w-[26rem] xl:p-6">
-        <div className="space-y-2">
+        <div>
           <PrimitiveText variant="overline" className="text-white/60">
             Image Tools
-          </PrimitiveText>
-          <PrimitiveText as="h2" variant="title" className="text-white">
-            Adjust {title}
-          </PrimitiveText>
-          <PrimitiveText variant="bodySm" className="text-white/72">
-            Crop the frame or remove background regions manually before saving the edited image back into the flow.
           </PrimitiveText>
         </div>
 
@@ -832,9 +826,6 @@ export function ExpandedImageEditor({
                 </PrimitiveButton>
               ))}
             </div>
-            <PrimitiveText variant="bodySm" className="text-white/72">
-              Drag the crop frame to choose a new image size. Free mode lets you crop without a fixed ratio.
-            </PrimitiveText>
             <PrimitiveButton
               type="button"
               variant="outline"
