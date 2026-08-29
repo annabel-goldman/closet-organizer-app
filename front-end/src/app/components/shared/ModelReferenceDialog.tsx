@@ -13,7 +13,6 @@ import { PrimitiveText } from "../primitives/PrimitiveText";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -147,11 +146,6 @@ export function ModelReferenceDialog({ user, onUserUpdated }: ModelReferenceDial
               Model reference photos
             </PrimitiveText>
           </DialogTitle>
-          <DialogDescription asChild>
-            <PrimitiveText as="p" tone="muted">
-              Save up to three private photos to improve your likeness in modeled item and outfit previews.
-            </PrimitiveText>
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
