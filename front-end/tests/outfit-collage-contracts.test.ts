@@ -4,7 +4,7 @@ import test from "node:test";
 import { resolveOutfitCollageLayouts } from "../src/app/lib/outfitCollage.ts";
 import {
   COLLAGE_STAGE_ASPECT_RATIO,
-  normalizeOutfitCollageLayoutToAspectRatio,
+  resolveOutfitCollageMediaBox,
   resolveOutfitCollageResizeAspectRatio,
 } from "../src/app/lib/outfitCollageRenderMath.ts";
 
@@ -12,7 +12,7 @@ function collageFrameRatio(layout: { width: number; height: number }) {
   return (layout.width * COLLAGE_STAGE_ASPECT_RATIO) / Math.max(layout.height, 0.001);
 }
 
-test("saved collage layouts seed the editor with the same normalized preview frames", () => {
+test("saved collage frames remain authoritative when image measurements arrive", () => {
   const items = [
     {
       id: 11,
@@ -40,34 +40,15 @@ test("saved collage layouts seed the editor with the same normalized preview fra
     },
   ] as const;
 
-  const aspectRatioByItemId = {
-    11: 0.72,
-    24: 0.58,
-  } as const;
-
   const editorSeedLayouts = resolveOutfitCollageLayouts(items as never);
-  const savedDisplayLayouts = Object.fromEntries(
-    items.map((item) => [
-      item.id,
-      normalizeOutfitCollageLayoutToAspectRatio(
-        item.collage_layout,
-        aspectRatioByItemId[item.id as keyof typeof aspectRatioByItemId],
-      ),
-    ]),
-  );
-  const editorDisplayLayouts = Object.fromEntries(
-    items.map((item) => [
-      item.id,
-      normalizeOutfitCollageLayoutToAspectRatio(
-        editorSeedLayouts[item.id],
-        aspectRatioByItemId[item.id as keyof typeof aspectRatioByItemId],
-      ),
-    ]),
-  );
+  const originalLayouts = structuredClone(editorSeedLayouts);
+
+  resolveOutfitCollageMediaBox(editorSeedLayouts[11], 0.72);
+  resolveOutfitCollageMediaBox(editorSeedLayouts[24], 0.58);
 
   assert.deepEqual(editorSeedLayouts[11], items[0].collage_layout);
   assert.deepEqual(editorSeedLayouts[24], items[1].collage_layout);
-  assert.deepEqual(editorDisplayLayouts, savedDisplayLayouts);
+  assert.deepEqual(editorSeedLayouts, originalLayouts);
 });
 
 test("category defaults place tops above bottoms with accessories on the left and no rotation", () => {
@@ -97,20 +78,23 @@ test("category defaults place tops above bottoms with accessories on the left an
   assert.ok(accessory.y < shoes.y);
 });
 
-test("normalized collage layouts are idempotent across repeated saved/editor renders", () => {
+test("contained media boxes preserve tall and wide item proportions without changing their frame", () => {
   const layout = {
-    x: 12,
-    y: 48,
-    width: 76,
-    height: 36,
-    rotation: 2,
-    layer_order: 1,
+    x: 20,
+    y: 20,
+    width: 40,
+    height: 40,
+    rotation: 0,
+    layer_order: 0,
   };
+  const originalLayout = { ...layout };
 
-  const once = normalizeOutfitCollageLayoutToAspectRatio(layout, 0.64);
-  const twice = normalizeOutfitCollageLayoutToAspectRatio(once, 0.64);
+  const tall = resolveOutfitCollageMediaBox(layout, 0.4);
+  const wide = resolveOutfitCollageMediaBox(layout, 2);
 
-  assert.deepEqual(twice, once);
+  assert.deepEqual(tall, { height: 100, left: 25, top: 0, width: 50 });
+  assert.deepEqual(wide, { height: 40, left: 0, top: 30, width: 100 });
+  assert.deepEqual(layout, originalLayout);
 });
 
 test("resize ratio fallback prefers the real image ratio over the current layout frame ratio", () => {

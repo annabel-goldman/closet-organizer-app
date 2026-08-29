@@ -45,6 +45,7 @@ import { PrimitiveText } from "./primitives/PrimitiveText";
 import { useItemPhotoState } from "../lib/useItemPhotoState";
 import type { ItemPhotoStateSnapshot } from "../lib/useItemPhotoState";
 import { useUndoRedoShortcuts } from "../lib/useUndoRedoShortcuts";
+import { mapWithConcurrency } from "../lib/asyncPool";
 import type { ExpandedImageEditorApplyContext } from "./ExpandedImageEditor";
 import {
   AlertDialog,
@@ -61,7 +62,7 @@ interface CreateItemPageProps {
   userId: number | null;
   initialMode?: CreateItemMode;
   initialUser?: User | null;
-  initialOutfitUploadId?: number | null;
+  initialOutfitUploadIds?: number[];
   onBack: () => void;
   onItemsCreated: (items: ClothingItem[]) => void;
   onGenerationTaskStarted: (workflow: AiWorkflow, label: string) => void;
@@ -80,14 +81,16 @@ export function CreateItemPage({
   userId,
   initialMode = "manual",
   initialUser,
-  initialOutfitUploadId = null,
+  initialOutfitUploadIds = [],
   onBack,
   onItemsCreated,
   onGenerationTaskStarted,
 }: CreateItemPageProps) {
-  const detectionPollControllerRef = useRef<AbortController | null>(null);
-  const resumedOutfitUploadIdRef = useRef<number | null>(null);
+  const detectionPollControllersRef = useRef<Map<number, AbortController>>(new Map());
+  const resumedOutfitUploadIdsRef = useRef<Set<number>>(new Set());
+  const isMountedRef = useRef(true);
   const detectionMetadataRunRef = useRef(0);
+  const preparingMetadataRunsRef = useRef(0);
   const originalUploadedPhotoRef = useRef<File | null>(null);
   const pendingManualCleanPromiseRef = useRef<Promise<File> | null>(null);
   const pendingManualCleanModeRef = useRef<"preview" | "attach" | "ignore">("preview");
@@ -107,8 +110,9 @@ export function CreateItemPage({
   const [manualRedoHistory, setManualRedoHistory] = useState<ManualCreateUndoSnapshot[]>([]);
   const [detectionUndoHistory, setDetectionUndoHistory] = useState<DetectionDraftHistory>({});
   const [detectionRedoHistory, setDetectionRedoHistory] = useState<DetectionDraftHistory>({});
-  const [outfitUpload, setOutfitUpload] = useState<OutfitUpload | null>(null);
-  const [pendingReplacementFile, setPendingReplacementFile] = useState<File | null>(null);
+  const [outfitUploads, setOutfitUploads] = useState<OutfitUpload[]>([]);
+  const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
+  const [pendingReplacementFiles, setPendingReplacementFiles] = useState<File[]>([]);
   const [selectedDetectionIds, setSelectedDetectionIds] = useState<number[]>([]);
   const [cleaningDetectionIds, setCleaningDetectionIds] = useState<number[]>([]);
   const [detectionCleanErrors, setDetectionCleanErrors] = useState<Record<number, string>>({});
@@ -138,20 +142,58 @@ export function CreateItemPage({
 
   const isImageMode = initialMode === "image";
   const closetSuggestions = collectClosetSuggestions(user?.clothing_items ?? []);
-  const sourceImageUrl = photoState.imageUrl ?? outfitUpload?.source_photo_url ?? null;
-  const detections = outfitUpload?.detections ?? [];
+  const sourceImageUrl = photoState.imageUrl ?? outfitUploads[0]?.source_photo_url ?? null;
+  const detections = outfitUploads.flatMap((upload) => upload.detections);
   const selectedDetections = detections.filter((detection) => selectedDetectionIds.includes(detection.id));
   const selectedCount = selectedDetections.length;
+  const selectedFileCount = Math.max(
+    selectedImageFiles.length,
+    outfitUploads.length,
+    initialOutfitUploadIds.length,
+  );
+  const completedFileCount = outfitUploads.filter((upload) =>
+    ["succeeded", "failed", "cancelled"].includes(upload.status),
+  ).length;
+  const selectedFileName = selectedImageFiles.length > 1
+    ? `${selectedImageFiles.length} photos selected`
+    : selectedImageFiles[0]?.name
+      ?? (outfitUploads.length > 0
+        ? `${outfitUploads.length} uploaded photo${outfitUploads.length === 1 ? "" : "s"}`
+        : undefined);
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
-      detectionPollControllerRef.current?.abort();
+      isMountedRef.current = false;
+      abortDetectionPolling();
     };
   }, []);
 
+  function abortDetectionPolling() {
+    detectionPollControllersRef.current.forEach((controller) => controller.abort());
+    detectionPollControllersRef.current.clear();
+  }
+
+  function upsertOutfitUpload(nextUpload: OutfitUpload) {
+    setOutfitUploads((current) => {
+      const existingIndex = current.findIndex((upload) => upload.id === nextUpload.id);
+      if (existingIndex < 0) {
+        return [...current, nextUpload];
+      }
+
+      return current.map((upload, index) => (index === existingIndex ? nextUpload : upload));
+    });
+  }
+
+  function getDetectionSourceImageUrl(detection: OutfitDetection) {
+    return outfitUploads.find((upload) => upload.id === detection.outfit_upload_id)?.source_photo_url
+      ?? null;
+  }
+
   function resetDetectionState() {
     detectionMetadataRunRef.current += 1;
-    setOutfitUpload(null);
+    preparingMetadataRunsRef.current = 0;
+    setOutfitUploads([]);
     setSelectedDetectionIds([]);
     setCleaningDetectionIds([]);
     setDetectionCleanErrors({});
@@ -234,12 +276,29 @@ export function CreateItemPage({
     imageKind: ExpandedImageEditorApplyContext["imageKind"] = "base",
   ) {
     pushManualUndoSnapshot();
-    detectionPollControllerRef.current?.abort();
+    abortDetectionPolling();
     if (imageKind === "base" || !originalUploadedPhotoRef.current) {
       originalUploadedPhotoRef.current = file;
     }
+    setSelectedImageFiles([file]);
     setSelectedImageKind(imageKind);
     photoState.updateSelectedFile(file);
+    resetDetectionState();
+    setErrorMessage("");
+  }
+
+  function applyImageFilesSelection(files: File[]) {
+    const firstFile = files[0];
+    if (!firstFile) {
+      return;
+    }
+
+    pushManualUndoSnapshot();
+    abortDetectionPolling();
+    originalUploadedPhotoRef.current = firstFile;
+    setSelectedImageFiles(files);
+    setSelectedImageKind("base");
+    photoState.updateSelectedFile(firstFile);
     resetDetectionState();
     setErrorMessage("");
   }
@@ -248,7 +307,7 @@ export function CreateItemPage({
     setIsReplaceImageWarningOpen(open);
 
     if (!open) {
-      setPendingReplacementFile(null);
+      setPendingReplacementFiles([]);
       if (photoState.inputRef.current) {
         photoState.inputRef.current.value = "";
       }
@@ -256,20 +315,27 @@ export function CreateItemPage({
   }
 
   function confirmReplaceImage() {
-    if (pendingReplacementFile) {
-      applyImageFileSelection(pendingReplacementFile);
+    if (pendingReplacementFiles.length > 0) {
+      applyImageFilesSelection(pendingReplacementFiles);
     }
 
-    setPendingReplacementFile(null);
+    setPendingReplacementFiles([]);
     setIsReplaceImageWarningOpen(false);
   }
 
-  async function waitForOutfitUpload(uploadId: number, signal: AbortSignal) {
+  async function waitForOutfitUpload(
+    uploadId: number,
+    signal: AbortSignal,
+    detectionRunId = detectionMetadataRunRef.current,
+  ) {
     const startedAt = Date.now();
 
     while (!signal.aborted) {
       const nextUpload = await fetchOutfitUpload(uploadId, signal);
-      setOutfitUpload(nextUpload);
+      if (detectionMetadataRunRef.current !== detectionRunId) {
+        throw new DOMException("Aborted", "AbortError");
+      }
+      upsertOutfitUpload(nextUpload);
 
       if (["succeeded", "failed", "cancelled"].includes(nextUpload.status)) {
         return nextUpload;
@@ -294,120 +360,190 @@ export function CreateItemPage({
   }
 
   useEffect(() => {
-    if (!initialOutfitUploadId || resumedOutfitUploadIdRef.current === initialOutfitUploadId) {
+    const uploadIdsToResume = initialOutfitUploadIds.filter((uploadId) => (
+      uploadId > 0 && !resumedOutfitUploadIdsRef.current.has(uploadId)
+    ));
+    if (uploadIdsToResume.length === 0) {
       return;
     }
 
-    resumedOutfitUploadIdRef.current = initialOutfitUploadId;
-    if (outfitUpload?.id === initialOutfitUploadId) {
-      return;
-    }
-
-    detectionPollControllerRef.current?.abort();
-    const controller = new AbortController();
-    detectionPollControllerRef.current = controller;
+    uploadIdsToResume.forEach((uploadId) => resumedOutfitUploadIdsRef.current.add(uploadId));
+    const detectionRunId = detectionMetadataRunRef.current;
 
     void (async () => {
       setIsDetecting(true);
       setErrorMessage("");
 
-      try {
-        let restoredUpload = await fetchOutfitUpload(initialOutfitUploadId, controller.signal);
-        setOutfitUpload(restoredUpload);
+      const results = await mapWithConcurrency(uploadIdsToResume, 3, async (uploadId) => {
+        const controller = new AbortController();
+        detectionPollControllersRef.current.set(uploadId, controller);
 
-        if (["pending", "processing"].includes(restoredUpload.status)) {
-          restoredUpload = await waitForOutfitUpload(restoredUpload.id, controller.signal);
-        }
+        try {
+          let restoredUpload = await fetchOutfitUpload(uploadId, controller.signal);
+          if (detectionMetadataRunRef.current !== detectionRunId) {
+            throw new DOMException("Aborted", "AbortError");
+          }
+          upsertOutfitUpload(restoredUpload);
 
-        if (restoredUpload.status === "failed" && restoredUpload.error_message) {
-          setErrorMessage(restoredUpload.error_message);
-        } else if (restoredUpload.status === "succeeded") {
-          await autofillDetectedMetadata(restoredUpload.detections);
+          if (["pending", "processing"].includes(restoredUpload.status)) {
+            restoredUpload = await waitForOutfitUpload(
+              restoredUpload.id,
+              controller.signal,
+              detectionRunId,
+            );
+          }
+          if (detectionMetadataRunRef.current !== detectionRunId) {
+            throw new DOMException("Aborted", "AbortError");
+          }
+
+          if (restoredUpload.status === "failed") {
+            throw new Error(restoredUpload.error_message || "Unable to analyze one of these photos.");
+          }
+          if (restoredUpload.status === "succeeded") {
+            void autofillDetectedMetadata(restoredUpload.detections);
+          }
+
+          return restoredUpload;
+        } finally {
+          detectionPollControllersRef.current.delete(uploadId);
         }
-      } catch (error) {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setErrorMessage(
-            error instanceof Error ? error.message : "Unable to restore this analyzed outfit photo.",
-          );
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          detectionPollControllerRef.current = null;
-          setIsDetecting(false);
-        }
+      });
+
+      if (detectionMetadataRunRef.current !== detectionRunId) {
+        return;
       }
+
+      const failures = results.filter((result) => result.status === "rejected");
+      if (failures.length > 0) {
+        setErrorMessage(
+          failures.length === uploadIdsToResume.length
+            ? "Unable to restore these analyzed photos."
+            : `${failures.length} photo${failures.length === 1 ? "" : "s"} could not be restored. The successful results are still available.`,
+        );
+      }
+      setIsDetecting(false);
     })();
 
-    return () => controller.abort();
-  }, [initialOutfitUploadId]);
+  }, [initialOutfitUploadIds.join(",")]);
 
-  async function detectItems(file: File) {
+  async function detectItems(files: File[]) {
     if (!userId) {
       setErrorMessage("A user is required before you can upload from an image.");
+      return;
+    }
+    if (files.length === 0) {
       return;
     }
 
     setIsDetecting(true);
     setErrorMessage("");
+    abortDetectionPolling();
     resetDetectionState();
-    detectionPollControllerRef.current?.abort();
+    const detectionRunId = detectionMetadataRunRef.current;
 
-    try {
-      const nextUpload = await createOutfitUpload(userId, { photo: file });
-      setOutfitUpload(nextUpload);
+    const completionPromises: Promise<PromiseSettledResult<OutfitUpload>>[] = [];
+    const uploadResults = await mapWithConcurrency(files, 3, async (file) => {
+      let nextUpload = await createOutfitUpload(userId, { photo: file });
+      resumedOutfitUploadIdsRef.current.add(nextUpload.id);
       if (nextUpload.ai_workflow) {
         onGenerationTaskStarted(nextUpload.ai_workflow, file.name);
       }
+      if (detectionMetadataRunRef.current !== detectionRunId) {
+        return nextUpload;
+      }
 
-      if (nextUpload.status === "pending" || nextUpload.status === "processing") {
-        const controller = new AbortController();
-        detectionPollControllerRef.current = controller;
-        const completedUpload = await waitForOutfitUpload(nextUpload.id, controller.signal);
+      upsertOutfitUpload(nextUpload);
 
-        if (completedUpload.status === "failed" && completedUpload.error_message) {
-          setErrorMessage(completedUpload.error_message);
-        } else if (completedUpload.status === "succeeded") {
-          await autofillDetectedMetadata(completedUpload.detections);
+      const completionPromise = (async () => {
+        if (!isMountedRef.current || detectionMetadataRunRef.current !== detectionRunId) {
+          return nextUpload;
         }
-      } else if (nextUpload.status === "failed" && nextUpload.error_message) {
-        setErrorMessage(nextUpload.error_message);
-      } else if (nextUpload.status === "succeeded") {
-        await autofillDetectedMetadata(nextUpload.detections);
-      }
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return;
-      }
 
-      setErrorMessage(error instanceof Error ? error.message : "Unable to analyze this item photo.");
-    } finally {
-      detectionPollControllerRef.current = null;
-      setIsDetecting(false);
-    }
-  }
+        const controller = new AbortController();
+        detectionPollControllersRef.current.set(nextUpload.id, controller);
 
-  function handleImageFileChange(file: File | null) {
-    if (!file) {
+        try {
+          if (["pending", "processing"].includes(nextUpload.status)) {
+            nextUpload = await waitForOutfitUpload(
+              nextUpload.id,
+              controller.signal,
+              detectionRunId,
+            );
+          }
+          if (detectionMetadataRunRef.current !== detectionRunId) {
+            throw new DOMException("Aborted", "AbortError");
+          }
+
+          if (nextUpload.status === "failed") {
+            throw new Error(nextUpload.error_message || `Unable to analyze ${file.name}.`);
+          }
+          if (nextUpload.status === "cancelled") {
+            throw new DOMException("Aborted", "AbortError");
+          }
+          if (nextUpload.status === "succeeded") {
+            void autofillDetectedMetadata(nextUpload.detections);
+          }
+
+          return nextUpload;
+        } finally {
+          detectionPollControllersRef.current.delete(nextUpload.id);
+        }
+      })();
+      completionPromises.push(completionPromise.then(
+        (value): PromiseSettledResult<OutfitUpload> => ({ status: "fulfilled", value }),
+        (reason): PromiseSettledResult<OutfitUpload> => ({ status: "rejected", reason }),
+      ));
+
+      return nextUpload;
+    });
+
+    const completionResults = await Promise.all(completionPromises);
+    if (detectionMetadataRunRef.current !== detectionRunId) {
       return;
     }
 
-    const shouldWarnBeforeReplacingImage = isImageMode && Boolean(outfitUpload);
+    const failures = [
+      ...uploadResults.filter((result) => result.status === "rejected"),
+      ...completionResults.filter((result) => result.status === "rejected"),
+    ];
+    const nonAbortFailures = failures.filter((result) => !(
+      result.status === "rejected"
+      && result.reason instanceof DOMException
+      && result.reason.name === "AbortError"
+    ));
+    if (nonAbortFailures.length > 0) {
+      setErrorMessage(
+        nonAbortFailures.length === files.length
+          ? "Unable to analyze these photos."
+          : `${nonAbortFailures.length} photo${nonAbortFailures.length === 1 ? "" : "s"} could not be analyzed. The successful results are ready below.`,
+      );
+    }
+    setIsDetecting(false);
+  }
+
+  function handleImageFileChange(files: File[]) {
+    if (files.length === 0) {
+      return;
+    }
+
+    const shouldWarnBeforeReplacingImage = isImageMode && outfitUploads.length > 0;
 
     if (shouldWarnBeforeReplacingImage) {
-      setPendingReplacementFile(file);
+      setPendingReplacementFiles(files);
       setIsReplaceImageWarningOpen(true);
       return;
     }
 
-    applyImageFileSelection(file);
+    applyImageFilesSelection(files);
   }
 
   function clearImageSelection() {
     if (photoState.selectedFile || originalUploadedPhotoRef.current || selectedImageKind !== "base") {
       pushManualUndoSnapshot();
     }
-    detectionPollControllerRef.current?.abort();
+    abortDetectionPolling();
     originalUploadedPhotoRef.current = null;
+    setSelectedImageFiles([]);
     setSelectedImageKind("base");
     photoState.clearSelectedFile();
     resetDetectionState();
@@ -588,11 +724,15 @@ export function CreateItemPage({
     }
 
     const detectionBox = preferredDetectionBox(detection);
-    if (!sourceImageUrl || !detectionBox) {
+    const detectionSourceImageUrl = getDetectionSourceImageUrl(detection);
+    if (!detectionSourceImageUrl || !detectionBox) {
       return null;
     }
 
-    const sourceFile = await fetchImageFileFromUrl(sourceImageUrl, `${suggestedName}-source.png`);
+    const sourceFile = await fetchImageFileFromUrl(
+      detectionSourceImageUrl,
+      `${suggestedName}-source.png`,
+    );
     return cropDetectionImageFile(sourceFile, detectionBox, `${suggestedName}-detected.png`);
   }
 
@@ -686,6 +826,14 @@ export function CreateItemPage({
   }
 
   async function autofillDetectedMetadata(nextDetections: OutfitDetection[]) {
+    setEditedDetections((current) => {
+      const next = { ...current };
+      nextDetections.forEach((detection) => {
+        next[detection.id] ??= toClothingItemFormValuesFromDetection(detection);
+      });
+      return next;
+    });
+
     const detectionIdsToAutofill = nextDetections
       .filter((detection) => Boolean(detection.cleaned_image_url || preferredDetectionBox(detection)))
       .map((detection) => detection.id);
@@ -694,7 +842,8 @@ export function CreateItemPage({
       return;
     }
 
-    const runId = ++detectionMetadataRunRef.current;
+    const runId = detectionMetadataRunRef.current;
+    preparingMetadataRunsRef.current += 1;
     setIsPreparingDetectedMetadata(true);
 
     try {
@@ -730,7 +879,8 @@ export function CreateItemPage({
       }
     } finally {
       if (detectionMetadataRunRef.current === runId) {
-        setIsPreparingDetectedMetadata(false);
+        preparingMetadataRunsRef.current = Math.max(0, preparingMetadataRunsRef.current - 1);
+        setIsPreparingDetectedMetadata(preparingMetadataRunsRef.current > 0);
       }
     }
   }
@@ -884,9 +1034,12 @@ export function CreateItemPage({
           isPreparingDetectedMetadata={isPreparingDetectedMetadata}
           isCreating={isCreating}
           isDetecting={isDetecting}
+          completedFileCount={completedFileCount}
+          getDetectionSourceImageUrl={getDetectionSourceImageUrl}
+          hasOutfitUploads={outfitUploads.length > 0}
           onBack={onBack}
           onClearImageSelection={clearImageSelection}
-          onDetectItems={() => photoState.selectedFile && void detectItems(photoState.selectedFile)}
+          onDetectItems={() => void detectItems(selectedImageFiles)}
           onDraftChange={updateDetectionDraft}
           getDetectionEditedImageFile={(detection) => editedDetectionPhotos[detection.id]?.file ?? null}
           getDetectionEditedImageKind={(detection) => editedDetectionPhotos[detection.id]?.imageKind ?? null}
@@ -903,10 +1056,10 @@ export function CreateItemPage({
           onSaveSelectedItems={() => void handleSaveSelectedItems()}
           onToggleSelection={toggleDetectionSelection}
           onUndoDetectionDraft={handleDetectionUndo}
-          outfitUpload={outfitUpload}
           selectedCount={selectedCount}
           selectedDetectionIds={selectedDetectionIds}
-          selectedFileName={photoState.selectedFile?.name}
+          selectedFileCount={selectedFileCount}
+          selectedFileName={selectedFileName}
           sourceImageEditorActions={{
             initialKind: selectedImageKind,
             onClean: createPreviewEditorCleanImage,
@@ -916,7 +1069,7 @@ export function CreateItemPage({
           user={user}
         />
         <PrimitiveConfirmationDialog
-          description="Uploading a new image will discard all currently detected items. Proceed?"
+          description="Uploading new photos will discard all currently detected items. Proceed?"
           onConfirm={confirmReplaceImage}
           onOpenChange={closeReplaceImageWarning}
           open={isReplaceImageWarningOpen}
@@ -1012,7 +1165,12 @@ export function CreateItemPage({
         ref={photoState.inputRef}
         type="file"
         accept="image/*"
-        onChange={(event) => handleImageFileChange(event.target.files?.[0] ?? null)}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) {
+            applyImageFileSelection(file);
+          }
+        }}
         className="sr-only"
       />
 

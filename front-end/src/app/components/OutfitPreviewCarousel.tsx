@@ -100,7 +100,7 @@ export function OutfitPreviewCarousel({
             {flatlay}
           </div>
           {modeledImageUrl ? (
-            <div className="h-full w-full shrink-0 bg-stone-100" aria-hidden={activeSlide !== "modeled"}>
+            <div className="h-full w-full shrink-0 bg-white" aria-hidden={activeSlide !== "modeled"}>
               <img
                 src={modeledImageUrl}
                 alt="Modeled version of this outfit"

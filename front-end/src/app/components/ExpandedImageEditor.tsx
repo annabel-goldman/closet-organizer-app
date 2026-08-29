@@ -18,6 +18,7 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { useAiActionState } from "../lib/useAiActionState";
+import { fitImageWithinViewport } from "../lib/imageEditorGeometry";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { cn } from "./ui/utils";
@@ -67,6 +68,8 @@ const ASPECT_OPTIONS: Array<{ label: string; value: AspectPreset }> = [
   { label: "4:5", value: "portrait" },
   { label: "3:4", value: "classic" },
 ];
+
+const EDITOR_MEDIA_INSET = 32;
 
 export function ExpandedImageEditor({
   getEditableFile,
@@ -610,11 +613,11 @@ export function ExpandedImageEditor({
     "h-9 border-white/20 bg-white/8 px-3 text-white hover:bg-white/14 data-[active=true]:bg-white data-[active=true]:text-stone-950";
   const editorViewportClass =
     "relative h-full min-h-0 w-full overflow-hidden bg-black/60";
-  const fittedMediaSize = containSize(mediaNaturalSize, viewportSize);
+  const fittedMediaSize = fitImageWithinViewport(mediaNaturalSize, viewportSize, EDITOR_MEDIA_INSET);
   const editorMediaBoxStyle = fittedMediaSize
     ? ({
-        height: `${Math.max(1, Math.floor(fittedMediaSize.height))}px`,
-        width: `${Math.max(1, Math.floor(fittedMediaSize.width))}px`,
+        aspectRatio: `${mediaNaturalSize.width} / ${mediaNaturalSize.height}`,
+        width: `${Math.max(1, fittedMediaSize.width)}px`,
       } as const)
     : undefined;
 
@@ -644,13 +647,12 @@ export function ExpandedImageEditor({
                   onComplete={(nextCrop) => setCompletedCrop(nextCrop)}
                   aspect={aspectRatioForPreset(aspectPreset) ?? undefined}
                   className="expanded-image-editor-crop"
-                  style={editorMediaBoxStyle}
                 >
                   <img
                     ref={imageRef}
                     src={imageUrl}
                     alt={title}
-                    className="block h-full w-full"
+                    className="block h-auto w-full max-w-full object-contain"
                     onLoad={handleCropImageLoad}
                   />
                 </ReactCrop>
@@ -937,30 +939,6 @@ function centerAspectCrop(width: number, height: number, aspect: number) {
     width,
     height,
   );
-}
-
-function containSize(
-  naturalSize: { height: number; width: number },
-  viewportSize: { height: number; width: number },
-) {
-  if (
-    naturalSize.width <= 0 ||
-    naturalSize.height <= 0 ||
-    viewportSize.width <= 0 ||
-    viewportSize.height <= 0
-  ) {
-    return null;
-  }
-
-  const scale = Math.min(
-    viewportSize.width / naturalSize.width,
-    viewportSize.height / naturalSize.height,
-  );
-
-  return {
-    height: Math.max(1, Math.floor(naturalSize.height * scale)),
-    width: Math.max(1, Math.floor(naturalSize.width * scale)),
-  };
 }
 
 function useObjectUrl(file: File | null) {

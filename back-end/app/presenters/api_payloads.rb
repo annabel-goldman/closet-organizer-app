@@ -189,6 +189,40 @@ class ApiPayloads
     payload
   end
 
+  def outfit_folder(folder)
+    {
+      id: folder.id,
+      user_id: folder.user_id,
+      name: folder.name,
+      occasion: folder.occasion,
+      notes: folder.notes,
+      theme: folder.theme,
+      outfit_ids: folder.memberships.sort_by { |membership| [ membership.position, membership.id ] }.map(&:outfit_id),
+      outfits: folder.memberships.sort_by { |membership| [ membership.position, membership.id ] }.map do |membership|
+        outfit(membership.outfit)
+      end,
+      decorations: folder.decorations.map { |decoration| outfit_folder_decoration(decoration) },
+      created_at: folder.created_at,
+      updated_at: folder.updated_at
+    }
+  end
+
+  def outfit_folder_decoration(decoration)
+    {
+      id: decoration.id,
+      outfit_folder_id: decoration.outfit_folder_id,
+      page_key: decoration.page_key,
+      image_url: attachment_url(decoration.image, proxy: true),
+      x: decoration.x.to_f,
+      y: decoration.y.to_f,
+      width: decoration.width.to_f,
+      rotation: decoration.rotation.to_f,
+      layer_order: decoration.layer_order,
+      created_at: decoration.created_at,
+      updated_at: decoration.updated_at
+    }
+  end
+
   private
 
   attr_reader :url_helpers

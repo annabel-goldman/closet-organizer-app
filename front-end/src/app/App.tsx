@@ -55,8 +55,10 @@ import {
   fetchOutfit,
   fetchOutfits,
   fetchCurrentUser,
+  formatTagInput,
   formatPossessive,
   formatPreferredStyle,
+  generateOutfitMetadataSuggestions,
   logoutSession,
   Outfit,
   OutfitDraft,
@@ -87,6 +89,11 @@ import { collectClosetSuggestions } from "./lib/itemFormValidation";
 import { useOutfitDraftState } from "./lib/useOutfitDraftState";
 
 interface HomeMessageState {
+  kind: "error" | "success";
+  text: string;
+}
+
+interface OutfitCartAutofillMessage {
   kind: "error" | "success";
   text: string;
 }
@@ -217,9 +224,12 @@ export default function App() {
   const [outfitsErrorMessage, setOutfitsErrorMessage] = useState("");
   const [outfitCartErrorMessage, setOutfitCartErrorMessage] = useState("");
   const [outfitCartName, setOutfitCartName] = useState("");
+  const [isAutofillingOutfitCartDetails, setIsAutofillingOutfitCartDetails] = useState(false);
+  const [outfitCartAutofillMessage, setOutfitCartAutofillMessage] = useState<OutfitCartAutofillMessage | null>(null);
   const [outfitCartStatusMessage, setOutfitCartStatusMessage] = useState("");
   const [isTopOutfitCartButtonVisible, setIsTopOutfitCartButtonVisible] = useState(true);
   const topOutfitCartButtonRef = useRef<HTMLSpanElement | null>(null);
+  const outfitCartAutofillRequestIdRef = useRef(0);
   const [outfitDraft, setOutfitDraft] = useOutfitDraftState(user);
 
   useEffect(() => {
@@ -458,6 +468,9 @@ export default function App() {
     setIsOutfitCreatedDialogOpen(false);
     setOutfitCartName("");
     setOutfitCartErrorMessage("");
+    setIsAutofillingOutfitCartDetails(false);
+    setOutfitCartAutofillMessage(null);
+    outfitCartAutofillRequestIdRef.current += 1;
     setOutfitCartStatusMessage("");
   }, [user]);
 
@@ -487,14 +500,13 @@ export default function App() {
         && Number(task.workflow.metadata?.item_id) === route.itemId
       ))?.workflow ?? null
     : null;
-  const resumableOutfitUploadId = Object.values(generationTasks)
+  const resumableOutfitUploadIds = Array.from(new Set(Object.values(generationTasks)
     .filter((task) => (
       task.workflow.kind === "outfit_upload"
       && !["failed", "cancelled"].includes(task.workflow.status)
     ))
     .map((task) => Number(task.workflow.metadata?.upload_id))
-    .filter((uploadId) => uploadId > 0)
-    .at(-1) ?? null;
+    .filter((uploadId) => uploadId > 0)));
   const isAdminRoute = route.kind === "users" || route.kind === "user";
   const isUnauthorizedAdminRoute = Boolean(user && !user.admin && isAdminRoute);
   const groupedTagOptions = buildGroupedTagOptions(clothingItems);
@@ -551,6 +563,9 @@ export default function App() {
 
     setOutfitCartStatusMessage("Item added successfully.");
     setOutfitCartErrorMessage("");
+    setOutfitCartAutofillMessage(null);
+    setIsAutofillingOutfitCartDetails(false);
+    outfitCartAutofillRequestIdRef.current += 1;
     setOutfitDraft((current) => ({
       ...current,
       itemIds: [itemId, ...current.itemIds],
@@ -559,6 +574,9 @@ export default function App() {
 
   function removeItemFromOutfitDraft(itemId: number) {
     setOutfitCartStatusMessage("Item removed from outfit.");
+    setOutfitCartAutofillMessage(null);
+    setIsAutofillingOutfitCartDetails(false);
+    outfitCartAutofillRequestIdRef.current += 1;
     setOutfitDraft((current) => ({
       ...current,
       itemIds: current.itemIds.filter((id) => id !== itemId),
@@ -752,6 +770,7 @@ export default function App() {
         tagInput: "",
       }));
       setOutfitCartName("");
+      setOutfitCartAutofillMessage(null);
       setIsOutfitCartOpen(false);
       setIsOutfitCreatedDialogOpen(true);
       setOutfitCartStatusMessage("Outfit created.");
@@ -761,6 +780,58 @@ export default function App() {
       );
     } finally {
       setIsCreatingOutfitFromCart(false);
+    }
+  }
+
+  async function handleAutofillOutfitCartDetails() {
+    if (!user || outfitDraft.itemIds.length === 0) {
+      setOutfitCartAutofillMessage({
+        kind: "error",
+        text: "Add at least one item before filling outfit details.",
+      });
+      return;
+    }
+
+    const requestId = outfitCartAutofillRequestIdRef.current + 1;
+    outfitCartAutofillRequestIdRef.current = requestId;
+    setIsAutofillingOutfitCartDetails(true);
+    setOutfitCartAutofillMessage(null);
+    setOutfitCartErrorMessage("");
+
+    try {
+      const suggestion = await generateOutfitMetadataSuggestions({
+        itemIds: outfitDraft.itemIds,
+        name: outfitCartName,
+        notes: outfitDraft.notes,
+        tags: parseTagInput(outfitDraft.tagInput),
+      });
+      if (outfitCartAutofillRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setOutfitCartName((current) => suggestion.name || current);
+      setOutfitDraft((current) => ({
+        ...current,
+        notes: suggestion.notes,
+        tagInput: formatTagInput(suggestion.tags),
+      }));
+      setOutfitCartAutofillMessage({
+        kind: "success",
+        text: "AI filled the outfit details. Review them before creating the outfit.",
+      });
+    } catch (error) {
+      if (outfitCartAutofillRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setOutfitCartAutofillMessage({
+        kind: "error",
+        text: error instanceof Error ? error.message : "Unable to fill the outfit details.",
+      });
+    } finally {
+      if (outfitCartAutofillRequestIdRef.current === requestId) {
+        setIsAutofillingOutfitCartDetails(false);
+      }
     }
   }
 
@@ -842,7 +913,7 @@ export default function App() {
         userId={targetUserId}
         initialMode={route.mode}
         initialUser={targetUser}
-        initialOutfitUploadId={route.mode === "image" ? resumableOutfitUploadId : null}
+        initialOutfitUploadIds={route.mode === "image" ? resumableOutfitUploadIds : []}
         onBack={() => navigateTo("/closet")}
         onGenerationTaskStarted={trackGenerationTask}
         onItemsCreated={(nextItems) => {
@@ -1198,11 +1269,14 @@ export default function App() {
       </main>
 
       <OutfitCartSheet
+        autofillMessage={outfitCartAutofillMessage}
         createErrorMessage={outfitCartErrorMessage}
+        isAutofillingDetails={isAutofillingOutfitCartDetails}
         isCreating={isCreatingOutfitFromCart}
         isOpen={isOutfitCartOpen}
         items={outfitDraftItems}
         notes={outfitDraft.notes}
+        onAutofillDetails={() => void handleAutofillOutfitCartDetails()}
         onCreateOutfit={() => void handleCreateOutfitFromCart()}
         onNotesChange={(value) =>
           setOutfitDraft((current) => ({

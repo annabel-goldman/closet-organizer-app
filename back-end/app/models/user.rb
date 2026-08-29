@@ -11,6 +11,7 @@ class User < ApplicationRecord
 
   has_many :clothing_items, dependent: :destroy
   has_many :outfits, dependent: :destroy
+  has_many :outfit_folders, dependent: :destroy
   has_many :outfit_generation_runs, dependent: :destroy
   has_many :outfit_uploads, dependent: :destroy
   has_many :ai_workflows, dependent: :destroy

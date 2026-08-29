@@ -1,17 +1,31 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Pencil, Shirt, Sparkles, Trash2, Upload, UserRound, X } from "lucide-react";
+import {
+  BookOpen,
+  Pencil,
+  Plus,
+  Sparkles,
+  Trash2,
+  Upload,
+  UserRound,
+  X,
+} from "lucide-react";
 import {
   ClothingItem,
+  createOutfitFolder,
   deleteModeledPreview,
+  destroyOutfitFolder,
   destroyOutfit,
+  fetchOutfitFolders,
   formatTagInput,
   generateOutfit,
   generateOutfitMetadataSuggestions,
   OutfitDraft,
   Outfit,
+  OutfitFolder,
   parseTagInput,
   requestModeledOutfit,
+  updateOutfitFolder,
   updateOutfit,
   User,
   AiWorkflow,
@@ -43,6 +57,8 @@ import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveConfirmationDialog } from "./primitives/PrimitiveConfirmationDialog";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
+import { OutfitFolderDialog, type OutfitFolderDraft } from "./OutfitFolderDialog";
+import { OutfitMagazineDialog } from "./OutfitMagazineDialog";
 import { MAX_OUTFIT_NAME, MAX_OUTFIT_NOTES } from "../lib/inputLengthPolicy";
 
 interface MyOutfitsPageProps {
@@ -63,6 +79,7 @@ interface FlashState {
 }
 
 type OutfitGalleryView = "flatlay" | "modeled";
+type OutfitsPageView = "outfits" | "magazines";
 
 function outfitToFormState(outfit: Outfit): OutfitDraft {
   return {
@@ -104,7 +121,16 @@ export function MyOutfitsPage({
   const [isDeletingModeledPreview, setIsDeletingModeledPreview] = useState(false);
   const [isAutofillingOutfitDetails, setIsAutofillingOutfitDetails] = useState(false);
   const [galleryView, setGalleryView] = useState<OutfitGalleryView>("flatlay");
+  const [pageView, setPageView] = useState<OutfitsPageView>("outfits");
   const [regenerationConfirmationOutfitId, setRegenerationConfirmationOutfitId] = useState<number | null>(null);
+  const [outfitFolders, setOutfitFolders] = useState<OutfitFolder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
+  const [editingFolderId, setEditingFolderId] = useState<number | null>(null);
+  const [isFolderDialogOpen, setIsFolderDialogOpen] = useState(false);
+  const [isMagazineOpen, setIsMagazineOpen] = useState(false);
+  const [isLoadingFolders, setIsLoadingFolders] = useState(false);
+  const [isSavingFolder, setIsSavingFolder] = useState(false);
+  const [folderToDeleteId, setFolderToDeleteId] = useState<number | null>(null);
   const outfitDetailsRequestIdRef = useRef(0);
 
   const sortedItems = useMemo(
@@ -129,6 +155,17 @@ export function MyOutfitsPage({
     : null;
   const selectedItemsCanBeModeled = selectedItems.length > 0 && selectedItems.every((item) => Boolean(item.image_url));
   const modeledImageUrl = resolveModeledWorkflowImageUrl(modeledWorkflow);
+  const editingFolder = outfitFolders.find((folder) => folder.id === editingFolderId) ?? null;
+  const hydratedFolders = useMemo(() => {
+    const currentOutfitsById = new Map(outfits.map((outfit) => [outfit.id, outfit]));
+    return outfitFolders.map((folder) => ({
+      ...folder,
+      outfits: folder.outfit_ids
+        .map((outfitId) => currentOutfitsById.get(outfitId) ?? folder.outfits.find((outfit) => outfit.id === outfitId))
+        .filter((outfit): outfit is Outfit => Boolean(outfit)),
+    }));
+  }, [outfitFolders, outfits]);
+  const hydratedSelectedFolder = hydratedFolders.find((folder) => folder.id === selectedFolderId) ?? null;
 
   function showFlash(kind: FlashState["kind"], message: string) {
     setFlash({ kind, message });
@@ -169,6 +206,23 @@ export function MyOutfitsPage({
       setModeledWorkflow(editingOutfit?.modeled_workflow ?? null);
     }
   }, [editingOutfit?.modeled_workflow, editingOutfitId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setIsLoadingFolders(true);
+
+    fetchOutfitFolders(controller.signal)
+      .then((folders) => setOutfitFolders(folders))
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        showFlash("error", error instanceof Error ? error.message : "Unable to load magazines.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingFolders(false);
+      });
+
+    return () => controller.abort();
+  }, [user.id]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -225,10 +279,77 @@ export function MyOutfitsPage({
     try {
       await destroyOutfit(outfitId);
       onOutfitDeleted(outfitId);
+      setOutfitFolders((current) => current.map((folder) => ({
+        ...folder,
+        outfit_ids: folder.outfit_ids.filter((id) => id !== outfitId),
+        outfits: folder.outfits.filter((outfit) => outfit.id !== outfitId),
+        decorations: folder.decorations.filter((decoration) => decoration.page_key !== `outfit:${outfitId}`),
+      })));
       showFlash("success", "Outfit deleted.");
     } catch (error) {
       showFlash("error", error instanceof Error ? error.message : "Unable to delete outfit.");
     }
+  }
+
+  function openCreateFolderDialog() {
+    setEditingFolderId(null);
+    setIsFolderDialogOpen(true);
+  }
+
+  function openEditFolderDialog(folder: OutfitFolder) {
+    setEditingFolderId(folder.id);
+    setIsFolderDialogOpen(true);
+  }
+
+  async function handleSaveFolder(draft: OutfitFolderDraft) {
+    setIsSavingFolder(true);
+    setFlash(null);
+
+    try {
+      const savedFolder = editingFolder
+        ? await updateOutfitFolder(editingFolder.id, draft)
+        : await createOutfitFolder(draft);
+
+      setOutfitFolders((current) => {
+        const exists = current.some((folder) => folder.id === savedFolder.id);
+        return exists
+          ? current.map((folder) => folder.id === savedFolder.id ? savedFolder : folder)
+          : [savedFolder, ...current];
+      });
+      setSelectedFolderId(savedFolder.id);
+      setPageView("magazines");
+      setIsFolderDialogOpen(false);
+      setEditingFolderId(null);
+      showFlash("success", editingFolder ? "Magazine updated." : "Magazine created.");
+    } catch (error) {
+      showFlash("error", error instanceof Error ? error.message : "Unable to save this magazine.");
+    } finally {
+      setIsSavingFolder(false);
+    }
+  }
+
+  async function handleDeleteFolder() {
+    if (!folderToDeleteId) return;
+
+    const folderId = folderToDeleteId;
+    try {
+      await destroyOutfitFolder(folderId);
+      setOutfitFolders((current) => current.filter((folder) => folder.id !== folderId));
+      if (selectedFolderId === folderId) setSelectedFolderId(null);
+      setFolderToDeleteId(null);
+      showFlash("success", "Magazine deleted. Your outfits are still saved.");
+    } catch (error) {
+      showFlash("error", error instanceof Error ? error.message : "Unable to delete this magazine.");
+    }
+  }
+
+  function handleFolderUpdated(folder: OutfitFolder) {
+    setOutfitFolders((current) => current.map((entry) => entry.id === folder.id ? folder : entry));
+  }
+
+  function openMagazine(folder: OutfitFolder) {
+    setSelectedFolderId(folder.id);
+    setIsMagazineOpen(true);
   }
 
   async function handleGenerateOutfit(event: FormEvent<HTMLFormElement>) {
@@ -440,46 +561,160 @@ export function MyOutfitsPage({
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-12 space-y-10">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
-            My Outfits
-          </PrimitiveText>
-          <PrimitiveText as="h1" variant="display" font="serif" className="mb-2">
-            Lookbook Builder
-          </PrimitiveText>
-          <PrimitiveText as="p" tone="muted">
-            Group your closet pieces into reusable outfit combos.
-          </PrimitiveText>
-        </div>
-        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-          <PrimitiveButton
-            type="button"
-            variant={galleryView === "modeled" ? "default" : "outline"}
-            className="h-auto px-5 py-3"
-            aria-pressed={galleryView === "modeled"}
-            onClick={() => setGalleryView((current) => current === "modeled" ? "flatlay" : "modeled")}
-            title={galleryView === "modeled" ? "Show outfit flat lays" : "Show modeled outfits"}
-          >
-            <UserRound className="h-4 w-4" />
-            Model view
-          </PrimitiveButton>
-          <PrimitiveButton
-            type="button"
-            variant="outline"
-            className="h-auto px-5 py-3"
-            onClick={() => setIsGenerateDialogOpen(true)}
-            disabled={isLoading || isGeneratingOutfit || user.clothing_items.length === 0}
-          >
-            <Sparkles className="h-4 w-4" />
-            {isGeneratingOutfit ? "Generating..." : "AI Outfit"}
-          </PrimitiveButton>
-          <PrimitiveText as="p" variant="bodySm" tone="muted">
-            {outfits.length} {outfits.length === 1 ? "outfit" : "outfits"} saved
-          </PrimitiveText>
-        </div>
-      </div>
+      <section className="space-y-4 border-y border-border py-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <PrimitiveButton
+              type="button"
+              variant={pageView === "outfits" ? "default" : "outline"}
+              size="sm"
+              aria-pressed={pageView === "outfits"}
+              onClick={() => setPageView("outfits")}
+            >
+              All outfits
+            </PrimitiveButton>
+            <PrimitiveButton
+              type="button"
+              variant={pageView === "magazines" ? "default" : "outline"}
+              size="sm"
+              disabled={isLoadingFolders}
+              aria-pressed={pageView === "magazines"}
+              onClick={() => setPageView("magazines")}
+            >
+              <BookOpen className="h-4 w-4" />
+              My Magazines
+            </PrimitiveButton>
+          </div>
 
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {pageView === "outfits" ? (
+              <>
+                <PrimitiveButton
+                  type="button"
+                  variant={galleryView === "modeled" ? "default" : "outline"}
+                  size="sm"
+                  aria-pressed={galleryView === "modeled"}
+                  onClick={() => setGalleryView((current) => current === "modeled" ? "flatlay" : "modeled")}
+                  title={galleryView === "modeled" ? "Show outfit flat lays" : "Show modeled outfits"}
+                >
+                  <UserRound className="h-4 w-4" />
+                  {galleryView === "modeled" ? "Flatlay view" : "Model view"}
+                </PrimitiveButton>
+                <PrimitiveButton
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsGenerateDialogOpen(true)}
+                  disabled={isLoading || isGeneratingOutfit || user.clothing_items.length === 0}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  {isGeneratingOutfit ? "Generating..." : "AI Outfit"}
+                </PrimitiveButton>
+              </>
+            ) : null}
+            <PrimitiveText as="p" variant="bodySm" tone="muted" className="px-1">
+              {pageView === "outfits"
+                ? `${outfits.length} ${outfits.length === 1 ? "outfit" : "outfits"} saved`
+                : `${hydratedFolders.length} ${hydratedFolders.length === 1 ? "magazine" : "magazines"}`}
+            </PrimitiveText>
+          </div>
+        </div>
+      </section>
+
+      {pageView === "magazines" ? (
+        <section className="space-y-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <PrimitiveText as="h2" variant="display" font="serif">
+                My Magazines
+              </PrimitiveText>
+              <PrimitiveText as="p" tone="muted" className="mt-1">
+                Group saved outfits into a story, arrange their order, and decorate each page.
+              </PrimitiveText>
+            </div>
+            <PrimitiveButton
+              type="button"
+              variant="outline"
+              onClick={openCreateFolderDialog}
+              disabled={isLoadingFolders}
+            >
+              <Plus className="h-4 w-4" />
+              New magazine
+            </PrimitiveButton>
+          </div>
+
+          {isLoadingFolders ? (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="aspect-[4/3] animate-pulse border border-border bg-muted/40" />
+              ))}
+            </div>
+          ) : hydratedFolders.length === 0 ? (
+            <div className="border border-dashed border-border px-6 py-14 text-center">
+              <BookOpen className="mx-auto mb-4 h-10 w-10 text-muted-foreground" aria-hidden="true" />
+              <PrimitiveText as="h3" variant="display" font="serif" className="mb-2">
+                Create your first magazine
+              </PrimitiveText>
+              <PrimitiveText as="p" tone="muted" className="mx-auto max-w-lg">
+                Choose saved outfits, arrange the page order, and pick a visual style for your trip or occasion.
+              </PrimitiveText>
+              <PrimitiveButton type="button" className="mt-6" onClick={openCreateFolderDialog}>
+                <Plus className="h-4 w-4" />
+                New magazine
+              </PrimitiveButton>
+            </div>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {hydratedFolders.map((folder, index) => (
+                <motion.article
+                  key={folder.id}
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: index * 0.04 }}
+                  className="overflow-hidden border border-border bg-card"
+                >
+                  <div className="flex aspect-[4/3] w-full flex-col items-center justify-center bg-stone-100 px-8 text-center">
+                    <BookOpen className="mb-5 h-12 w-12 stroke-[1.2] text-muted-foreground" aria-hidden="true" />
+                    <PrimitiveText as="span" variant="overline" tone="muted">
+                      {folder.theme} magazine
+                    </PrimitiveText>
+                    <PrimitiveText as="span" variant="display" font="serif" className="mt-2 break-words">
+                      {folder.name}
+                    </PrimitiveText>
+                  </div>
+
+                  <div className="space-y-4 p-5">
+                    <PrimitiveText as="p" variant="bodySm" tone="muted">
+                      {folder.outfits.length} {folder.outfits.length === 1 ? "outfit" : "outfits"}
+                      {folder.notes ? ` · ${folder.notes}` : ""}
+                    </PrimitiveText>
+                    <div className="flex flex-wrap gap-2">
+                      <PrimitiveButton type="button" onClick={() => openMagazine(folder)}>
+                        <BookOpen className="h-4 w-4" />
+                        Open magazine
+                      </PrimitiveButton>
+                      <PrimitiveButton type="button" variant="outline" onClick={() => openEditFolderDialog(folder)}>
+                        <Pencil className="h-4 w-4" />
+                        Add or arrange outfits
+                      </PrimitiveButton>
+                      <PrimitiveButton
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="hover:border-destructive"
+                        onClick={() => setFolderToDeleteId(folder.id)}
+                        aria-label={`Delete ${folder.name} magazine`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </PrimitiveButton>
+                    </div>
+                  </div>
+                </motion.article>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (
       <section className="space-y-4">
         {isLoading ? (
           <div className="grid gap-4 md:grid-cols-2">
@@ -525,7 +760,7 @@ export function MyOutfitsPage({
                   <div className="px-5 pt-5">
                     {galleryView === "modeled" ? (
                       galleryModelPreview.kind === "image" ? (
-                        <div className="relative mx-auto aspect-[4/5] w-full max-w-[15.5rem] overflow-hidden bg-stone-100">
+                        <div className="relative mx-auto aspect-[4/5] w-full max-w-[15.5rem] overflow-hidden bg-white">
                           <img
                             src={galleryModelPreview.imageUrl}
                             alt={`Modeled version of ${outfit.name}`}
@@ -553,37 +788,12 @@ export function MyOutfitsPage({
                     )}
                   </div>
 
-                  <div className="space-y-4 p-6">
+                  <div className="space-y-4 border-t border-border p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
-                        <PrimitiveText as="p" variant="overline" tone="muted" className="mb-3">
-                          Saved Look
-                        </PrimitiveText>
-                        {outfit.generated_by_ai ? (
-                          <PrimitiveText
-                            as="p"
-                            variant="caption"
-                            tone="muted"
-                            className="mb-2 inline-flex items-center gap-1 uppercase tracking-[0.18em]"
-                          >
-                            <Sparkles className="h-3 w-3" />
-                            AI generated
-                          </PrimitiveText>
-                        ) : null}
                         <PrimitiveText as="h3" variant="display" font="serif" className="break-words">
                           {outfit.name}
                         </PrimitiveText>
-                        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-                          <PrimitiveText as="p" variant="bodySm" tone="muted">
-                            <Shirt className="mr-1 inline h-3 w-3" />
-                            {outfit.items.length} {outfit.items.length === 1 ? "piece" : "pieces"}
-                          </PrimitiveText>
-                          {outfit.tags && outfit.tags.length > 0 ? (
-                            <PrimitiveText as="p" variant="bodySm" tone="muted">
-                              {outfit.tags.join(" · ")}
-                            </PrimitiveText>
-                          ) : null}
-                        </div>
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -606,12 +816,6 @@ export function MyOutfitsPage({
                         </PrimitiveButton>
                       </div>
                     </div>
-
-                    {outfit.notes ? (
-                      <PrimitiveText as="p" variant="bodySm" tone="muted" className="line-clamp-3">
-                        {outfit.notes}
-                      </PrimitiveText>
-                    ) : null}
 
                     {canUseModeledPreview && galleryView === "modeled" ? (
                       galleryModelPreview.kind === "image" ? (
@@ -659,6 +863,7 @@ export function MyOutfitsPage({
           </div>
         )}
       </section>
+      )}
 
       {flash && !editingOutfitId && !isGenerateDialogOpen ? (
         <motion.div
@@ -678,7 +883,18 @@ export function MyOutfitsPage({
       ) : null}
 
       <Dialog open={Boolean(editingOutfitId)} onOpenChange={(open) => !open && resetForm()}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] rounded-none border-border p-0 sm:w-[calc(100vw-3rem)] sm:max-w-[calc(100vw-3rem)] xl:max-w-[120rem] 2xl:max-w-[128rem]">
+        <DialogContent
+          className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] rounded-none border-border p-0 sm:w-[calc(100vw-3rem)] sm:max-w-[calc(100vw-3rem)] xl:max-w-[120rem] 2xl:max-w-[128rem]"
+          headerActions={(
+            <AiMetadataAutofillButton
+              label="AI fill details"
+              isLoading={isAutofillingOutfitDetails}
+              disabled={isSaving || formState.itemIds.length === 0}
+              onClick={() => void handleAutofillOutfitDetails()}
+              className="h-9 w-9 p-0"
+            />
+          )}
+        >
           <div className="max-h-[90vh] overflow-y-auto lg:grid lg:overflow-hidden lg:grid-cols-[minmax(0,1.55fr)_minmax(28rem,0.95fr)] 2xl:grid-cols-[minmax(0,1.7fr)_minmax(32rem,0.9fr)]">
             <div className="min-h-[calc(100svh-8rem)] border-b border-border bg-stone-50 px-5 py-6 md:px-8 lg:min-h-0 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-10">
               <div className="flex h-full min-h-0 flex-col gap-4">
@@ -740,7 +956,7 @@ export function MyOutfitsPage({
             </div>
 
             <div className="p-6 lg:overflow-y-auto lg:p-8 xl:p-10">
-              <DialogHeader className="mb-6 text-left sm:text-left">
+              <DialogHeader className="mb-6 pr-24 text-left sm:text-left">
                 <DialogTitle asChild>
                   <PrimitiveText as="h2" variant="display" font="serif">
                     Edit Outfit
@@ -773,15 +989,6 @@ export function MyOutfitsPage({
               ) : null}
 
               <form onSubmit={handleSubmit} className="space-y-5">
-                <div className="flex justify-end">
-                  <AiMetadataAutofillButton
-                    label="AI fill details"
-                    isLoading={isAutofillingOutfitDetails}
-                    disabled={isSaving || formState.itemIds.length === 0}
-                    onClick={() => void handleAutofillOutfitDetails()}
-                  />
-                </div>
-
                 <label className="block space-y-2">
                   <PrimitiveText as="span" variant="bodySm" tone="muted">
                     Title
@@ -864,6 +1071,35 @@ export function MyOutfitsPage({
           </div>
         </DialogContent>
       </Dialog>
+
+      <OutfitFolderDialog
+        open={isFolderDialogOpen}
+        onOpenChange={(open) => {
+          setIsFolderDialogOpen(open);
+          if (!open) setEditingFolderId(null);
+        }}
+        folder={editingFolder}
+        outfits={outfits}
+        isSaving={isSavingFolder}
+        onSave={(draft) => void handleSaveFolder(draft)}
+      />
+
+      <OutfitMagazineDialog
+        open={isMagazineOpen}
+        onOpenChange={setIsMagazineOpen}
+        folder={hydratedSelectedFolder}
+        onFolderUpdated={handleFolderUpdated}
+      />
+
+      <PrimitiveConfirmationDialog
+        open={folderToDeleteId !== null}
+        onOpenChange={(open) => !open && setFolderToDeleteId(null)}
+        title="Delete magazine?"
+        description="This removes the magazine layout and uploaded clip art. The outfits themselves will stay saved."
+        cancelLabel="Keep magazine"
+        confirmLabel="Delete magazine"
+        onConfirm={() => void handleDeleteFolder()}
+      />
 
       <Dialog
         open={isGenerateDialogOpen}

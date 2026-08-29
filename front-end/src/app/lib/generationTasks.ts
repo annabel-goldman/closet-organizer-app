@@ -11,6 +11,10 @@ export function isGenerationTaskRunning(task: GenerationTask) {
   return ["pending", "processing"].includes(task.workflow.status);
 }
 
+export function isGenerationTaskSuccessful(task: GenerationTask) {
+  return ["review", "succeeded"].includes(task.workflow.status);
+}
+
 export function generationTaskLabel(task: GenerationTask) {
   const resultName = task.workflow.metadata?.result_name;
   return typeof resultName === "string" && resultName.trim() ? resultName : task.label;
@@ -18,7 +22,7 @@ export function generationTaskLabel(task: GenerationTask) {
 
 export function generationTaskMessage(task: GenerationTask) {
   const running = isGenerationTaskRunning(task);
-  const completed = ["review", "succeeded"].includes(task.workflow.status);
+  const completed = isGenerationTaskSuccessful(task);
 
   switch (task.workflow.kind) {
     case "item_clean":

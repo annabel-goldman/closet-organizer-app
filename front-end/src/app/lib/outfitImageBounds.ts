@@ -1,3 +1,5 @@
+import { resolveEditableImageFetchUrl } from "./closet.ts";
+
 const EDGE_BACKGROUND_ALPHA_THRESHOLD = 8;
 const EDGE_BACKGROUND_MIN_RGB = 250;
 const EDGE_BACKGROUND_MAX_RGB_DELTA = 6;
@@ -269,7 +271,7 @@ async function loadCanvasSafeImage(imageUrl: string): Promise<LoadedCanvasImage>
     };
   }
 
-  const response = await fetch(imageUrl, {
+  const response = await fetch(resolveEditableImageFetchUrl(imageUrl), {
     credentials: "include",
   });
 

@@ -4,6 +4,8 @@ class Outfit < ApplicationRecord
   has_many :clothing_items, through: :outfit_items
   has_one :outfit_generation_run, dependent: :nullify
   has_many :ai_workflows, as: :subject, dependent: :destroy
+  has_many :outfit_folder_memberships, dependent: :destroy
+  has_many :outfit_folders, through: :outfit_folder_memberships
 
   validates :name, presence: true, length: { maximum: InputLengthPolicy::MAX_OUTFIT_NAME }
   validates :notes, length: { maximum: InputLengthPolicy::MAX_OUTFIT_NOTES }, allow_blank: true

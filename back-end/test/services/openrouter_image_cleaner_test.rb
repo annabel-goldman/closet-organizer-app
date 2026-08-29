@@ -71,12 +71,14 @@ class OpenrouterImageCleanerTest < ActiveSupport::TestCase
     assert_includes prompt, "Frame the person head to toe with the complete outfit visible"
     assert_includes prompt, "The first 2 input reference images are private photos of the same person"
     assert_includes prompt, "The next 2 input reference images are the outfit pieces"
-    assert_includes prompt, "seamless pure white studio background"
-    assert_includes prompt, "no room, scenery, furniture, props, texture, gradient, horizon line, wall-to-floor seam"
-    assert_includes prompt, "do not make the background transparent"
+    assert_includes prompt, "solid pure white (#FFFFFF) background like a clean full-body cutout"
+    assert_includes prompt, "every background pixel uniformly white"
+    assert_includes prompt, "Do not add a cast shadow, contact shadow, reflection, halo, glow, or grounding surface"
+    assert_includes prompt, "color-selection magic wand can remove the white background easily"
+    assert_includes prompt, "white background opaque rather than transparent"
   end
 
-  test "modeled item prompt requires a plain white grounded studio background" do
+  test "modeled item prompt requires an isolated cutout on a solid white background" do
     cleaner = OpenrouterImageCleaner.new(
       Object.new,
       mode: :modeled,
@@ -88,12 +90,13 @@ class OpenrouterImageCleanerTest < ActiveSupport::TestCase
 
     prompt = cleaner.send(:generation_prompt)
 
-    assert_includes prompt, "seamless pure white studio background"
+    assert_includes prompt, "solid pure white (#FFFFFF) background like a clean full-body cutout"
     assert_includes prompt, "vertical 4:5 portrait image, never landscape or square"
     assert_includes prompt, "vertical composition that keeps the referenced item fully visible"
-    assert_includes prompt, "background uniformly white"
-    assert_includes prompt, "subtle natural contact shadow"
-    assert_includes prompt, "do not make the background transparent"
+    assert_includes prompt, "every background pixel uniformly white"
+    assert_includes prompt, "Do not add a cast shadow, contact shadow, reflection, halo, glow, or grounding surface"
+    assert_includes prompt, "color-selection magic wand can remove the white background easily"
+    assert_includes prompt, "white background opaque rather than transparent"
   end
 
   test "modeled preview requests use the app's portrait canvas ratio" do

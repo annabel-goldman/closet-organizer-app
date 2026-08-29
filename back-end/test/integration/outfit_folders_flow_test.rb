@@ -1,0 +1,150 @@
+require "test_helper"
+
+class OutfitFoldersFlowTest < ActionDispatch::IntegrationTest
+  setup do
+    @user = users(:one)
+    @other_user = users(:two)
+    @outfit = outfits(:one)
+    @other_outfit = outfits(:two)
+  end
+
+  test "user can create, reorder, browse, and delete an outfit folder without deleting outfits" do
+    second_outfit = @user.outfits.create!(name: "Dinner Look")
+
+    assert_difference("OutfitFolder.count", 1) do
+      post outfit_folders_url, params: {
+        outfit_folder: {
+          name: "Paris Weekend",
+          occasion: "Paris · September",
+          notes: "Three days of walking and dinner reservations.",
+          theme: "scrapbook",
+          outfit_ids: [ second_outfit.id, @outfit.id ]
+        }
+      }, headers: auth_headers(@user), as: :json
+    end
+
+    assert_response :created
+    folder_id = response_json.fetch("id")
+    assert_equal [ second_outfit.id, @outfit.id ], response_json.fetch("outfit_ids")
+    assert_equal [ "Dinner Look", @outfit.name ], response_json.fetch("outfits").map { |outfit| outfit.fetch("name") }
+
+    get outfit_folders_url, headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal [ folder_id ], response_json.map { |folder| folder.fetch("id") }
+
+    patch outfit_folder_url(folder_id), params: {
+      outfit_folder: {
+        name: "Paris Weekend",
+        occasion: "Paris · September",
+        notes: "Updated notes",
+        theme: "editorial",
+        outfit_ids: [ @outfit.id, second_outfit.id ]
+      }
+    }, headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal [ @outfit.id, second_outfit.id ], response_json.fetch("outfit_ids")
+
+    assert_no_difference("Outfit.count") do
+      assert_difference("OutfitFolder.count", -1) do
+        delete outfit_folder_url(folder_id), headers: auth_headers(@user), as: :json
+      end
+    end
+
+    assert_response :no_content
+  end
+
+  test "folder cannot include another user's outfit" do
+    assert_no_difference("OutfitFolder.count") do
+      post outfit_folders_url, params: {
+        outfit_folder: {
+          name: "Not mine",
+          outfit_ids: [ @other_outfit.id ]
+        }
+      }, headers: auth_headers(@user), as: :json
+    end
+
+    assert_response :unprocessable_content
+  end
+
+  test "user cannot access another user's folder" do
+    folder = @other_user.outfit_folders.create!(name: "Private trip")
+
+    get outfit_folder_url(folder), headers: auth_headers(@user), as: :json
+
+    assert_response :not_found
+  end
+
+  test "user can add, move, and remove private clip art from a magazine page" do
+    folder = @user.outfit_folders.create!(name: "Beach Week")
+    folder.memberships.create!(outfit: @outfit, position: 0)
+    image = Rack::Test::UploadedFile.new(file_fixture("item-photo.png"), "image/png")
+
+    assert_difference("OutfitFolderDecoration.count", 1) do
+      post outfit_folder_decorations_url(folder), params: {
+        decoration: {
+          image: image,
+          page_key: "outfit:#{@outfit.id}",
+          x: 12,
+          y: 18,
+          width: 24,
+          rotation: -8,
+          layer_order: 2
+        }
+      }, headers: auth_headers(@user)
+    end
+
+    assert_response :created
+    decoration_id = response_json.fetch("id")
+    assert_equal "outfit:#{@outfit.id}", response_json.fetch("page_key")
+    assert_equal 12.0, response_json.fetch("x")
+    assert response_json.fetch("image_url").present?
+
+    patch outfit_folder_decoration_url(folder, decoration_id), params: {
+      decoration: { x: 35, y: 40, width: 30, rotation: 10 }
+    }, headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal 35.0, response_json.fetch("x")
+    assert_equal 10.0, response_json.fetch("rotation")
+
+    assert_difference("OutfitFolderDecoration.count", -1) do
+      delete outfit_folder_decoration_url(folder, decoration_id), headers: auth_headers(@user), as: :json
+    end
+
+    assert_response :no_content
+  end
+
+  test "clip art cannot target an outfit outside the folder" do
+    folder = @user.outfit_folders.create!(name: "Beach Week")
+    image = Rack::Test::UploadedFile.new(file_fixture("item-photo.png"), "image/png")
+
+    assert_no_difference("OutfitFolderDecoration.count") do
+      post outfit_folder_decorations_url(folder), params: {
+        decoration: { image: image, page_key: "outfit:#{@outfit.id}" }
+      }, headers: auth_headers(@user)
+    end
+
+    assert_response :unprocessable_content
+  end
+
+  test "deleting an outfit removes its folder membership and retired magazine-page decorations" do
+    outfit = @user.outfits.create!(name: "One-night look")
+    folder = @user.outfit_folders.create!(name: "Weekend")
+    folder.memberships.create!(outfit: outfit, position: 0)
+    decoration = folder.decorations.new(page_key: "outfit:#{outfit.id}")
+    image = StringIO.new(file_fixture("item-photo.png").binread)
+    decoration.image.attach(io: image, filename: "star.png", content_type: "image/png")
+    decoration.save!
+
+    assert_difference("OutfitFolderMembership.count", -1) do
+      assert_difference("OutfitFolderDecoration.count", -1) do
+        delete outfit_url(outfit), headers: auth_headers(@user), as: :json
+      end
+    end
+
+    assert_response :no_content
+    assert folder.reload.persisted?
+  end
+end

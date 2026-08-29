@@ -164,7 +164,7 @@ class AiWorkflowsFlowTest < ActionDispatch::IntegrationTest
       workflow_id = response_json.fetch("id")
       assert_equal "modeled_outfit", response_json["kind"]
       assert_equal "bytedance-seed/seedream-4.5", response_json["model"]
-      assert_equal "modeled-outfit-v5-flatlay-composition", response_json["prompt_version"]
+      assert_equal "modeled-outfit-v6-white-cutout", response_json["prompt_version"]
       assert_equal %w[prepare modeled verify], response_json.fetch("stages").map { |stage| stage.fetch("key") }
 
       perform_enqueued_jobs only: ModeledOutfitGenerationJob

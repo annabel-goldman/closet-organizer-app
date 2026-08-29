@@ -4,7 +4,6 @@ import {
   buildItemPreviewMetadata,
   ClothingItemFormValues,
   OutfitDetection,
-  OutfitUpload,
   preferredDetectionBox,
   parseTagInput,
   titleize,
@@ -31,11 +30,14 @@ interface CreateItemImageModeProps {
   canRedoDetectionDraft: (detectionId: number) => boolean;
   canUndoDetectionDraft: (detectionId: number) => boolean;
   cleaningDetectionIds: number[];
+  completedFileCount: number;
   detectionCleanErrors: Record<number, string>;
   detections: OutfitDetection[];
   errorMessage: string;
   getDetectionDraft: (detection: OutfitDetection) => ClothingItemFormValues;
+  getDetectionSourceImageUrl: (detection: OutfitDetection) => string | null;
   hasDetectionDraft: (detectionId: number) => boolean;
+  hasOutfitUploads: boolean;
   isPreparingDetectedMetadata: boolean;
   isCreating: boolean;
   isDetecting: boolean;
@@ -56,7 +58,7 @@ interface CreateItemImageModeProps {
   onCleanDetectionEditorImage?: (detection: OutfitDetection, file: File) => Promise<File>;
   onDetectItems: () => void;
   onDraftChange: (detectionId: number, nextValues: ClothingItemFormValues) => void;
-  onFileChange: (file: File | null) => void;
+  onFileChange: (files: File[]) => void;
   onGetDetectionImageEditorFile?: (detection: OutfitDetection) => Promise<File | null>;
   onGetSourceImageEditorFile?: () => Promise<File | null>;
   onRequestDetectionAutofill: (detection: OutfitDetection) => void;
@@ -64,9 +66,9 @@ interface CreateItemImageModeProps {
   onSaveSelectedItems: () => void;
   onToggleSelection: (detection: OutfitDetection) => void;
   onUndoDetectionDraft: (detection: OutfitDetection) => void;
-  outfitUpload: OutfitUpload | null;
   selectedCount: number;
   selectedDetectionIds: number[];
+  selectedFileCount: number;
   selectedFileName?: string;
   sourceImageEditorActions?: ExpandedImageEditorImageActions;
   sourceImageUrl: string | null;
@@ -80,11 +82,14 @@ export function CreateItemImageMode({
   canRedoDetectionDraft,
   canUndoDetectionDraft,
   cleaningDetectionIds,
+  completedFileCount,
   detectionCleanErrors,
   detections,
   errorMessage,
   getDetectionDraft,
+  getDetectionSourceImageUrl,
   hasDetectionDraft,
+  hasOutfitUploads,
   isPreparingDetectedMetadata,
   isCreating,
   isDetecting,
@@ -106,9 +111,9 @@ export function CreateItemImageMode({
   onSaveSelectedItems,
   onToggleSelection,
   onUndoDetectionDraft,
-  outfitUpload,
   selectedCount,
   selectedDetectionIds,
+  selectedFileCount,
   selectedFileName,
   sourceImageEditorActions,
   sourceImageUrl,
@@ -121,7 +126,7 @@ export function CreateItemImageMode({
   const [isRedetectDialogOpen, setIsRedetectDialogOpen] = useState(false);
   const [isSaveWarningDialogOpen, setIsSaveWarningDialogOpen] = useState(false);
   const previousDetectionCountRef = useRef(0);
-  const hasStartedDetectionFlow = Boolean(selectedFileName || isDetecting || outfitUpload);
+  const hasStartedDetectionFlow = Boolean(selectedFileCount || isDetecting || hasOutfitUploads);
 
   useEffect(() => {
     const previousDetectionCount = previousDetectionCountRef.current;
@@ -197,8 +202,11 @@ export function CreateItemImageMode({
     ? autofillingDetectionId === detailsDetection.id
     : false;
   const detectionHistoryDisabled = isCreating || focusedIsAutofilling || isPreparingDetectedMetadata;
+  const previewDetectionSourceImageUrl = previewDetection
+    ? getDetectionSourceImageUrl(previewDetection)
+    : null;
   const previewMedia = useMemo(() => {
-    if (!previewDetection || !sourceImageUrl || !previewDetectionBox || previewDetection.cleaned_image_url) {
+    if (!previewDetection || !previewDetectionSourceImageUrl || !previewDetectionBox || previewDetection.cleaned_image_url) {
       return undefined;
     }
 
@@ -206,12 +214,12 @@ export function CreateItemImageMode({
       <DetectionPreviewImage
         alt={`${focusedSuggestedName} preview`}
         cropBox={previewDetectionBox}
-        sourceImageUrl={sourceImageUrl}
+        sourceImageUrl={previewDetectionSourceImageUrl}
       />
     );
-  }, [focusedSuggestedName, previewDetection, previewDetectionBox, sourceImageUrl]);
+  }, [focusedSuggestedName, previewDetection, previewDetectionBox, previewDetectionSourceImageUrl]);
   const expandedPreview = useMemo(() => {
-    if (!previewDetection || !sourceImageUrl || !previewDetectionBox || previewDetection.cleaned_image_url) {
+    if (!previewDetection || !previewDetectionSourceImageUrl || !previewDetectionBox || previewDetection.cleaned_image_url) {
       return undefined;
     }
 
@@ -219,13 +227,13 @@ export function CreateItemImageMode({
       <DetectionPreviewImage
         alt={`${focusedSuggestedName} preview`}
         cropBox={previewDetectionBox}
-        sourceImageUrl={sourceImageUrl}
+        sourceImageUrl={previewDetectionSourceImageUrl}
       />
     );
-  }, [focusedSuggestedName, previewDetection, previewDetectionBox, sourceImageUrl]);
-  const sourcePreviewTitle = selectedFileName ?? "Upload an image";
+  }, [focusedSuggestedName, previewDetection, previewDetectionBox, previewDetectionSourceImageUrl]);
+  const sourcePreviewTitle = selectedFileName ?? "Upload photos";
   const sourcePreviewPrimaryDetail = isDetecting
-    ? "Detecting items"
+    ? `${detectionCount} item${detectionCount === 1 ? "" : "s"} found · ${completedFileCount}/${selectedFileCount} photos analyzed`
     : detectionCount > 0
       ? `${detectionCount} detected item${detectionCount === 1 ? "" : "s"}`
       : selectedFileName
@@ -234,8 +242,8 @@ export function CreateItemImageMode({
   const sourcePreviewSecondaryDetail = detectionCount > 0
     ? `${selectedCount} selected to save`
     : `Saving to ${titleize(user.username)}`;
-  const shouldShowUploadPrompt = !selectedFileName && !isDetecting && !outfitUpload;
-  const shouldShowInitialDetectPrompt = Boolean(selectedFileName) && detectionCount === 0;
+  const shouldShowUploadPrompt = selectedFileCount === 0 && !isDetecting && !hasOutfitUploads;
+  const shouldShowInitialDetectPrompt = selectedFileCount > 0 && detectionCount === 0;
   const shouldShowRedetectPrompt = hasStartedDetectionFlow && detectionCount > 0 && isSourceFocused;
   const isLoadingDetectedMetadata = isPreparingDetectedMetadata || autofillingDetectionId !== null;
   const shouldShowMetadataLoadingState =
@@ -243,7 +251,9 @@ export function CreateItemImageMode({
     && !isSourceFocused
     && (!detailsDetection || !detailsDraftReady || isLoadingDetectedMetadata);
   const hasUnsavedDetectedItems = selectedCount < detectionCount;
-  const detectPromptCopy = "Press the button below to detect your items.";
+  const detectPromptCopy = selectedFileCount === 1
+    ? "Analyze this photo. Detected items will appear as soon as it finishes."
+    : `Analyze these ${selectedFileCount} photos. Detected items will appear as each photo finishes.`;
 
   return (
     <div className="max-w-7xl mx-auto px-6 pt-12 pb-24 space-y-8">
@@ -275,7 +285,11 @@ export function CreateItemImageMode({
                 },
                 onApply: (file, context) => onApplyDetectionImageEdits(previewDetection, file, context),
               }
-            : isSourceFocused && selectedFileName && onGetSourceImageEditorFile && onApplySourceImageEdits
+            : isSourceFocused
+              && selectedFileCount === 1
+              && selectedFileName
+              && onGetSourceImageEditorFile
+              && onApplySourceImageEdits
             ? {
                 getEditableFile: onGetSourceImageEditorFile,
                 imageActions: sourceImageEditorActions,
@@ -310,7 +324,11 @@ export function CreateItemImageMode({
           ref={inputRef}
           type="file"
           accept="image/*"
-          onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
+          multiple
+          onChange={(event) => {
+            onFileChange(Array.from(event.target.files ?? []));
+            event.currentTarget.value = "";
+          }}
           className="sr-only"
         />
 
@@ -320,6 +338,7 @@ export function CreateItemImageMode({
           getDetectionPreviewImageUrl={(detection) => {
             return editedDetectionImageUrls[detection.id] ?? detection.cleaned_image_url ?? null;
           }}
+          getDetectionSourceImageUrl={getDetectionSourceImageUrl}
           isDetecting={isDetecting}
           onSelectDetection={(detectionId) => {
             setPreviewTarget(detectionId);
@@ -330,6 +349,19 @@ export function CreateItemImageMode({
           sourceImageUrl={sourceImageUrl}
         />
 
+        {isDetecting ? (
+          <div
+            className="flex items-center gap-3 border border-border bg-card px-4 py-3"
+            role="status"
+            aria-live="polite"
+          >
+            <LoaderCircle className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+            <PrimitiveText as="p" variant="bodySm">
+              Analyzing {selectedFileCount} photo{selectedFileCount === 1 ? "" : "s"} · {completedFileCount}/{selectedFileCount} complete · {detectionCount} item{detectionCount === 1 ? "" : "s"} ready
+            </PrimitiveText>
+          </div>
+        ) : null}
+
         {errorMessage && (
           <div className="border border-destructive/20 bg-destructive/5 p-4 text-sm">
             {errorMessage}
@@ -338,10 +370,10 @@ export function CreateItemImageMode({
 
         {shouldShowUploadPrompt ? (
           <div className="border border-border bg-card p-5">
-            <p>Upload an image to get started.</p>
+            <p>Upload one or more photos to get started.</p>
             <p>
-              Our AI will analyze your image and pull out different items of clothing you&apos;re
-              wearing, so you can add them to your closet.
+              Our AI will analyze your photos and pull out different clothing items so you can add
+              them to your closet.
             </p>
           </div>
         ) : null}
@@ -352,7 +384,7 @@ export function CreateItemImageMode({
             <PrimitiveButton
               type="button"
               onClick={onDetectItems}
-              disabled={isDetecting || !selectedFileName}
+              disabled={isDetecting || selectedFileCount === 0}
               className={`h-auto self-start bg-foreground px-5 py-3 text-background hover:bg-foreground/90 ${
                 isDetecting ? "min-w-40 justify-center" : ""
               }`}
@@ -361,18 +393,18 @@ export function CreateItemImageMode({
               {isDetecting ? (
                 <>
                   <LoaderCircle className="w-4 h-4 animate-spin" />
-                  <span>Detect Items</span>
+                  <span>Analyzing photos</span>
                   <span className="inline-flex items-center gap-1" aria-hidden="true">
                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:-0.3s]" />
                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:-0.15s]" />
                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
                   </span>
-                  <span className="sr-only">Detecting items</span>
+                  <span className="sr-only">Analyzing photos</span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  Detect Items
+                  Add Multiple Items
                 </>
               )}
             </PrimitiveButton>
@@ -393,7 +425,7 @@ export function CreateItemImageMode({
             >
               <PrimitiveButton
                 type="button"
-                disabled={isDetecting || !selectedFileName}
+                disabled={isDetecting || selectedFileCount === 0}
                 className="h-auto self-start bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
               >
                 <Sparkles className="w-4 h-4" />
@@ -410,7 +442,7 @@ export function CreateItemImageMode({
           </div>
         ) : null}
 
-        {!hasStartedDetectionFlow || isDetecting || !outfitUpload || detectionCount === 0 || !detailsDetection || !focusedDraft || !detailsDraftReady || isSourceFocused ? null : (
+        {!hasStartedDetectionFlow || !hasOutfitUploads || detectionCount === 0 || !detailsDetection || !focusedDraft || !detailsDraftReady || isSourceFocused ? null : (
           <ItemMetadataPanel
             action={
               <div className="mt-0.5 flex items-center gap-2 self-start">

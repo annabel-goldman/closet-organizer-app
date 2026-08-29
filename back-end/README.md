@@ -98,10 +98,19 @@ POST    /outfits/:id/generate_modeled_image
 GET     /outfits
 POST    /outfits
 POST    /outfits/generate
+POST    /outfits/generate_metadata_suggestions
 GET     /outfits/:id
 PATCH   /outfits/:id
 DELETE  /outfits/:id
 POST    /outfits/:id/generate_metadata_suggestions
+GET     /outfit_folders
+POST    /outfit_folders
+GET     /outfit_folders/:id
+PATCH   /outfit_folders/:id
+DELETE  /outfit_folders/:id
+POST    /outfit_folders/:outfit_folder_id/decorations
+PATCH   /outfit_folders/:outfit_folder_id/decorations/:id
+DELETE  /outfit_folders/:outfit_folder_id/decorations/:id
 POST    /outfit_uploads
 GET     /outfit_uploads/:id
 POST    /outfit_detections/:id/generate_clean_image
@@ -119,16 +128,17 @@ Notes:
 - Text input length is capped at every layer: `app/models/concerns/input_length_policy.rb` exposes the limits (username 60, email 254, item name 120, brand 80, category 60, outfit name 120, notes 2_000, tag 40 chars × 30 per record); the `User`/`ClothingItem`/`Outfit` models validate against the same constants and surface friendly errors; the `AddInputLengthConstraints` migration enforces matching `limit:` and `null: false` constraints at the database. SQL injection is mitigated by ActiveRecord's parameterized queries — the only raw SQL fragment in the app (`where("lower(email) = ?", ...)` in `User`) uses bound placeholders.
 - `GET /users` is paginated via Kaminari. It accepts `page` and `per_page` query params (default 24, max 100) and returns `{ users: [...], meta: { page, per_page, total_pages, total_count } }`. The index payload omits each user's `clothing_items` array and only includes a `clothing_items_count` field; per-user `GET /users/:id` still returns the full items array.
 - Outfit payloads now preserve per-piece collage presentation through `outfit_items`: each embedded outfit item can include `outfit_item_id`, `layer_order`, and `collage_layout` (`x`, `y`, `width`, `height`, `rotation`) so the frontend can reopen and edit saved collages faithfully. AI-generated outfits also include optional `generation_id`, `generated_by_ai`, and `generated_item_ids` fields. The outfit integration suite covers the round-trip contract that the collage layout returned by `PATCH /outfits/:id` matches the subsequent `GET /outfits/:id` payload used by the saved gallery.
+- Outfit folders are user-scoped collections with ordered many-to-many outfit membership; one outfit may appear in multiple folders and deleting a folder never deletes an outfit. Folder payloads embed outfits in magazine order. Decorations are private Active Storage images assigned to either the cover or an outfit page, with validated percentage position, width, rotation, and layer order. Removing an outfit from a folder also purges decorations for its retired page.
 - `POST /outfits/generate` accepts JSON `{ "occasion": "optional vibe or event" }` or multipart form data with `occasion` plus an optional `reference_photo` flatlay image. It snapshots the current owned closet item IDs, persists the optional reference on an `outfit_generation` workflow, queues `OutfitGenerationJob`, and immediately returns the workflow with `202 Accepted`. The job analyzes a reference into structured target slots, shortlists candidates while preserving required slots and cross-slot visual anchors, applies complete-look rules, and performs visual refinement. It creates the outfit and preference-learning run only after the provider returns and a final cancellation check succeeds, then stores `outfit_id` and `result_name` in workflow metadata. A cancelled late response never creates an outfit, and the temporary reference attachment is purged when the job reaches a terminal state.
-- `POST /outfits/:id/generate_metadata_suggestions` accepts the editor's current `item_ids`, title, tags, and notes, verifies that every draft item belongs to the authenticated user, and returns a structured title/tag/note suggestion grounded in those pieces. It never persists the suggestion; the normal outfit update endpoint remains the only save step.
+- `POST /outfits/generate_metadata_suggestions` accepts an unsaved Outfit Cart draft, while `POST /outfits/:id/generate_metadata_suggestions` accepts the saved editor's current draft. Both take `item_ids`, title, tags, and notes, verify that every item belongs to the authenticated user, and return a structured title/tag/note suggestion grounded in those pieces without persisting an outfit or metadata changes.
 - AI outfit feedback is stored as recommender-style logs. Each generated outfit creates an `outfit_generation_run` with candidate item IDs, generated item IDs, the structured reference profile, and generator version. Save/delete behavior appends `outfit_generation_events`: unchanged saves become positive keep signals, item-list edits become added/removed/kept correction signals, layout-only edits do not become item-change feedback, and deletes become weak negative feedback for the generated combination. Runs survive outfit deletion through a nullable `outfit_id`.
 - `AiWorkflow` is the durable lifecycle for multi-step AI work. Current kinds are `outfit_upload`, `item_clean`, `outfit_generation`, `modeled_item`, `modeled_outfit`, and `lookbook`; each initializes explicit stages and can report pending, processing, review, succeeded, rejected, deleted, failed, or cancelled state. `POST /ai_workflows/:id/cancel` marks unfinished stages and artifacts cancelled and resets subject state for item cleaning or outfit-photo detection. All durable generation jobs re-check cancellation before publishing, so an external provider response that arrives after cancellation is discarded. Successful jobs automatically approve their generated artifacts/stages where applicable. `PATCH /ai_workflows/:id/preview` accepts an edited image for an authenticated user's completed modeled workflow, replaces only the generated artifact attachment, and records the manual edit timestamp/count without altering the source item or outfit. `DELETE /ai_workflows/:id/preview` purges that generated attachment, marks the artifact and workflow deleted, and likewise leaves the source unchanged; both endpoints also accept legacy `review` workflows created before automatic approval. `AiArtifact` records provider/model/prompt provenance and keeps generated files behind the authenticated workflow payload. Artifact file URLs use Active Storage's proxy route so private generated previews stream through the app instead of redirecting the browser directly to object storage.
 - Outfit-photo creation stores `upload_id` and `upload_name` in the `outfit_upload` workflow metadata so the frontend can reopen the persisted upload after background detection finishes. The analysis job serializes startup against cancellation and restores cancelled state if a late provider failure arrives.
 
 - `POST /clothing_items/:id/generate_clean_image` now queues `CleanImageGenerationJob` and returns an `item_clean` workflow with `202 Accepted`. The job generates and removes the background off-request, publishes the cleaned attachment only after a cancellation-safe lock, updates the item cache-facing clean-image state, and records an approved artifact for provenance.
 - A user can keep up to three ordered `ModelReferenceImage` records. Uploading the first reference records consent, the first image is the primary identity anchor, individual references can be removed or reordered, and removing the final reference clears consent. Existing single-photo attachments are migrated into position one. Thumbnail bytes are served only through `GET /model_reference_images/:id/photo`, which scopes lookup to the authenticated user rather than exposing a direct storage URL.
-- `POST /clothing_items/:id/generate_modeled_image` requires the current user to have at least one validated private model reference and a consent timestamp. It queues `ModeledImageGenerationJob`, which labels and sends all ordered references to the existing OpenRouter modeled-preview prompt, requests a vertical `4:5` head-to-toe portrait on a seamless plain white studio background, and automatically publishes the finished artifact as an approved preview.
-- `POST /outfits/:id/generate_modeled_image` uses the same consent gate and queues `ModeledOutfitGenerationJob`. An optional multipart `modeled_outfit` payload can snapshot the editor's current `item_ids`, `name`, `tags`, and `notes` plus a temporary `flatlay_snapshot`; item IDs are ownership-checked and the worker generates from that immutable request snapshot rather than re-reading later-saved outfit links. Requests without a draft remain backward-compatible and use the saved outfit. Every requested item must have a display photo, and the combined identity, garment, and flat-lay inputs are limited to the provider's 14-reference maximum. Full-outfit modeling uses Seedream 4.5 through OpenRouter's dedicated `/images` API by default, sends ordered private identity references first, garment references next, and the styled flat lay last as composition-only guidance, then requests a `2K` vertical `4:5` plain-white studio result and records returned usage/cost data on the artifact. The flat-lay input is purged at terminal workflow state. The persisted `modeled_outfit` workflow moves directly to `succeeded` when ready, and outfit payloads include that workflow so the frontend can reopen or delete its preview.
+- `POST /clothing_items/:id/generate_modeled_image` requires the current user to have at least one validated private model reference and a consent timestamp. It queues `ModeledImageGenerationJob`, which labels and sends all ordered references to the existing OpenRouter modeled-preview prompt, requests a vertical `4:5` head-to-toe cutout on an opaque, uniformly pure-white background without a floor, cast shadow, reflection, halo, or tonal falloff, and automatically publishes the finished artifact as an approved preview.
+- `POST /outfits/:id/generate_modeled_image` uses the same consent gate and queues `ModeledOutfitGenerationJob`. An optional multipart `modeled_outfit` payload can snapshot the editor's current `item_ids`, title, tags, and notes plus a temporary `flatlay_snapshot`; item IDs are ownership-checked and the worker generates from that immutable request snapshot rather than re-reading later-saved outfit links. Requests without a draft remain backward-compatible and use the saved outfit. Every requested item must have a display photo, and the combined identity, garment, and flat-lay inputs are limited to the provider's 14-reference maximum. Full-outfit modeling uses Seedream 4.5 through OpenRouter's dedicated `/images` API by default, sends ordered private identity references first, garment references next, and the styled flat lay last as composition-only guidance, then requests a `2K` vertical `4:5` isolated cutout on an opaque, uniformly pure-white background and records returned usage/cost data on the artifact. The flat-lay input is purged at terminal workflow state. The persisted `modeled_outfit` workflow moves directly to `succeeded` when ready, and outfit payloads include that workflow so the frontend can reopen or delete its preview.
 - Production defaults Active Job to Solid Queue and connects it to the `queue` database role. `config/queue.yml`, `config/recurring.yml`, `bin/jobs`, and `db/queue_schema.rb` are checked in for the worker lifecycle; `ACTIVE_JOB_QUEUE_ADAPTER` can still override the adapter for controlled environments.
 
 ## Important Internal Files
@@ -139,6 +149,8 @@ Notes:
   Handles clothing item CRUD, photo attachment and cropping, clean-image generation, and metadata suggestions
 - `app/controllers/outfit_detections_controller.rb`
   Handles detection-based clean-image and metadata suggestion requests
+- `app/controllers/outfit_folders_controller.rb` and `app/controllers/outfit_folder_decorations_controller.rb`
+  Handle user-scoped lookbook folders, ordered memberships, and private magazine clip-art layout
 - `app/controllers/image_variants_controller.rb`
   Handles temporary AI preview generation and metadata suggestions for uploaded but unsaved images
 - `app/controllers/ai_status_controller.rb`, `app/controllers/ai_workflows_controller.rb`, `app/controllers/modeled_images_controller.rb`, and `app/controllers/modeled_outfit_images_controller.rb`
@@ -186,6 +198,7 @@ Notes:
 - `password_digest`
 - `has_many :clothing_items`
 - `has_many :outfits`
+- `has_many :outfit_folders`
 - `has_many :outfit_generation_runs`
 - `has_many :outfit_uploads`
 - `has_many :ai_workflows`
@@ -242,6 +255,12 @@ Supported `size` enum values:
 - `collage_width`
 - `collage_height`
 - `collage_rotation`
+
+### `OutfitFolder`
+
+- belongs to one user and stores a name, optional occasion/notes, and an editorial, scrapbook, or minimal theme
+- has ordered `OutfitFolderMembership` records so outfits can be reused across multiple folders
+- has page-scoped `OutfitFolderDecoration` records whose private Active Storage images carry percentage layout and layer data
 
 ### `OutfitGenerationRun`
 

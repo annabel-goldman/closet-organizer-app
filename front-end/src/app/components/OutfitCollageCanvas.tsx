@@ -21,7 +21,7 @@ import {
 } from "../lib/outfitCollage";
 import {
   COLLAGE_STAGE_ASPECT_RATIO,
-  normalizeOutfitCollageLayoutToAspectRatio,
+  resolveOutfitCollageMediaBox,
   resolveOutfitCollageResizeAspectRatio,
 } from "../lib/outfitCollageRenderMath";
 import { PrimitiveText } from "./primitives/PrimitiveText";
@@ -73,21 +73,8 @@ export function OutfitCollageCanvas({
   );
   const visibleItems = maxVisibleItems ? orderedItems.slice(0, maxVisibleItems) : orderedItems;
   const hiddenCount = Math.max(0, orderedItems.length - visibleItems.length);
-  const normalizedLayouts = useMemo(
-    () =>
-      Object.fromEntries(
-        visibleItems.map((item) => [
-          item.id,
-          normalizeOutfitCollageLayoutToAspectRatio(
-            resolvedLayouts[item.id],
-            imageContentBoundsByItemId[item.id]?.aspectRatio ?? imageAspectRatioByItemId[item.id],
-          ),
-        ]),
-      ) as Record<number, OutfitCollageLayout>,
-    [imageAspectRatioByItemId, imageContentBoundsByItemId, resolvedLayouts, visibleItems],
-  );
   const selectedTarget = editable && selectedItemId ? itemFrameRefs.current[selectedItemId] : null;
-  const displayLayouts = normalizedLayouts;
+  const displayLayouts = resolvedLayouts;
 
   function syncFrameToPercentLayout(itemId: number, layout: OutfitCollageLayout) {
     const target = itemFrameRefs.current[itemId];
@@ -328,6 +315,11 @@ export function OutfitCollageCanvas({
     >
       {visibleItems.map((item, index) => {
         const layout = displayLayouts[item.id] ?? resolvedLayouts[item.id];
+        const contentBounds = imageContentBoundsByItemId[item.id];
+        const mediaBox = resolveOutfitCollageMediaBox(
+          layout,
+          contentBounds?.aspectRatio ?? imageAspectRatioByItemId[item.id],
+        );
         const isLastVisibleTile = index === visibleItems.length - 1;
         const showHiddenCount = hiddenCount > 0 && isLastVisibleTile && !editable;
 
@@ -369,42 +361,47 @@ export function OutfitCollageCanvas({
           >
             <div className="relative h-full w-full overflow-hidden bg-transparent">
               {item.image_url ? (
-                <img
-                  src={item.image_url}
-                  alt={item.name}
-                  className="pointer-events-none absolute max-w-none"
-                  style={imageStyleForContentBounds(imageContentBoundsByItemId[item.id])}
-                  onLoad={(event) => {
-                    const nextAspectRatio = event.currentTarget.naturalWidth / Math.max(1, event.currentTarget.naturalHeight);
-                    setImageAspectRatioByItemId((current) =>
-                      nearlyEqual(current[item.id] ?? 0, nextAspectRatio, 0.001)
-                        ? current
-                        : {
-                            ...current,
-                            [item.id]: nextAspectRatio,
-                          },
-                    );
-                    void measureImageContentBounds({
-                      imageUrl: item.image_url,
-                    }).then((nextBounds) => {
-                      if (!nextBounds) {
-                        return;
-                      }
-
-                      setImageContentBoundsByItemId((current) => {
-                        const previous = current[item.id];
-                        if (previous && imageContentBoundsEqual(previous, nextBounds)) {
-                          return current;
+                <div
+                  className="pointer-events-none absolute overflow-hidden"
+                  style={mediaBoxStyle(mediaBox)}
+                >
+                  <img
+                    src={item.image_url}
+                    alt={item.name}
+                    className="absolute max-w-none"
+                    style={imageStyleForContentBounds(contentBounds)}
+                    onLoad={(event) => {
+                      const nextAspectRatio = event.currentTarget.naturalWidth / Math.max(1, event.currentTarget.naturalHeight);
+                      setImageAspectRatioByItemId((current) =>
+                        nearlyEqual(current[item.id] ?? 0, nextAspectRatio, 0.001)
+                          ? current
+                          : {
+                              ...current,
+                              [item.id]: nextAspectRatio,
+                            },
+                      );
+                      void measureImageContentBounds({
+                        imageUrl: item.image_url,
+                      }).then((nextBounds) => {
+                        if (!nextBounds) {
+                          return;
                         }
 
-                        return {
-                          ...current,
-                          [item.id]: nextBounds,
-                        };
+                        setImageContentBoundsByItemId((current) => {
+                          const previous = current[item.id];
+                          if (previous && imageContentBoundsEqual(previous, nextBounds)) {
+                            return current;
+                          }
+
+                          return {
+                            ...current,
+                            [item.id]: nextBounds,
+                          };
+                        });
                       });
-                    });
-                  }}
-                />
+                    }}
+                  />
+                </div>
               ) : (
                 <div className="pointer-events-none flex h-full w-full items-end border border-border/40 bg-white/85 p-4 text-left shadow-sm">
                   <div>
@@ -452,6 +449,15 @@ export function OutfitCollageCanvas({
       ) : null}
     </div>
   );
+}
+
+function mediaBoxStyle(box: ReturnType<typeof resolveOutfitCollageMediaBox>): CSSProperties {
+  return {
+    height: `${box.height}%`,
+    left: `${box.left}%`,
+    top: `${box.top}%`,
+    width: `${box.width}%`,
+  };
 }
 
 function imageStyleForContentBounds(bounds?: ImageContentBounds): CSSProperties {

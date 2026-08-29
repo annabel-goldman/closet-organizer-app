@@ -1,6 +1,8 @@
 class OutfitsController < ApplicationController
   before_action :require_login
-  before_action :set_outfit, only: %i[ show update destroy generate_metadata_suggestions ]
+  before_action :set_outfit,
+    only: %i[ show update destroy generate_metadata_suggestions ],
+    if: -> { params[:id].present? }
 
   def index
     outfits = current_user.outfits.includes(:outfit_generation_run, :ai_workflows, outfit_items: :clothing_item).order(created_at: :desc)
@@ -63,9 +65,9 @@ class OutfitsController < ApplicationController
     render json: OpenrouterOutfitMetadataSuggester.call(
       items: items,
       current_metadata: {
-        name: suggestion_params[:name].presence || @outfit.name,
-        tags: suggestion_params.key?(:tags) ? suggestion_params[:tags] : @outfit.tags,
-        notes: suggestion_params.key?(:notes) ? suggestion_params[:notes] : @outfit.notes
+        name: suggestion_params[:name].presence || @outfit&.name,
+        tags: suggestion_params.key?(:tags) ? suggestion_params[:tags] : (@outfit&.tags || []),
+        notes: suggestion_params.key?(:notes) ? suggestion_params[:notes] : @outfit&.notes
       }
     )
   rescue StandardError => error

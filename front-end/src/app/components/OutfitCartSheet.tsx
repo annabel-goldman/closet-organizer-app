@@ -13,9 +13,17 @@ import {
 } from "./ui/sheet";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
+
+interface OutfitCartAutofillMessage {
+  kind: "error" | "success";
+  text: string;
+}
 
 interface OutfitCartSheetProps {
+  autofillMessage?: OutfitCartAutofillMessage | null;
   createErrorMessage?: string;
+  isAutofillingDetails: boolean;
   isCreating: boolean;
   isOpen: boolean;
   items: ClothingItem[];
@@ -26,12 +34,15 @@ interface OutfitCartSheetProps {
   onNotesChange: (value: string) => void;
   onOutfitNameChange: (value: string) => void;
   notes: string;
+  onAutofillDetails: () => void;
   outfitName: string;
   tagInput: string;
 }
 
 export function OutfitCartSheet({
+  autofillMessage = null,
   createErrorMessage = "",
+  isAutofillingDetails,
   isCreating,
   isOpen,
   items,
@@ -42,6 +53,7 @@ export function OutfitCartSheet({
   onNotesChange,
   onOutfitNameChange,
   notes,
+  onAutofillDetails,
   outfitName,
   tagInput,
 }: OutfitCartSheetProps) {
@@ -49,8 +61,20 @@ export function OutfitCartSheet({
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full border-l border-border bg-stone-50 p-0 sm:max-w-md">
-        <SheetHeader className="gap-2 border-b border-border px-5 py-4 pr-14">
+      <SheetContent
+        side="right"
+        className="w-full border-l border-border bg-stone-50 p-0 sm:max-w-md"
+        headerActions={(
+          <AiMetadataAutofillButton
+            label="AI fill details"
+            isLoading={isAutofillingDetails}
+            disabled={itemCount === 0 || isCreating}
+            onClick={onAutofillDetails}
+            className="h-9 w-9 p-0"
+          />
+        )}
+      >
+        <SheetHeader className="gap-2 border-b border-border px-5 py-4 pr-28">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground text-background">
               <ShoppingBag className="h-4 w-4" />
@@ -70,6 +94,23 @@ export function OutfitCartSheet({
               ) : null}
             </div>
           </div>
+
+          {autofillMessage ? (
+            <div
+              className={`border px-3 py-2 ${
+                autofillMessage.kind === "success"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                  : "border-destructive/25 bg-destructive/10 text-destructive"
+              }`}
+              role={autofillMessage.kind === "error" ? "alert" : "status"}
+              aria-live={autofillMessage.kind === "error" ? "assertive" : "polite"}
+              aria-atomic="true"
+            >
+              <PrimitiveText as="p" variant="caption">
+                {autofillMessage.text}
+              </PrimitiveText>
+            </div>
+          ) : null}
 
           <div className="grid gap-3">
             <div className="space-y-2">
@@ -198,7 +239,7 @@ export function OutfitCartSheet({
             <PrimitiveButton
               type="button"
               onClick={onCreateOutfit}
-              disabled={itemCount === 0 || isCreating}
+              disabled={itemCount === 0 || isCreating || isAutofillingDetails}
               className="h-auto w-full px-5 py-3 text-base"
             >
               {isCreating ? "Creating outfit..." : "Create Outfit"}

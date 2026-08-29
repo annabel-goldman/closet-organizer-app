@@ -230,6 +230,34 @@ export interface Outfit {
   updated_at?: string;
 }
 
+export interface OutfitFolderDecoration {
+  id: number;
+  outfit_folder_id: number;
+  page_key: string;
+  image_url: string;
+  x: number;
+  y: number;
+  width: number;
+  rotation: number;
+  layer_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface OutfitFolder {
+  id: number;
+  user_id: number;
+  name: string;
+  occasion?: string | null;
+  notes?: string | null;
+  theme: "editorial" | "scrapbook" | "minimal";
+  outfit_ids: number[];
+  outfits: Outfit[];
+  decorations: OutfitFolderDecoration[];
+  created_at?: string;
+  updated_at?: string;
+}
+
 function normalizeAttachmentUrl(rawUrl: unknown) {
   if (typeof rawUrl !== "string" || rawUrl.trim().length === 0) {
     return null;
@@ -846,6 +874,103 @@ export async function destroyOutfit(id: number) {
   });
 }
 
+export async function fetchOutfitFolders(signal?: AbortSignal) {
+  return (await requestJson<OutfitFolder[]>(`${API_BASE_URL}/outfit_folders`, { signal }))
+    .map(normalizeOutfitFolderPayload);
+}
+
+interface SaveOutfitFolderInput {
+  name: string;
+  occasion?: string;
+  notes?: string;
+  theme?: OutfitFolder["theme"];
+  outfitIds: number[];
+}
+
+function outfitFolderPayload(input: SaveOutfitFolderInput) {
+  return {
+    outfit_folder: {
+      name: input.name,
+      occasion: input.occasion,
+      notes: input.notes,
+      theme: input.theme ?? "editorial",
+      outfit_ids: input.outfitIds,
+    },
+  };
+}
+
+export async function createOutfitFolder(input: SaveOutfitFolderInput) {
+  return normalizeOutfitFolderPayload(await requestJson<OutfitFolder>(`${API_BASE_URL}/outfit_folders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(outfitFolderPayload(input)),
+  }));
+}
+
+export async function updateOutfitFolder(id: number, input: SaveOutfitFolderInput) {
+  return normalizeOutfitFolderPayload(await requestJson<OutfitFolder>(`${API_BASE_URL}/outfit_folders/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(outfitFolderPayload(input)),
+  }));
+}
+
+export async function destroyOutfitFolder(id: number) {
+  await requestVoid(`${API_BASE_URL}/outfit_folders/${id}`, { method: "DELETE" });
+}
+
+export async function createOutfitFolderDecoration(
+  outfitFolderId: number,
+  input: {
+    file: File;
+    pageKey: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    rotation?: number;
+    layerOrder?: number;
+  },
+) {
+  const formData = new FormData();
+  formData.append("decoration[image]", input.file);
+  formData.append("decoration[page_key]", input.pageKey);
+  if (input.x != null) formData.append("decoration[x]", String(input.x));
+  if (input.y != null) formData.append("decoration[y]", String(input.y));
+  if (input.width != null) formData.append("decoration[width]", String(input.width));
+  if (input.rotation != null) formData.append("decoration[rotation]", String(input.rotation));
+  if (input.layerOrder != null) formData.append("decoration[layer_order]", String(input.layerOrder));
+
+  return normalizeOutfitFolderDecorationPayload(
+    await requestJson<OutfitFolderDecoration>(
+      `${API_BASE_URL}/outfit_folders/${outfitFolderId}/decorations`,
+      { method: "POST", body: formData },
+    ),
+  );
+}
+
+export async function updateOutfitFolderDecoration(
+  outfitFolderId: number,
+  decorationId: number,
+  input: Partial<Pick<OutfitFolderDecoration, "page_key" | "x" | "y" | "width" | "rotation" | "layer_order">>,
+) {
+  return normalizeOutfitFolderDecorationPayload(
+    await requestJson<OutfitFolderDecoration>(
+      `${API_BASE_URL}/outfit_folders/${outfitFolderId}/decorations/${decorationId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decoration: input }),
+      },
+    ),
+  );
+}
+
+export async function destroyOutfitFolderDecoration(outfitFolderId: number, decorationId: number) {
+  await requestVoid(`${API_BASE_URL}/outfit_folders/${outfitFolderId}/decorations/${decorationId}`, {
+    method: "DELETE",
+  });
+}
+
 interface GenerateOutfitInput {
   occasion?: string;
   referencePhoto?: File | null;
@@ -879,14 +1004,18 @@ export async function generateOutfit(input: string | GenerateOutfitInput = {}) {
 }
 
 export async function generateOutfitMetadataSuggestions(input: {
-  outfitId: number;
+  outfitId?: number;
   itemIds: number[];
   name: string;
   notes: string;
   tags: string[];
 }) {
+  const path = input.outfitId
+    ? `${API_BASE_URL}/outfits/${input.outfitId}/generate_metadata_suggestions`
+    : `${API_BASE_URL}/outfits/generate_metadata_suggestions`;
+
   return requestJson<OutfitMetadataSuggestion>(
-    `${API_BASE_URL}/outfits/${input.outfitId}/generate_metadata_suggestions`,
+    path,
     {
       method: "POST",
       headers: {
@@ -1162,6 +1291,24 @@ function normalizeOutfitPayload(outfit: Outfit): Outfit {
       ? normalizeAiWorkflowPayload(outfit.modeled_workflow)
       : null,
     items: (outfit.items ?? []).map(normalizeClothingItemPayload),
+  };
+}
+
+function normalizeOutfitFolderDecorationPayload(
+  decoration: OutfitFolderDecoration,
+): OutfitFolderDecoration {
+  return {
+    ...decoration,
+    image_url: normalizeAttachmentUrl(decoration.image_url) ?? "",
+  };
+}
+
+function normalizeOutfitFolderPayload(folder: OutfitFolder): OutfitFolder {
+  return {
+    ...folder,
+    outfit_ids: Array.isArray(folder.outfit_ids) ? folder.outfit_ids : [],
+    outfits: (folder.outfits ?? []).map(normalizeOutfitPayload),
+    decorations: (folder.decorations ?? []).map(normalizeOutfitFolderDecorationPayload),
   };
 }
 

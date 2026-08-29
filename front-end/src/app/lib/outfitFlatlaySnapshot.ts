@@ -1,4 +1,4 @@
-import type { ClothingItem } from "./closet.ts";
+import { resolveEditableImageFetchUrl, type ClothingItem } from "./closet.ts";
 import {
   resolveOutfitCollageLayouts,
   sortItemsByCollageLayer,
@@ -6,7 +6,7 @@ import {
 } from "./outfitCollage.ts";
 import {
   COLLAGE_STAGE_ASPECT_RATIO,
-  normalizeOutfitCollageLayoutToAspectRatio,
+  resolveOutfitCollageMediaBox,
 } from "./outfitCollageRenderMath.ts";
 import { measureImageContentBounds, type ImageContentBounds } from "./outfitImageBounds.ts";
 
@@ -44,14 +44,10 @@ export async function createOutfitFlatlaySnapshot({
       const loaded = await loadSnapshotImage(item.image_url!);
       try {
         const bounds = await measureImageContentBounds({ imageUrl: item.image_url! });
-        const intrinsicAspectRatio = loaded.image.naturalWidth / Math.max(loaded.image.naturalHeight, 1);
         loadedImages.push({
           ...loaded,
           bounds,
-          layout: normalizeOutfitCollageLayoutToAspectRatio(
-            resolvedLayouts[item.id],
-            bounds?.aspectRatio ?? intrinsicAspectRatio,
-          ),
+          layout: resolvedLayouts[item.id],
         });
       } catch (error) {
         loaded.cleanup();
@@ -96,6 +92,14 @@ function drawSnapshotItem(
   const sourceY = (bounds?.topFraction ?? 0) * image.naturalHeight;
   const sourceWidth = (bounds?.widthFraction ?? 1) * image.naturalWidth;
   const sourceHeight = (bounds?.heightFraction ?? 1) * image.naturalHeight;
+  const mediaBox = resolveOutfitCollageMediaBox(
+    layout,
+    bounds?.aspectRatio ?? (sourceWidth / Math.max(sourceHeight, 1)),
+  );
+  const destinationX = -frameWidth / 2 + (mediaBox.left / 100) * frameWidth;
+  const destinationY = -frameHeight / 2 + (mediaBox.top / 100) * frameHeight;
+  const destinationWidth = (mediaBox.width / 100) * frameWidth;
+  const destinationHeight = (mediaBox.height / 100) * frameHeight;
 
   context.save();
   context.translate(centerX, centerY);
@@ -109,16 +113,16 @@ function drawSnapshotItem(
     sourceY,
     sourceWidth,
     sourceHeight,
-    -frameWidth / 2,
-    -frameHeight / 2,
-    frameWidth,
-    frameHeight,
+    destinationX,
+    destinationY,
+    destinationWidth,
+    destinationHeight,
   );
   context.restore();
 }
 
 async function loadSnapshotImage(imageUrl: string) {
-  const response = await fetch(imageUrl, { credentials: "include" });
+  const response = await fetch(resolveEditableImageFetchUrl(imageUrl), { credentials: "include" });
   if (!response.ok) {
     throw new Error("One of this outfit's images could not be loaded for the flat-lay reference.");
   }

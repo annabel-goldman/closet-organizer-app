@@ -38,7 +38,7 @@ class ModeledOutfitImagesController < ApplicationController
       requested_count: 1,
       provider: "openrouter",
       model: OpenrouterImageCleaner.modeled_outfit_model,
-      prompt_version: "modeled-outfit-v5-flatlay-composition",
+      prompt_version: "modeled-outfit-v6-white-cutout",
       metadata: {
         source: "outfit-detail",
         outfit_id: @outfit.id,

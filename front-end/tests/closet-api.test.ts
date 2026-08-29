@@ -3,7 +3,10 @@ import test from "node:test";
 
 import {
   cancelAiWorkflow,
+  createOutfitFolder,
+  createOutfitFolderDecoration,
   deleteModeledPreview,
+  fetchOutfitFolders,
   generateClothingItemCleanImage,
   generateOutfit,
   generateOutfitMetadataSuggestions,
@@ -12,6 +15,7 @@ import {
   resolveEditableImageFetchUrl,
   saveModelReferences,
   updateModeledPreview,
+  updateOutfitFolderDecoration,
 } from "../src/app/lib/closet.ts";
 import { validateClothingItemForm } from "../src/app/lib/itemFormValidation.ts";
 import { normalizeCategory } from "../src/app/lib/wardrobeTaxonomy.ts";
@@ -50,6 +54,94 @@ test("generateOutfit queues a background workflow with an optional occasion", as
     assert.equal(requestInit?.body, JSON.stringify({ occasion: "dinner" }));
     assert.equal(workflow.kind, "outfit_generation");
     assert.equal(workflow.status, "pending");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("outfit folder APIs preserve magazine order and upload page-specific clip art", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ path: string; init?: RequestInit }> = [];
+  const folderPayload = {
+    id: 8,
+    user_id: 1,
+    name: "Paris Weekend",
+    occasion: "Paris · September",
+    notes: "Three days",
+    theme: "scrapbook",
+    outfit_ids: [19, 12],
+    outfits: [],
+    decorations: [],
+  };
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ path: String(input), init });
+    if (String(input).endsWith("/decorations") && init?.method === "POST") {
+      return new Response(JSON.stringify({
+        id: 31,
+        outfit_folder_id: 8,
+        page_key: "cover",
+        image_url: "/rails/active_storage/blobs/proxy/clip-art",
+        x: 12,
+        y: 18,
+        width: 24,
+        rotation: 0,
+        layer_order: 0,
+      }), { status: 201, headers: { "Content-Type": "application/json" } });
+    }
+    if (String(input).includes("/decorations/31")) {
+      return new Response(JSON.stringify({
+        id: 31,
+        outfit_folder_id: 8,
+        page_key: "cover",
+        image_url: "/rails/active_storage/blobs/proxy/clip-art",
+        x: 42,
+        y: 18,
+        width: 24,
+        rotation: 0,
+        layer_order: 0,
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (init?.method === "POST") {
+      return new Response(JSON.stringify(folderPayload), { status: 201, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(JSON.stringify([folderPayload]), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const folder = await createOutfitFolder({
+      name: "Paris Weekend",
+      occasion: "Paris · September",
+      notes: "Three days",
+      theme: "scrapbook",
+      outfitIds: [19, 12],
+    });
+    const folders = await fetchOutfitFolders();
+    const clipArt = new File(["clip"], "star.png", { type: "image/png" });
+    const decoration = await createOutfitFolderDecoration(folder.id, {
+      file: clipArt,
+      pageKey: "cover",
+      x: 12,
+      y: 18,
+      width: 24,
+    });
+    const movedDecoration = await updateOutfitFolderDecoration(folder.id, decoration.id, { x: 42 });
+
+    assert.deepEqual(folder.outfit_ids, [19, 12]);
+    assert.equal(folders[0].theme, "scrapbook");
+    assert.deepEqual(JSON.parse(String(requests[0].init?.body)), {
+      outfit_folder: {
+        name: "Paris Weekend",
+        occasion: "Paris · September",
+        notes: "Three days",
+        theme: "scrapbook",
+        outfit_ids: [19, 12],
+      },
+    });
+    assert.ok(requests[2].init?.body instanceof FormData);
+    assert.equal((requests[2].init?.body as FormData).get("decoration[image]"), clipArt);
+    assert.equal((requests[2].init?.body as FormData).get("decoration[page_key]"), "cover");
+    assert.equal(movedDecoration.x, 42);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -194,6 +286,50 @@ test("generateOutfitMetadataSuggestions sends the current outfit draft without s
     });
     assert.equal(suggestion.name, "Ivory Gallery Afternoon");
     assert.deepEqual(suggestion.tags, ["ivory", "gallery", "polished"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("generateOutfitMetadataSuggestions uses the collection route for an unsaved cart draft", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedPath = "";
+  let requestInit: RequestInit | undefined;
+
+  globalThis.fetch = async (input, init) => {
+    requestedPath = String(input);
+    requestInit = init;
+    return new Response(JSON.stringify({
+      name: "Soft Western Layers",
+      tags: ["cream", "floral", "western"],
+      notes: "A soft layered look with warm western accents.",
+      provider: "openrouter",
+      model: "openai/gpt-4.1-mini",
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const suggestion = await generateOutfitMetadataSuggestions({
+      itemIds: [7, 8],
+      name: "",
+      notes: "",
+      tags: [],
+    });
+
+    assert.equal(requestedPath, "/api/outfits/generate_metadata_suggestions");
+    assert.equal(requestInit?.method, "POST");
+    assert.deepEqual(JSON.parse(String(requestInit?.body)), {
+      outfit: {
+        item_ids: [7, 8],
+        name: "",
+        notes: "",
+        tags: [],
+      },
+    });
+    assert.equal(suggestion.name, "Soft Western Layers");
   } finally {
     globalThis.fetch = originalFetch;
   }

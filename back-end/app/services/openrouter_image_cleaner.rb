@@ -212,7 +212,7 @@ class OpenrouterImageCleaner
     details << "Style cue: #{prompt_context[:style]}" if prompt_context[:style].present?
 
     <<~PROMPT
-      Create one realistic editorial outfit preview using the clothing item in the first image and the person's private reference photos that follow it.
+      Create one photorealistic cutout-style wardrobe preview using the clothing item in the first image and the person's private reference photos that follow it.
 
       Requirements:
       - Generate a vertical 4:5 portrait image, never landscape or square.
@@ -220,11 +220,12 @@ class OpenrouterImageCleaner
       - Preserve the exact clothing item identity, color, silhouette, fit, graphics, logos, trim, neckline, sleeve length, and material cues.
       - Use the person's face, hair, skin tone, body proportions, and general identity only from the private reference photos.
       - Reconcile the person's consistent features across all private references; use the first private reference as the primary identity anchor if details conflict.
-      - Show the person wearing the item naturally against a seamless pure white studio background.
-      - Keep the background uniformly white with no room, scenery, furniture, props, texture, gradient, horizon line, wall-to-floor seam, colored cast, text, or border.
-      - Use soft neutral studio lighting and only a subtle natural contact shadow so the person remains grounded; do not make the background transparent.
+      - Isolate only the person wearing the item, centered against a solid pure white (#FFFFFF) background like a clean full-body cutout.
+      - Keep every background pixel uniformly white, including behind the person and beneath the feet. Do not include a room, scenery, furniture, props, texture, gradient, lighting falloff, floor, horizon line, wall-to-floor seam, colored cast, text, or border.
+      - Do not add a cast shadow, contact shadow, reflection, halo, glow, or grounding surface. Keep a crisp, clean silhouette boundary so a color-selection magic wand can remove the white background easily.
+      - Keep the white background opaque rather than transparent.
       - Do not add extra garments or accessories that are not visible in the clothing-item image.
-      - Keep the result photorealistic and suitable for a private closet preview, not an ecommerce cutout.
+      - Keep the person and garment photorealistic while presenting them as a clean isolated cutout for a private closet preview.
       - The private reference images are identity context and must not be reproduced as separate people or images in the output.
       - If the item and text disagree, preserve the visible item identity from the first image.
 
@@ -258,7 +259,7 @@ class OpenrouterImageCleaner
     end
 
     <<~PROMPT
-      Create one realistic editorial outfit preview of the person wearing the complete outfit represented by the garment reference images.
+      Create one photorealistic cutout-style outfit preview of the person wearing the complete outfit represented by the garment reference images.
 
       Requirements:
       - Generate a vertical 4:5 portrait image, never landscape or square.
@@ -270,12 +271,13 @@ class OpenrouterImageCleaner
       - Reconcile the person's consistent features across all private references; use the first private reference as the primary identity anchor if details conflict.
       - Preserve every garment shown in the outfit-piece images, including exact colors, silhouettes, fits, graphics, logos, trim, necklines, sleeve lengths, and material cues.
       - Combine the referenced pieces into one coherent, naturally worn full outfit while respecting their categories and the saved outfit order.
-      - Show the complete look on the person against a seamless pure white studio background.
-      - Keep the background uniformly white with no room, scenery, furniture, props, texture, gradient, horizon line, wall-to-floor seam, colored cast, text, or border.
-      - Use soft neutral studio lighting and only a subtle natural contact shadow so the person remains grounded; do not make the background transparent.
+      - Isolate only the person wearing the complete look, centered against a solid pure white (#FFFFFF) background like a clean full-body cutout.
+      - Keep every background pixel uniformly white, including behind the person and beneath the feet. Do not include a room, scenery, furniture, props, texture, gradient, lighting falloff, floor, horizon line, wall-to-floor seam, colored cast, text, or border.
+      - Do not add a cast shadow, contact shadow, reflection, halo, glow, or grounding surface. Keep a crisp, clean silhouette boundary so a color-selection magic wand can remove the white background easily.
+      - Keep the white background opaque rather than transparent.
       - Do not add unreferenced clothing, shoes, bags, jewelry, or other accessories.
       - Do not omit a referenced garment unless it is physically impossible to show it because another referenced garment covers it.
-      - Keep the result photorealistic and suitable for a private closet preview, not an ecommerce cutout.
+      - Keep the person and outfit photorealistic while presenting them as a clean isolated cutout for a private closet preview.
       - The private model reference photos are identity context and must not be reproduced as separate people or images in the output.
       - If the images and text disagree, preserve the visible garment identities from the images.
 

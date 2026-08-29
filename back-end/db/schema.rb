@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_28_013000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_28_014000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -175,6 +175,42 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_013000) do
     t.index ["outfit_upload_id"], name: "index_outfit_detections_on_outfit_upload_id"
   end
 
+  create_table "outfit_folder_decorations", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "layer_order", default: 0, null: false
+    t.integer "outfit_folder_id", null: false
+    t.string "page_key", limit: 80, null: false
+    t.decimal "rotation", precision: 7, scale: 3, default: "0.0", null: false
+    t.datetime "updated_at", null: false
+    t.decimal "width", precision: 7, scale: 3, default: "20.0", null: false
+    t.decimal "x", precision: 7, scale: 3, default: "8.0", null: false
+    t.decimal "y", precision: 7, scale: 3, default: "8.0", null: false
+    t.index ["outfit_folder_id", "page_key", "layer_order"], name: "index_outfit_folder_decorations_on_page_order"
+    t.index ["outfit_folder_id"], name: "index_outfit_folder_decorations_on_outfit_folder_id"
+  end
+
+  create_table "outfit_folder_memberships", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "outfit_folder_id", null: false
+    t.integer "outfit_id", null: false
+    t.integer "position", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["outfit_folder_id", "outfit_id"], name: "index_outfit_folder_memberships_on_folder_and_outfit", unique: true
+    t.index ["outfit_folder_id"], name: "index_outfit_folder_memberships_on_outfit_folder_id"
+    t.index ["outfit_id"], name: "index_outfit_folder_memberships_on_outfit_id"
+  end
+
+  create_table "outfit_folders", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "name", limit: 120, null: false
+    t.text "notes"
+    t.string "occasion", limit: 120
+    t.string "theme", limit: 40, default: "editorial", null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["user_id"], name: "index_outfit_folders_on_user_id"
+  end
+
   create_table "outfit_generation_events", force: :cascade do |t|
     t.json "added_item_ids", default: [], null: false
     t.datetime "created_at", null: false
@@ -268,6 +304,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_013000) do
   add_foreign_key "clothing_items", "users"
   add_foreign_key "model_reference_images", "users"
   add_foreign_key "outfit_detections", "outfit_uploads"
+  add_foreign_key "outfit_folder_decorations", "outfit_folders"
+  add_foreign_key "outfit_folder_memberships", "outfit_folders"
+  add_foreign_key "outfit_folder_memberships", "outfits"
+  add_foreign_key "outfit_folders", "users"
   add_foreign_key "outfit_generation_events", "outfit_generation_runs"
   add_foreign_key "outfit_generation_runs", "outfits", on_delete: :nullify
   add_foreign_key "outfit_generation_runs", "users"

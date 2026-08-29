@@ -151,7 +151,7 @@ export function ClothingCard({
                 onAddToOutfit?.(id);
               }
             }}
-            className="h-auto w-full bg-white/90 px-4 py-2 backdrop-blur-sm hover:bg-white"
+            className="h-auto w-full bg-white/90 px-4 py-2 text-black backdrop-blur-sm hover:bg-white"
           >
             {isInOutfit ? <X className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
             <PrimitiveText as="span" variant="bodySm">

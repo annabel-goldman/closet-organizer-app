@@ -1,4 +1,4 @@
-import { clampCollageLayout, type OutfitCollageLayout } from "./outfitCollage.ts";
+import type { OutfitCollageLayout } from "./outfitCollage.ts";
 
 export const COLLAGE_STAGE_ASPECT_RATIO = 4 / 5;
 
@@ -8,38 +8,47 @@ interface ResolveResizeAspectRatioOptions {
   layout: OutfitCollageLayout;
 }
 
-export function normalizeOutfitCollageLayoutToAspectRatio(
+export interface OutfitCollageMediaBox {
+  height: number;
+  left: number;
+  top: number;
+  width: number;
+}
+
+export function resolveOutfitCollageMediaBox(
   layout: OutfitCollageLayout,
   aspectRatio?: number,
-): OutfitCollageLayout {
+): OutfitCollageMediaBox {
+  const fullFrame = { height: 100, left: 0, top: 0, width: 100 };
   if (!aspectRatio || !Number.isFinite(aspectRatio) || aspectRatio <= 0) {
-    return clampCollageLayout(layout);
+    return fullFrame;
   }
 
-  const safeLayout = clampCollageLayout(layout);
-  const currentRatio = (
-    safeLayout.width * COLLAGE_STAGE_ASPECT_RATIO
-  ) / Math.max(safeLayout.height, 0.001);
+  const frameAspectRatio = (
+    layout.width * COLLAGE_STAGE_ASPECT_RATIO
+  ) / Math.max(layout.height, 0.001);
 
-  if (Math.abs(currentRatio - aspectRatio) < 0.001) {
-    return safeLayout;
+  if (Math.abs(frameAspectRatio - aspectRatio) < 0.001) {
+    return fullFrame;
   }
 
-  if (currentRatio > aspectRatio) {
-    const width = (safeLayout.height * aspectRatio) / COLLAGE_STAGE_ASPECT_RATIO;
-    return clampCollageLayout({
-      ...safeLayout,
-      x: safeLayout.x + (safeLayout.width - width) / 2,
+  if (frameAspectRatio > aspectRatio) {
+    const width = (aspectRatio / frameAspectRatio) * 100;
+    return {
+      height: 100,
+      left: (100 - width) / 2,
+      top: 0,
       width,
-    });
+    };
   }
 
-  const height = (safeLayout.width * COLLAGE_STAGE_ASPECT_RATIO) / aspectRatio;
-  return clampCollageLayout({
-    ...safeLayout,
-    y: safeLayout.y + (safeLayout.height - height) / 2,
+  const height = (frameAspectRatio / aspectRatio) * 100;
+  return {
     height,
-  });
+    left: 0,
+    top: (100 - height) / 2,
+    width: 100,
+  };
 }
 
 export function resolveOutfitCollageResizeAspectRatio({
@@ -50,6 +59,6 @@ export function resolveOutfitCollageResizeAspectRatio({
   return (
     contentBoundsAspectRatio
     ?? intrinsicAspectRatio
-    ?? (layout.width / Math.max(layout.height, 0.001))
+    ?? ((layout.width * COLLAGE_STAGE_ASPECT_RATIO) / Math.max(layout.height, 0.001))
   );
 }

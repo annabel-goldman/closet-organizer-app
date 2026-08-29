@@ -223,6 +223,61 @@ class OutfitsFlowTest < ActionDispatch::IntegrationTest
     assert_equal original_name, @outfit.reload.name
   end
 
+  test "suggests outfit details for an unsaved cart draft without creating an outfit" do
+    captured = {}
+
+    with_outfit_metadata_suggester_stub(
+      capture: captured,
+      result: {
+        name: "Soft Western Layers",
+        tags: %w[cream floral western],
+        notes: "A soft layered look with warm western accents.",
+        provider: "openrouter",
+        model: "test/metadata"
+      }
+    ) do
+      assert_no_difference("Outfit.count") do
+        post generate_metadata_suggestions_outfits_url, params: {
+          outfit: {
+            item_ids: [ @user_item.id ],
+            name: "",
+            tags: [],
+            notes: ""
+          }
+        }, headers: auth_headers(@user), as: :json
+      end
+    end
+
+    assert_response :success
+    assert_equal "Soft Western Layers", response_json["name"]
+    assert_equal [ @user_item.id ], captured.fetch(:items).map(&:id)
+    assert_nil captured.dig(:current_metadata, :name)
+    assert_equal [], captured.dig(:current_metadata, :tags)
+    assert_equal "", captured.dig(:current_metadata, :notes)
+  end
+
+  test "unsaved outfit detail suggestions reject another user's item" do
+    post generate_metadata_suggestions_outfits_url, params: {
+      outfit: {
+        item_ids: [ @other_user_item.id ]
+      }
+    }, headers: auth_headers(@user), as: :json
+
+    assert_response :unprocessable_content
+    assert_equal "Outfit details can only use items from your closet.", response_json["error"]
+  end
+
+  test "unsaved outfit detail suggestions require at least one item" do
+    post generate_metadata_suggestions_outfits_url, params: {
+      outfit: {
+        item_ids: []
+      }
+    }, headers: auth_headers(@user), as: :json
+
+    assert_response :unprocessable_content
+    assert_equal "Add at least one item before filling outfit details.", response_json["error"]
+  end
+
   test "outfit detail suggestions reject another user's item" do
     post generate_metadata_suggestions_outfit_url(@outfit), params: {
       outfit: {

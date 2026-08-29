@@ -5,6 +5,7 @@ import {
   generationTaskLabel,
   generationTaskMessage,
   isGenerationTaskRunning,
+  isGenerationTaskSuccessful,
   type GenerationTask,
 } from "../src/app/lib/generationTasks.ts";
 
@@ -34,6 +35,13 @@ test("generation tasks remain cancellable only while pending or processing", () 
   assert.equal(isGenerationTaskRunning(task("item_clean", "processing")), true);
   assert.equal(isGenerationTaskRunning(task("item_clean", "succeeded")), false);
   assert.equal(isGenerationTaskRunning(task("item_clean", "cancelled")), false);
+});
+
+test("generation tasks identify review and succeeded as successful completion", () => {
+  assert.equal(isGenerationTaskSuccessful(task("modeled_outfit", "review")), true);
+  assert.equal(isGenerationTaskSuccessful(task("modeled_outfit", "succeeded")), true);
+  assert.equal(isGenerationTaskSuccessful(task("modeled_outfit", "processing")), false);
+  assert.equal(isGenerationTaskSuccessful(task("modeled_outfit", "failed")), false);
 });
 
 test("completed outfit generation uses the generated outfit name", () => {

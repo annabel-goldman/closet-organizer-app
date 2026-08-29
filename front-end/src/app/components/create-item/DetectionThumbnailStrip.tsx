@@ -12,6 +12,7 @@ interface DetectionThumbnailStripProps {
   detections: OutfitDetection[];
   focusedTarget: "source" | number;
   getDetectionPreviewImageUrl?: (detection: OutfitDetection) => string | null;
+  getDetectionSourceImageUrl?: (detection: OutfitDetection) => string | null;
   isDetecting: boolean;
   onSelectDetection: (detectionId: number) => void;
   onSelectSource: () => void;
@@ -23,6 +24,7 @@ export function DetectionThumbnailStrip({
   detections,
   focusedTarget,
   getDetectionPreviewImageUrl,
+  getDetectionSourceImageUrl,
   isDetecting,
   onSelectDetection,
   onSelectSource,
@@ -91,7 +93,7 @@ export function DetectionThumbnailStrip({
                       alt={`${label} thumbnail`}
                       cleanedImageUrl={previewImageUrl}
                       cropBox={previewBox}
-                      sourceImageUrl={sourceImageUrl}
+                      sourceImageUrl={getDetectionSourceImageUrl?.(detection) ?? sourceImageUrl}
                       variant="thumbnail"
                     />
                     {isSelected ? (

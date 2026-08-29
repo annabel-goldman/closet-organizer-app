@@ -19,7 +19,7 @@ class ModeledImagesController < ApplicationController
       requested_count: 1,
       provider: "openrouter",
       model: ENV.fetch("OPENROUTER_IMAGE_CLEAN_MODEL", OpenrouterImageCleaner::DEFAULT_MODEL),
-      prompt_version: "modeled-item-v3",
+      prompt_version: "modeled-item-v4-white-cutout",
       metadata: { source: "item-detail", item_id: @clothing_item.id }
     )
     workflow.initialize_stages!
