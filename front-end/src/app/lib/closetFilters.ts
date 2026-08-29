@@ -1,4 +1,4 @@
-import type { ClothingItem } from "./closet.ts";
+import type { ClothingItem, Outfit } from "./closet.ts";
 
 export type ClosetSortOption = "name-asc" | "newest-added" | "oldest-added";
 
@@ -160,6 +160,34 @@ export function matchesSearchQuery(item: ClothingItem, query: string): boolean {
   }
 
   const haystack = buildClothingItemSearchHaystack(item);
+  return normalizedQuery.split(/\s+/).every((term) => termMatchesInHaystack(term, haystack));
+}
+
+export function buildOutfitSearchHaystack(outfit: Outfit): string {
+  return [
+    outfit.name,
+    outfit.notes,
+    ...(outfit.tags ?? []),
+    ...outfit.items.flatMap((item) => [
+      item.name,
+      item.category,
+      item.brand,
+      item.style_notes,
+      ...item.tags,
+    ]),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+export function matchesOutfitSearchQuery(outfit: Outfit, query: string): boolean {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  const haystack = buildOutfitSearchHaystack(outfit);
   return normalizedQuery.split(/\s+/).every((term) => termMatchesInHaystack(term, haystack));
 }
 

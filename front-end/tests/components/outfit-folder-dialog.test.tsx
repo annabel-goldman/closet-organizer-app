@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OutfitFolderDialog } from "../../src/app/components/OutfitFolderDialog";
+import type { Outfit } from "../../src/app/lib/closet";
 
 afterEach(cleanup);
 
@@ -83,5 +84,77 @@ describe("OutfitFolderDialog", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("shows modeled or flat-lay previews and filters outfits by search", () => {
+    const outfits: Outfit[] = [
+      {
+        id: 19,
+        user_id: 1,
+        name: "Night Gallery",
+        tags: ["evening"],
+        notes: "Dinner afterward",
+        item_ids: [],
+        items: [],
+        modeled_workflow: {
+          id: 4,
+          kind: "modeled_outfit",
+          status: "succeeded",
+          completed_count: 1,
+          failed_count: 0,
+          stages: [{
+            key: "modeled",
+            status: "approved",
+            artifacts: [{
+              id: 5,
+              kind: "modeled_outfit_image",
+              status: "approved",
+              file_url: "/modeled/night-gallery.png",
+            }],
+          }],
+        },
+      },
+      {
+        id: 20,
+        user_id: 1,
+        name: "Denim Weekend",
+        tags: ["casual"],
+        notes: "Saturday errands",
+        item_ids: [31],
+        items: [{
+          id: 31,
+          user_id: 1,
+          name: "Indigo Denim Skirt",
+          category: "bottom",
+          size: "medium",
+          date: null,
+          tags: ["denim", "blue"],
+          image_url: "/items/denim-skirt.png",
+        }],
+      },
+    ];
+
+    render(
+      <OutfitFolderDialog
+        isSaving={false}
+        onOpenChange={() => undefined}
+        onSave={() => undefined}
+        open
+        outfits={outfits}
+      />,
+    );
+
+    expect(screen.getByAltText("Modeled version of Night Gallery")).toBeInTheDocument();
+    expect(screen.getByAltText("Indigo Denim Skirt")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Night Gallery" }));
+    expect(screen.getByRole("checkbox", { name: "Select Night Gallery" })).toBeChecked();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Search outfits" }), {
+      target: { value: "denim blue" },
+    });
+
+    expect(screen.queryByText("Night Gallery")).not.toBeInTheDocument();
+    expect(screen.getByText("Denim Weekend")).toBeInTheDocument();
   });
 });

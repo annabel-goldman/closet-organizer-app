@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { ClothingItem } from "../src/app/lib/closet.ts";
+import type { ClothingItem, Outfit } from "../src/app/lib/closet.ts";
 import {
   getClosetSearchSuggestions,
+  matchesOutfitSearchQuery,
   matchesSearchQuery,
   termMatchesInHaystack,
 } from "../src/app/lib/closetFilters.ts";
@@ -36,6 +37,21 @@ test("matchesSearchQuery requires every term to match", () => {
 
   assert.equal(matchesSearchQuery(item, "navy wool"), true);
   assert.equal(matchesSearchQuery(item, "navy leather"), false);
+});
+
+test("matchesOutfitSearchQuery includes outfit details and contained pieces", () => {
+  const outfit: Outfit = {
+    id: 9,
+    user_id: 1,
+    name: "City Layers",
+    tags: ["autumn"],
+    notes: "For museum afternoons",
+    item_ids: [1],
+    items: [makeItem({ id: 1, name: "Indigo Denim Skirt", tags: ["blue"] })],
+  };
+
+  assert.equal(matchesOutfitSearchQuery(outfit, "museum denim"), true);
+  assert.equal(matchesOutfitSearchQuery(outfit, "museum beach"), false);
 });
 
 test("getClosetSearchSuggestions returns empty list for blank query", () => {

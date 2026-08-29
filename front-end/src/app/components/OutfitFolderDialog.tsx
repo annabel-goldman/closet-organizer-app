@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, BookOpen } from "lucide-react";
+import { ArrowDown, ArrowUp, BookOpen, Check, Search } from "lucide-react";
 import {
   generateMagazineMetadataSuggestions,
   type Outfit,
   type OutfitFolder,
 } from "../lib/closet";
-import { Checkbox } from "./ui/checkbox";
+import { matchesOutfitSearchQuery } from "../lib/closetFilters";
+import { resolveModeledWorkflowImageUrl } from "../lib/modeledPreview";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,7 @@ import { Textarea } from "./ui/textarea";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
+import { OutfitCollageCanvas } from "./OutfitCollageCanvas";
 import type { OutfitFolderDraft } from "./outfits/useOutfitMagazines";
 
 interface OutfitFolderDialogProps {
@@ -52,6 +54,7 @@ export function OutfitFolderDialog({
   const [draft, setDraft] = useState<OutfitFolderDraft>(EMPTY_DRAFT);
   const [isAutofilling, setIsAutofilling] = useState(false);
   const [autofillMessage, setAutofillMessage] = useState<AutofillMessage | null>(null);
+  const [outfitSearchQuery, setOutfitSearchQuery] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -63,6 +66,7 @@ export function OutfitFolderDialog({
     } : EMPTY_DRAFT);
     setIsAutofilling(false);
     setAutofillMessage(null);
+    setOutfitSearchQuery("");
   }, [folder, open]);
 
   async function handleAutofill() {
@@ -126,6 +130,8 @@ export function OutfitFolderDialog({
   const selectedOutfits = draft.outfitIds
     .map((outfitId) => outfits.find((outfit) => outfit.id === outfitId))
     .filter((outfit): outfit is Outfit => Boolean(outfit));
+  const filteredOutfits = outfits.filter((outfit) =>
+    matchesOutfitSearchQuery(outfit, outfitSearchQuery));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -194,22 +200,59 @@ export function OutfitFolderDialog({
 
           <div className="space-y-3">
             <PrimitiveText as="h3" variant="title" font="serif">Choose outfits</PrimitiveText>
-            <div className="grid max-h-56 gap-2 overflow-y-auto border border-border p-3 sm:grid-cols-2">
-              {outfits.map((outfit) => {
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                value={outfitSearchQuery}
+                onChange={(event) => setOutfitSearchQuery(event.target.value)}
+                placeholder="Search outfits"
+                aria-label="Search outfits"
+                className="pl-9"
+              />
+            </div>
+            <div className="grid max-h-[32rem] grid-cols-2 gap-3 overflow-y-auto border border-border p-3 sm:grid-cols-3">
+              {filteredOutfits.map((outfit) => {
                 const checked = draft.outfitIds.includes(outfit.id);
                 return (
-                  <label key={outfit.id} className="flex cursor-pointer items-center gap-3 border border-border/70 p-3">
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={(value) => toggleOutfit(outfit.id, value === true)}
-                    />
-                    <span className="min-w-0">
+                  <PrimitiveButton
+                    key={outfit.id}
+                    type="button"
+                    variant="outline"
+                    role="checkbox"
+                    aria-checked={checked}
+                    aria-label={`Select ${outfit.name}`}
+                    onClick={() => toggleOutfit(outfit.id, !checked)}
+                    className={`relative h-auto w-full flex-col items-stretch justify-start gap-0 overflow-hidden whitespace-normal p-0 text-left ${
+                      checked ? "border-foreground" : "border-border"
+                    }`}
+                  >
+                    <span className="relative block bg-white">
+                      <OutfitPickerPreview outfit={outfit} />
+                      <span className="absolute right-2 top-2 flex size-8 items-center justify-center bg-white shadow-sm">
+                        <span className={`flex size-4 items-center justify-center rounded-[4px] border ${
+                          checked ? "border-foreground bg-foreground text-background" : "border-input bg-background"
+                        }`} aria-hidden="true">
+                          {checked ? <Check className="size-3" /> : null}
+                        </span>
+                      </span>
+                    </span>
+                    <span className="block min-w-0 border-t border-border px-3 py-2.5">
                       <PrimitiveText as="span" variant="bodySm" className="block truncate">{outfit.name}</PrimitiveText>
                       <PrimitiveText as="span" variant="caption" tone="muted">{outfit.items.length} pieces</PrimitiveText>
                     </span>
-                  </label>
+                  </PrimitiveButton>
                 );
               })}
+              {filteredOutfits.length === 0 ? (
+                <div className="col-span-full px-4 py-10 text-center">
+                  <PrimitiveText as="p" variant="bodySm" tone="muted">
+                    No outfits match “{outfitSearchQuery.trim()}”.
+                  </PrimitiveText>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -256,5 +299,29 @@ export function OutfitFolderDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function OutfitPickerPreview({ outfit }: { outfit: Outfit }) {
+  const modeledImageUrl = resolveModeledWorkflowImageUrl(outfit.modeled_workflow);
+
+  if (modeledImageUrl) {
+    return (
+      <div className="aspect-[4/5] w-full overflow-hidden bg-white">
+        <img
+          src={modeledImageUrl}
+          alt={`Modeled version of ${outfit.name}`}
+          className="h-full w-full object-contain"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <OutfitCollageCanvas
+      items={outfit.items}
+      maxVisibleItems={6}
+      className="w-full"
+    />
   );
 }
