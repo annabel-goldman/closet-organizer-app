@@ -579,9 +579,6 @@ export function MyOutfitsPage({
               <PrimitiveText as="h3" variant="display" font="serif" className="mb-2">
                 Create your first magazine
               </PrimitiveText>
-              <PrimitiveText as="p" tone="muted" className="mx-auto max-w-lg">
-                Choose saved outfits and arrange the page order for your trip or occasion.
-              </PrimitiveText>
               <PrimitiveButton type="button" className="mt-6" onClick={openCreateFolderDialog}>
                 <Plus className="h-4 w-4" />
                 New magazine
