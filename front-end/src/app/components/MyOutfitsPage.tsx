@@ -64,7 +64,6 @@ import { MAX_OUTFIT_NAME, MAX_OUTFIT_NOTES } from "../lib/inputLengthPolicy";
 import { useOutfitMagazines } from "./outfits/useOutfitMagazines";
 import { matchesOutfitSearchQuery } from "../lib/closetFilters";
 import { navigateTo } from "../lib/routes";
-import { OutfitDecorationLayer } from "./decorations/OutfitDecorationLayer";
 
 interface MyOutfitsPageProps {
   isLoading: boolean;
@@ -909,11 +908,19 @@ export function MyOutfitsPage({
                       <div className="min-w-0">
                         <OutfitCollageLayersPanel
                           availableItems={availableItems}
+                          decorations={editorDecorations}
                           items={selectedItems}
                           layouts={editorLayouts}
+                          onAddDecoration={(decoration) => void addDecorationToFlatlay(decoration)}
                           onAddItem={addItemToEditingOutfit}
+                          onRemoveDecoration={(decoration) => void removeFlatlayDecoration(decoration)}
                           onRemoveItem={removeItemFromEditingOutfit}
+                          selectedDecorationId={selectedDecorationId}
                           selectedItemId={selectedCollageItemId}
+                          onSelectDecoration={(decorationId) => {
+                            setSelectedDecorationId(decorationId);
+                            setSelectedCollageItemId(null);
+                          }}
                           onSelectItem={(itemId) => {
                             setSelectedCollageItemId(itemId);
                             setSelectedDecorationId(null);
@@ -943,30 +950,23 @@ export function MyOutfitsPage({
                             }}
                             flatlay={(
                               <OutfitCollageCanvas
+                                decorations={editorDecorations}
                                 items={selectedItems}
                                 layouts={editorLayouts}
                                 editable
+                                selectedDecorationId={selectedDecorationId}
                                 selectedItemId={selectedCollageItemId}
+                                onSelectDecoration={(placementId) => {
+                                  setSelectedDecorationId(placementId);
+                                  if (placementId) setSelectedCollageItemId(null);
+                                }}
                                 onSelectItem={(itemId) => {
                                   setSelectedCollageItemId(itemId);
                                   if (itemId) setSelectedDecorationId(null);
                                 }}
+                                onDecorationChange={(placement, changes) => void changeFlatlayDecoration(placement, changes)}
                                 onLayoutsChange={setEditorLayouts}
                                 className="w-full"
-                                overlay={(
-                                  <OutfitDecorationLayer
-                                    editable
-                                    placements={editorDecorations}
-                                    selectedPlacementId={selectedDecorationId}
-                                    onSelectionChange={(placementId) => {
-                                      setSelectedDecorationId(placementId);
-                                      if (placementId) setSelectedCollageItemId(null);
-                                    }}
-                                    onAdd={(decoration) => void addDecorationToFlatlay(decoration)}
-                                    onChange={(placement, changes) => void changeFlatlayDecoration(placement, changes)}
-                                    onDelete={(placement) => void removeFlatlayDecoration(placement)}
-                                  />
-                                )}
                               />
                             )}
                           />

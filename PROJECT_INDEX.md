@@ -42,13 +42,13 @@ project-closet-organizer/
 - `src/app/components/shared/ModelReferenceDialog.tsx`: private three-photo model-reference uploader, primary-order controls, authenticated thumbnails, and removal controls surfaced from the existing header
 - `src/app/components/shared/ModeledPreviewPanel.tsx`: minimal modeled-item image and confirmed deletion surface; successful previews are published automatically and workflow stages stay out of the UI
 - `src/app/components/shared/ModeledPreviewImageEditor.tsx`: shared modeled-item/outfit edit dialog that loads private workflow imagery into the existing crop, rotate, magic-wand, and undo/redo editor and persists the resulting image
-- `src/app/components/MyDecorationsPage.tsx` and `src/app/components/decorations/`: private progressive PNG library, shared image-editor adapter, reusable picker, and outfit decoration placement layer
+- `src/app/components/MyDecorationsPage.tsx` and `src/app/components/decorations/`: private progressive PNG library, shared image-editor adapter, and reusable decoration picker
 - `src/app/components/shared/GenerationTaskToasts.tsx`: global lower-right modeled outfit/item, image-cleaning, outfit-creation, and photo-detection notices with cross-route cancellation, completion states, and result navigation
 - `src/app/components/`: routed pages, the closet outfit-cart tray, item editor flows, extracted create-item/restricted-state components, and supporting UI
 - `public/demo/curated-closet-demo.mp4`: production-served product demo linked from the logged-out homepage and repository documentation
-- `src/app/components/OutfitCollageCanvas.tsx`: saved-outfit collage renderer plus the `react-moveable`-backed edit-modal move/resize/rotate interactions, decoration overlay slot, and shared normalized-layout/stage-aspect contract used by both saved and editable outfit previews
+- `src/app/components/OutfitCollageCanvas.tsx`: saved-outfit collage renderer plus the `react-moveable`-backed move/resize/rotate interactions shared by clothing pieces and visible-bounds-cropped decorations, with one normalized-layout/stage-aspect contract used by saved and editable outfit previews
 - `src/app/components/OutfitPreviewCarousel.tsx`: outfit-editor preview carousel that keeps the editable flat lay as the base slide and unlocks arrow/touch navigation to the latest modeled artifact
-- `src/app/components/OutfitCollageLayersPanel.tsx`: focused layers sidebar for thumbnail selection plus pointer and keyboard-accessible layer reordering
+- `src/app/components/OutfitCollageLayersPanel.tsx`: focused clothing-and-decoration layers sidebar with thumbnail selection, removal/addition controls, and pointer/keyboard-accessible clothing layer reordering
 - `src/app/lib/routes.ts`: route parsing, navigation helpers, and route guards
 - `src/app/lib/api.ts`: shared request/error helpers for frontend API calls
 - `src/app/lib/closet.ts`: compatibility-facing closet domain types, formatting helpers, and feature APIs while focused modules are extracted incrementally

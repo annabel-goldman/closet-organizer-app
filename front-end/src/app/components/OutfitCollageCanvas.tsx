@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Moveable, {
   type OnDrag,
@@ -8,7 +8,7 @@ import Moveable, {
   type OnResizeEnd,
   type OnResizeStart,
 } from "react-moveable";
-import { ClothingItem } from "../lib/closet";
+import { ClothingItem, OutfitDecoration } from "../lib/closet";
 import {
   ImageContentBounds,
   measureImageContentBounds,
@@ -28,9 +28,15 @@ import { PrimitiveText } from "./primitives/PrimitiveText";
 
 const MOVEABLE_RENDER_DIRECTIONS = [ "nw", "ne", "sw", "se" ] as const;
 const MIN_ITEM_SIZE_PERCENT = 8;
+const MIN_DECORATION_SIZE_PERCENT = 5;
+const MAX_DECORATION_SIZE_PERCENT = 60;
+
+type CollageSelection =
+  | { id: number; kind: "decoration" }
+  | { id: number; kind: "item" };
 
 interface ActiveRotationGesture {
-  itemId: number;
+  selection: CollageSelection;
   startPointerAngle: number;
   startRotation: number;
 }
@@ -43,31 +49,40 @@ interface ImageMeasurementState {
 
 interface OutfitCollageCanvasProps {
   className?: string;
+  decorations?: OutfitDecoration[];
   editable?: boolean;
   items: ClothingItem[];
   layouts?: Record<number, OutfitCollageLayout>;
   maxVisibleItems?: number;
+  onDecorationChange?: (placement: OutfitDecoration, changes: Partial<OutfitDecoration>) => void;
   onLayoutsChange?: (layouts: Record<number, OutfitCollageLayout>) => void;
+  onSelectDecoration?: (decorationId: number | null) => void;
   onSelectItem?: (itemId: number | null) => void;
+  selectedDecorationId?: number | null;
   selectedItemId?: number | null;
-  overlay?: ReactNode;
 }
 export function OutfitCollageCanvas({
   className = "",
+  decorations = [],
   editable = false,
   items,
   layouts,
   maxVisibleItems,
+  onDecorationChange,
   onLayoutsChange,
+  onSelectDecoration,
   onSelectItem,
+  selectedDecorationId = null,
   selectedItemId = null,
-  overlay,
 }: OutfitCollageCanvasProps) {
   const moveableRef = useRef<Moveable | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const decorationFrameRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const itemFrameRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const transientRotationByItemId = useRef<Record<number, number>>({});
+  const transientRotationBySelection = useRef<Record<string, number>>({});
   const activeRotationGestureRef = useRef<ActiveRotationGesture | null>(null);
+  const [decorationMeasurementById, setDecorationMeasurementById] = useState<Record<number, ImageMeasurementState>>({});
+  const [decorationAspectRatioById, setDecorationAspectRatioById] = useState<Record<number, number>>({});
   const [imageMeasurementByItemId, setImageMeasurementByItemId] = useState<Record<number, ImageMeasurementState>>({});
   const [imageAspectRatioByItemId, setImageAspectRatioByItemId] = useState<Record<number, number>>({});
 
@@ -81,17 +96,32 @@ export function OutfitCollageCanvas({
   );
   const visibleItems = maxVisibleItems ? orderedItems.slice(0, maxVisibleItems) : orderedItems;
   const hiddenCount = Math.max(0, orderedItems.length - visibleItems.length);
-  const selectedTarget = editable && selectedItemId ? itemFrameRefs.current[selectedItemId] : null;
+  const selectedDecoration = selectedDecorationId
+    ? decorations.find((decoration) => decoration.id === selectedDecorationId) ?? null
+    : null;
   const selectedItem = selectedItemId
     ? visibleItems.find((item) => item.id === selectedItemId)
     : null;
-  const selectedMeasurement = selectedItem?.image_url
-    ? imageMeasurementByItemId[selectedItem.id]
+  const selection: CollageSelection | null = selectedDecoration
+    ? { id: selectedDecoration.id, kind: "decoration" }
+    : selectedItem
+      ? { id: selectedItem.id, kind: "item" }
+      : null;
+  const selectedTarget = editable && selection
+    ? selection.kind === "decoration"
+      ? decorationFrameRefs.current[selection.id]
+      : itemFrameRefs.current[selection.id]
     : null;
-  const selectedItemResizeReady = Boolean(
-    !selectedItem?.image_url
+  const selectedSourceKey = selectedDecoration?.image_url ?? selectedItem?.image_url;
+  const selectedMeasurement = selectedDecoration
+    ? decorationMeasurementById[selectedDecoration.id]
+    : selectedItem
+      ? imageMeasurementByItemId[selectedItem.id]
+      : null;
+  const selectedResizeReady = Boolean(
+    !selectedSourceKey
     || (
-      selectedMeasurement?.sourceKey === selectedItem.image_url
+      selectedMeasurement?.sourceKey === selectedSourceKey
       && selectedMeasurement.status === "ready"
     ),
   );
@@ -141,6 +171,38 @@ export function OutfitCollageCanvas({
     };
   }, [items]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    decorations.forEach((decoration) => {
+      const sourceKey = decoration.image_url;
+      if (!sourceKey) return;
+
+      setDecorationMeasurementById((current) => {
+        if (current[decoration.id]?.sourceKey === sourceKey) return current;
+        return {
+          ...current,
+          [decoration.id]: { bounds: null, sourceKey, status: "pending" },
+        };
+      });
+
+      void measureImageContentBounds({ imageUrl: sourceKey }).then((nextBounds) => {
+        if (cancelled) return;
+        setDecorationMeasurementById((current) => {
+          if (current[decoration.id]?.sourceKey !== sourceKey) return current;
+          return {
+            ...current,
+            [decoration.id]: { bounds: nextBounds, sourceKey, status: "ready" },
+          };
+        });
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [decorations]);
+
   function syncFrameToPercentLayout(itemId: number, layout: OutfitCollageLayout) {
     const target = itemFrameRefs.current[itemId];
     if (!target) {
@@ -167,6 +229,36 @@ export function OutfitCollageCanvas({
     target.style.transform = `rotate(${layout.rotation}deg)`;
   }
 
+  function syncDecorationFrameToPercentLayout(decoration: OutfitDecoration) {
+    const target = decorationFrameRefs.current[decoration.id];
+    if (!target) return;
+
+    target.style.left = `${decoration.x}%`;
+    target.style.top = `${decoration.y}%`;
+    target.style.width = `${decoration.width}%`;
+    target.style.height = `${decorationHeightPercent(
+      decoration.width,
+      resolveDecorationAspectRatio(decoration, decorationMeasurementById, decorationAspectRatioById),
+    )}%`;
+    target.style.transform = `rotate(${decoration.rotation}deg)`;
+  }
+
+  function syncDecorationFrameToPixelLayout(decoration: OutfitDecoration, stageBounds: DOMRect) {
+    const target = decorationFrameRefs.current[decoration.id];
+    if (!target) return;
+
+    target.style.left = `${(decoration.x / 100) * stageBounds.width}px`;
+    target.style.top = `${(decoration.y / 100) * stageBounds.height}px`;
+    target.style.width = `${(decoration.width / 100) * stageBounds.width}px`;
+    target.style.height = `${(
+      decorationHeightPercent(
+        decoration.width,
+        resolveDecorationAspectRatio(decoration, decorationMeasurementById, decorationAspectRatioById),
+      ) / 100
+    ) * stageBounds.height}px`;
+    target.style.transform = `rotate(${decoration.rotation}deg)`;
+  }
+
   useLayoutEffect(() => {
     visibleItems.forEach((item) => {
       const layout = displayLayouts[item.id] ?? resolvedLayouts[item.id];
@@ -176,8 +268,20 @@ export function OutfitCollageCanvas({
 
       syncFrameToPercentLayout(item.id, layout);
     });
+    decorations.forEach((decoration) => {
+      const target = decorationFrameRefs.current[decoration.id];
+      if (!target) return;
+      target.style.left = `${decoration.x}%`;
+      target.style.top = `${decoration.y}%`;
+      target.style.width = `${decoration.width}%`;
+      target.style.height = `${decorationHeightPercent(
+        decoration.width,
+        resolveDecorationAspectRatio(decoration, decorationMeasurementById, decorationAspectRatioById),
+      )}%`;
+      target.style.transform = `rotate(${decoration.rotation}deg)`;
+    });
     moveableRef.current?.updateRect();
-  }, [displayLayouts, resolvedLayouts, selectedItemId, selectedItemResizeReady, visibleItems]);
+  }, [decorationAspectRatioById, decorations, decorationMeasurementById, displayLayouts, resolvedLayouts, selectedDecorationId, selectedItemId, selectedResizeReady, visibleItems]);
 
   function updateItemLayout(itemId: number, nextPartial: Partial<OutfitCollageLayout>) {
     if (!onLayoutsChange) {
@@ -197,74 +301,63 @@ export function OutfitCollageCanvas({
   }
 
   function handleDrag(event: OnDrag) {
-    if (!selectedItemId) {
-      return;
-    }
+    if (!selection) return;
     event.target.style.left = `${event.left}px`;
     event.target.style.top = `${event.top}px`;
   }
 
   function handleResize(event: OnResize) {
-    if (!selectedItemId) {
-      return;
-    }
+    if (!selection) return;
     event.target.style.left = `${event.drag.left}px`;
     event.target.style.top = `${event.drag.top}px`;
     event.target.style.width = `${Math.max(event.width, 1)}px`;
     event.target.style.height = `${Math.max(event.height, 1)}px`;
   }
 
-  function beginRotation(itemId: number, clientX: number, clientY: number) {
-    const target = itemFrameRefs.current[itemId];
-    if (!target) {
-      return;
-    }
+  function beginRotation(activeSelection: CollageSelection, clientX: number, clientY: number) {
+    const target = selectionTarget(activeSelection);
+    if (!target) return;
 
-    pinItemFrameToPixels(itemId);
+    pinSelectionToPixels(activeSelection);
     const frameRect = target.getBoundingClientRect();
+    const selectionKey = collageSelectionKey(activeSelection);
     activeRotationGestureRef.current = {
-      itemId,
+      selection: activeSelection,
       startPointerAngle: pointAngleFromRectCenter(frameRect, clientX, clientY),
-      startRotation:
-        transientRotationByItemId.current[itemId]
-        ?? (displayLayouts[itemId] ?? resolvedLayouts[itemId]).rotation,
+      startRotation: transientRotationBySelection.current[selectionKey] ?? selectionRotation(activeSelection),
     };
   }
 
   function handleDragStart(_event: OnDragStart) {
-    if (!selectedItemId) {
-      return;
-    }
-
-    pinItemFrameToPixels(selectedItemId);
+    if (selection) pinSelectionToPixels(selection);
   }
 
   function handleResizeStart(event: OnResizeStart) {
-    if (!selectedItemId) {
-      return;
-    }
+    if (!selection) return;
 
-    pinItemFrameToPixels(selectedItemId);
-    const selectedLayout = displayLayouts[selectedItemId] ?? resolvedLayouts[selectedItemId];
-    const measurement = imageMeasurementByItemId[selectedItemId];
-    event.setRatio(resolveOutfitCollageResizeAspectRatio({
-      contentBoundsAspectRatio: measurement?.status === "ready"
-        ? measurement.bounds?.aspectRatio
-        : undefined,
-      intrinsicAspectRatio: imageAspectRatioByItemId[selectedItemId],
-      layout: selectedLayout,
-    }));
+    pinSelectionToPixels(selection);
+    if (selection.kind === "decoration") {
+      const decoration = decorations.find((entry) => entry.id === selection.id);
+      if (!decoration) return;
+      event.setRatio(resolveDecorationAspectRatio(decoration, decorationMeasurementById, decorationAspectRatioById));
+    } else {
+      const selectedLayout = displayLayouts[selection.id] ?? resolvedLayouts[selection.id];
+      const measurement = imageMeasurementByItemId[selection.id];
+      event.setRatio(resolveOutfitCollageResizeAspectRatio({
+        contentBoundsAspectRatio: measurement?.status === "ready"
+          ? measurement.bounds?.aspectRatio
+          : undefined,
+        intrinsicAspectRatio: imageAspectRatioByItemId[selection.id],
+        layout: selectedLayout,
+      }));
+    }
     if (event.dragStart) {
       event.dragStart.set([ 0, 0 ]);
     }
   }
 
   function handleGestureEnd(_event: OnDragEnd | OnResizeEnd) {
-    if (!selectedItemId) {
-      return;
-    }
-
-    commitItemFrameFromPixels(selectedItemId);
+    if (selection) commitSelectionFromPixels(selection);
   }
 
   function handleStagePointerDown(event: React.PointerEvent<HTMLDivElement>) {
@@ -275,18 +368,20 @@ export function OutfitCollageCanvas({
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
       onSelectItem?.(null);
+      onSelectDecoration?.(null);
       return;
     }
 
-    if (selectedItemId && target.closest(".moveable-rotation-control")) {
+    if (selection && target.closest(".moveable-rotation-control")) {
       event.preventDefault();
       event.stopPropagation();
-      beginRotation(selectedItemId, event.clientX, event.clientY);
+      beginRotation(selection, event.clientX, event.clientY);
       return;
     }
 
     if (
       target.closest("[data-collage-item-frame='true']")
+      || target.closest("[data-collage-decoration-frame='true']")
       || target.closest(".moveable-control-box")
       || target.closest(".moveable-area")
       || target.closest(".moveable-control")
@@ -297,18 +392,35 @@ export function OutfitCollageCanvas({
     }
 
     onSelectItem?.(null);
+    onSelectDecoration?.(null);
   }
 
-  function pinItemFrameToPixels(itemId: number) {
-    const stageBounds = stageRef.current?.getBoundingClientRect();
-    const layout = displayLayouts[itemId] ?? resolvedLayouts[itemId];
+  function selectionTarget(activeSelection: CollageSelection) {
+    return activeSelection.kind === "decoration"
+      ? decorationFrameRefs.current[activeSelection.id]
+      : itemFrameRefs.current[activeSelection.id];
+  }
 
-    if (!stageBounds) {
-      return;
+  function selectionRotation(activeSelection: CollageSelection) {
+    if (activeSelection.kind === "decoration") {
+      return decorations.find((entry) => entry.id === activeSelection.id)?.rotation ?? 0;
     }
+    return (displayLayouts[activeSelection.id] ?? resolvedLayouts[activeSelection.id]).rotation;
+  }
 
-    syncFrameToPixelLayout(itemId, layout, stageBounds);
-    transientRotationByItemId.current[itemId] = layout.rotation;
+  function pinSelectionToPixels(activeSelection: CollageSelection) {
+    const stageBounds = stageRef.current?.getBoundingClientRect();
+    if (!stageBounds) return;
+
+    if (activeSelection.kind === "decoration") {
+      const decoration = decorations.find((entry) => entry.id === activeSelection.id);
+      if (!decoration) return;
+      syncDecorationFrameToPixelLayout(decoration, stageBounds);
+    } else {
+      const layout = displayLayouts[activeSelection.id] ?? resolvedLayouts[activeSelection.id];
+      syncFrameToPixelLayout(activeSelection.id, layout, stageBounds);
+    }
+    transientRotationBySelection.current[collageSelectionKey(activeSelection)] = selectionRotation(activeSelection);
   }
 
   function commitItemFrameFromPixels(itemId: number) {
@@ -326,11 +438,40 @@ export function OutfitCollageCanvas({
       y: pixelsToPercent(parseFloat(target.style.top || "0"), stageBounds.height),
       width: Math.max(MIN_ITEM_SIZE_PERCENT, pixelsToPercent(parseFloat(target.style.width || "0"), stageBounds.width)),
       height: Math.max(MIN_ITEM_SIZE_PERCENT, pixelsToPercent(parseFloat(target.style.height || "0"), stageBounds.height)),
-      rotation: transientRotationByItemId.current[itemId] ?? 0,
+      rotation: transientRotationBySelection.current[collageSelectionKey({ id: itemId, kind: "item" })] ?? 0,
     });
 
     syncFrameToPercentLayout(itemId, nextLayout);
     updateItemLayout(itemId, nextLayout);
+  }
+
+  function commitDecorationFrameFromPixels(decorationId: number) {
+    const decoration = decorations.find((entry) => entry.id === decorationId);
+    const target = decorationFrameRefs.current[decorationId];
+    const stageBounds = stageRef.current?.getBoundingClientRect();
+    if (!decoration || !target || !stageBounds) return;
+
+    const nextPlacement = {
+      x: clamp(pixelsToPercent(parseFloat(target.style.left || "0"), stageBounds.width), -25, 100),
+      y: clamp(pixelsToPercent(parseFloat(target.style.top || "0"), stageBounds.height), -25, 100),
+      width: clamp(
+        pixelsToPercent(parseFloat(target.style.width || "0"), stageBounds.width),
+        MIN_DECORATION_SIZE_PERCENT,
+        MAX_DECORATION_SIZE_PERCENT,
+      ),
+      rotation: wrapRotation(transientRotationBySelection.current[collageSelectionKey({ id: decorationId, kind: "decoration" })] ?? 0),
+    };
+
+    syncDecorationFrameToPercentLayout({ ...decoration, ...nextPlacement });
+    onDecorationChange?.(decoration, nextPlacement);
+  }
+
+  function commitSelectionFromPixels(activeSelection: CollageSelection) {
+    if (activeSelection.kind === "decoration") {
+      commitDecorationFrameFromPixels(activeSelection.id);
+    } else {
+      commitItemFrameFromPixels(activeSelection.id);
+    }
   }
 
   useEffect(() => {
@@ -340,7 +481,7 @@ export function OutfitCollageCanvas({
         return;
       }
 
-      const target = itemFrameRefs.current[gesture.itemId];
+      const target = selectionTarget(gesture.selection);
       if (!target) {
         return;
       }
@@ -348,7 +489,7 @@ export function OutfitCollageCanvas({
       const frameRect = target.getBoundingClientRect();
       const nextPointerAngle = pointAngleFromRectCenter(frameRect, event.clientX, event.clientY);
       const nextRotation = gesture.startRotation + (nextPointerAngle - gesture.startPointerAngle);
-      transientRotationByItemId.current[gesture.itemId] = nextRotation;
+      transientRotationBySelection.current[collageSelectionKey(gesture.selection)] = nextRotation;
       target.style.transform = `rotate(${nextRotation}deg)`;
       moveableRef.current?.updateRect();
     }
@@ -360,7 +501,7 @@ export function OutfitCollageCanvas({
       }
 
       activeRotationGestureRef.current = null;
-      commitItemFrameFromPixels(gesture.itemId);
+      commitSelectionFromPixels(gesture.selection);
     }
 
     window.addEventListener("pointermove", handleWindowPointerMove);
@@ -372,7 +513,7 @@ export function OutfitCollageCanvas({
       window.removeEventListener("pointerup", handleWindowPointerEnd);
       window.removeEventListener("pointercancel", handleWindowPointerEnd);
     };
-  }, [displayLayouts, resolvedLayouts]);
+  }, [decorations, displayLayouts, resolvedLayouts]);
   return (
     <div
       ref={stageRef}
@@ -404,7 +545,7 @@ export function OutfitCollageCanvas({
               itemFrameRefs.current[item.id] = node;
             }}
             data-collage-item-frame="true"
-            data-collage-resize-ready={item.id === selectedItemId ? selectedItemResizeReady : undefined}
+            data-collage-resize-ready={item.id === selectedItemId ? selectedResizeReady : undefined}
             role={editable ? "button" : undefined}
             tabIndex={editable ? 0 : -1}
             className={`absolute overflow-visible ${editable ? "cursor-move" : ""}`}
@@ -419,10 +560,12 @@ export function OutfitCollageCanvas({
             }}
             onPointerDown={(event) => {
               event.stopPropagation();
+              onSelectDecoration?.(null);
               onSelectItem?.(item.id);
             }}
             onClick={(event) => {
               event.stopPropagation();
+              onSelectDecoration?.(null);
               onSelectItem?.(item.id);
             }}
             onKeyDown={(event) => {
@@ -431,6 +574,7 @@ export function OutfitCollageCanvas({
               }
 
               event.preventDefault();
+              onSelectDecoration?.(null);
               onSelectItem?.(item.id);
             }}
           >
@@ -480,7 +624,73 @@ export function OutfitCollageCanvas({
         );
       })}
 
-      {overlay}
+      {decorations.map((decoration) => {
+        const measurement = decorationMeasurementById[decoration.id];
+        const contentBounds = measurement?.sourceKey === decoration.image_url && measurement.status === "ready"
+          ? measurement.bounds ?? undefined
+          : undefined;
+        const aspectRatio = contentBounds?.aspectRatio ?? decorationAspectRatioById[decoration.id] ?? 1;
+
+        return (
+          <div
+            key={`decoration-${decoration.id}`}
+            ref={(node) => {
+              decorationFrameRefs.current[decoration.id] = node;
+            }}
+            data-collage-decoration-frame="true"
+            data-collage-resize-ready={decoration.id === selectedDecorationId ? selectedResizeReady : undefined}
+            role={editable ? "button" : undefined}
+            tabIndex={editable ? 0 : -1}
+            className={`absolute overflow-visible ${editable ? "cursor-move" : "pointer-events-none"}`}
+            style={{
+              left: `${decoration.x}%`,
+              top: `${decoration.y}%`,
+              width: `${decoration.width}%`,
+              height: `${decorationHeightPercent(decoration.width, aspectRatio)}%`,
+              transform: `rotate(${decoration.rotation}deg)`,
+              transformOrigin: "center center",
+              zIndex: 60 + decoration.layer_order,
+            }}
+            onPointerDown={(event) => {
+              if (!editable) return;
+              event.stopPropagation();
+              onSelectItem?.(null);
+              onSelectDecoration?.(decoration.id);
+            }}
+            onClick={(event) => {
+              if (!editable) return;
+              event.stopPropagation();
+              onSelectItem?.(null);
+              onSelectDecoration?.(decoration.id);
+            }}
+            onKeyDown={(event) => {
+              if (!editable || (event.key !== "Enter" && event.key !== " ")) return;
+              event.preventDefault();
+              onSelectItem?.(null);
+              onSelectDecoration?.(decoration.id);
+            }}
+            aria-label={editable ? `Select decoration ${decoration.name}` : undefined}
+          >
+            <div className="pointer-events-none relative h-full w-full overflow-hidden bg-transparent">
+              <img
+                src={decoration.image_url}
+                alt=""
+                className="absolute max-w-none select-none"
+                style={imageStyleForContentBounds(contentBounds)}
+                draggable={false}
+                onLoad={(event) => {
+                  const nextAspectRatio = event.currentTarget.naturalWidth / Math.max(1, event.currentTarget.naturalHeight);
+                  setDecorationAspectRatioById((current) =>
+                    nearlyEqual(current[decoration.id] ?? 0, nextAspectRatio, 0.001)
+                      ? current
+                      : { ...current, [decoration.id]: nextAspectRatio },
+                  );
+                }}
+              />
+            </div>
+          </div>
+        );
+      })}
 
       {editable && selectedTarget ? (
         <Moveable
@@ -488,7 +698,7 @@ export function OutfitCollageCanvas({
           target={selectedTarget}
           container={stageRef.current ?? undefined}
           draggable
-          resizable={selectedItemResizeReady}
+          resizable={selectedResizeReady}
           rotatable
           keepRatio
           edge={false}
@@ -553,4 +763,37 @@ function pixelsToPercent(value: number, total: number) {
   }
 
   return (value / total) * 100;
+}
+
+function collageSelectionKey(selection: CollageSelection) {
+  return `${selection.kind}:${selection.id}`;
+}
+
+function decorationHeightPercent(width: number, aspectRatio: number) {
+  return (width * COLLAGE_STAGE_ASPECT_RATIO) / Math.max(aspectRatio, 0.001);
+}
+
+function resolveDecorationAspectRatio(
+  decoration: OutfitDecoration,
+  measurements: Record<number, ImageMeasurementState>,
+  intrinsicAspectRatios: Record<number, number>,
+) {
+  const measurement = measurements[decoration.id];
+  return (
+    (measurement?.sourceKey === decoration.image_url && measurement.status === "ready"
+      ? measurement.bounds?.aspectRatio
+      : undefined)
+    ?? intrinsicAspectRatios[decoration.id]
+    ?? 1
+  );
+}
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function wrapRotation(value: number) {
+  if (value > 180) return value - 360;
+  if (value < -180) return value + 360;
+  return value;
 }

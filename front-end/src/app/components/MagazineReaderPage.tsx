@@ -27,7 +27,6 @@ import { resolveModeledWorkflowImageUrl } from "../lib/modeledPreview";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { OutfitCollageCanvas } from "./OutfitCollageCanvas";
-import { OutfitDecorationLayer } from "./decorations/OutfitDecorationLayer";
 import { DecorationPickerPopover } from "./decorations/DecorationPickerPopover";
 
 interface MagazineReaderPageProps {
@@ -461,10 +460,10 @@ function OutfitMagazinePage({
         ) : (
           <div className="flex h-full items-center justify-center overflow-hidden bg-white">
             <OutfitCollageCanvas
+              decorations={outfit.decorations}
               items={outfit.items}
               maxVisibleItems={6}
               className="w-full"
-              overlay={<OutfitDecorationLayer placements={outfit.decorations} />}
             />
           </div>
         )}

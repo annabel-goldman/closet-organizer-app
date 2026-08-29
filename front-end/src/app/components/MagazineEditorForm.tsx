@@ -330,6 +330,7 @@ function OutfitPickerPreview({ outfit }: { outfit: Outfit }) {
 
   return (
     <OutfitCollageCanvas
+      decorations={outfit.decorations}
       items={outfit.items}
       maxVisibleItems={6}
       className="w-full"

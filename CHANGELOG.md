@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Unified outfit decorations with the flat-lay collage editor: decorations now appear in the layers rail, use the same direct drag/corner-resize/rotation handles as clothing pieces, and render from their measured visible PNG bounds instead of showing a padded miniature copy with separate controls.
 - Fixed the outfit editor's first resize gesture so image controls wait for visible garment bounds to finish measuring, preventing the initial resize from briefly using the source canvas's incorrect dimensions before later edits snap to the proper proportions.
 - Added a private `My Decorations` PNG library with progressive bulk upload, rename/delete controls, and the shared crop/rotate/magic-wand editor. Reusable decorations can now be placed, dragged, resized, rotated, and removed independently on saved outfit flat lays and magazine pages; flat-lay decorations also appear in gallery fallbacks and modeled-outfit composition snapshots.
 - Extended the Outfit Cart metadata fields and AI feedback message across the full usable width of the sidebar while preserving space for its header actions.

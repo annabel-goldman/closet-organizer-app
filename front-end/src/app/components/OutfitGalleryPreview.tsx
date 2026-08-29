@@ -4,7 +4,6 @@ import { UserRound } from "lucide-react";
 import type { Outfit } from "../lib/closet";
 import { resolveOutfitGalleryModelPreview } from "../lib/modeledPreview";
 import { OutfitCollageCanvas } from "./OutfitCollageCanvas";
-import { OutfitDecorationLayer } from "./decorations/OutfitDecorationLayer";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 
 export type OutfitGalleryPreviewView = "flatlay" | "modeled";
@@ -59,10 +58,10 @@ export function OutfitGalleryPreview({ outfit, view }: OutfitGalleryPreviewProps
             )
           ) : (
             <OutfitCollageCanvas
+              decorations={outfit.decorations}
               items={outfit.items}
               maxVisibleItems={6}
               className="h-full w-full"
-              overlay={<OutfitDecorationLayer placements={outfit.decorations} />}
             />
           )}
         </motion.div>
