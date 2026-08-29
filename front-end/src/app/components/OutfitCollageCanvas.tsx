@@ -35,6 +35,12 @@ interface ActiveRotationGesture {
   startRotation: number;
 }
 
+interface ImageMeasurementState {
+  bounds: ImageContentBounds | null;
+  sourceKey: string;
+  status: "pending" | "ready";
+}
+
 interface OutfitCollageCanvasProps {
   className?: string;
   editable?: boolean;
@@ -62,7 +68,7 @@ export function OutfitCollageCanvas({
   const itemFrameRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const transientRotationByItemId = useRef<Record<number, number>>({});
   const activeRotationGestureRef = useRef<ActiveRotationGesture | null>(null);
-  const [imageContentBoundsByItemId, setImageContentBoundsByItemId] = useState<Record<number, ImageContentBounds>>({});
+  const [imageMeasurementByItemId, setImageMeasurementByItemId] = useState<Record<number, ImageMeasurementState>>({});
   const [imageAspectRatioByItemId, setImageAspectRatioByItemId] = useState<Record<number, number>>({});
 
   const resolvedLayouts = useMemo(
@@ -76,7 +82,64 @@ export function OutfitCollageCanvas({
   const visibleItems = maxVisibleItems ? orderedItems.slice(0, maxVisibleItems) : orderedItems;
   const hiddenCount = Math.max(0, orderedItems.length - visibleItems.length);
   const selectedTarget = editable && selectedItemId ? itemFrameRefs.current[selectedItemId] : null;
+  const selectedItem = selectedItemId
+    ? visibleItems.find((item) => item.id === selectedItemId)
+    : null;
+  const selectedMeasurement = selectedItem?.image_url
+    ? imageMeasurementByItemId[selectedItem.id]
+    : null;
+  const selectedItemResizeReady = Boolean(
+    !selectedItem?.image_url
+    || (
+      selectedMeasurement?.sourceKey === selectedItem.image_url
+      && selectedMeasurement.status === "ready"
+    ),
+  );
   const displayLayouts = resolvedLayouts;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    items.forEach((item) => {
+      const sourceKey = item.image_url;
+      if (!sourceKey) {
+        return;
+      }
+
+      setImageMeasurementByItemId((current) => {
+        const existing = current[item.id];
+        if (existing?.sourceKey === sourceKey) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [item.id]: { bounds: null, sourceKey, status: "pending" },
+        };
+      });
+
+      void measureImageContentBounds({ imageUrl: sourceKey }).then((nextBounds) => {
+        if (cancelled) {
+          return;
+        }
+
+        setImageMeasurementByItemId((current) => {
+          if (current[item.id]?.sourceKey !== sourceKey) {
+            return current;
+          }
+
+          return {
+            ...current,
+            [item.id]: { bounds: nextBounds, sourceKey, status: "ready" },
+          };
+        });
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items]);
 
   function syncFrameToPercentLayout(itemId: number, layout: OutfitCollageLayout) {
     const target = itemFrameRefs.current[itemId];
@@ -114,7 +177,7 @@ export function OutfitCollageCanvas({
       syncFrameToPercentLayout(item.id, layout);
     });
     moveableRef.current?.updateRect();
-  }, [displayLayouts, resolvedLayouts, selectedItemId, visibleItems]);
+  }, [displayLayouts, resolvedLayouts, selectedItemId, selectedItemResizeReady, visibleItems]);
 
   function updateItemLayout(itemId: number, nextPartial: Partial<OutfitCollageLayout>) {
     if (!onLayoutsChange) {
@@ -183,8 +246,11 @@ export function OutfitCollageCanvas({
 
     pinItemFrameToPixels(selectedItemId);
     const selectedLayout = displayLayouts[selectedItemId] ?? resolvedLayouts[selectedItemId];
+    const measurement = imageMeasurementByItemId[selectedItemId];
     event.setRatio(resolveOutfitCollageResizeAspectRatio({
-      contentBoundsAspectRatio: imageContentBoundsByItemId[selectedItemId]?.aspectRatio,
+      contentBoundsAspectRatio: measurement?.status === "ready"
+        ? measurement.bounds?.aspectRatio
+        : undefined,
       intrinsicAspectRatio: imageAspectRatioByItemId[selectedItemId],
       layout: selectedLayout,
     }));
@@ -320,7 +386,10 @@ export function OutfitCollageCanvas({
     >
       {visibleItems.map((item, index) => {
         const layout = displayLayouts[item.id] ?? resolvedLayouts[item.id];
-        const contentBounds = imageContentBoundsByItemId[item.id];
+        const measurement = imageMeasurementByItemId[item.id];
+        const contentBounds = measurement?.sourceKey === item.image_url && measurement.status === "ready"
+          ? measurement.bounds ?? undefined
+          : undefined;
         const mediaBox = resolveOutfitCollageMediaBox(
           layout,
           contentBounds?.aspectRatio ?? imageAspectRatioByItemId[item.id],
@@ -335,6 +404,7 @@ export function OutfitCollageCanvas({
               itemFrameRefs.current[item.id] = node;
             }}
             data-collage-item-frame="true"
+            data-collage-resize-ready={item.id === selectedItemId ? selectedItemResizeReady : undefined}
             role={editable ? "button" : undefined}
             tabIndex={editable ? 0 : -1}
             className={`absolute overflow-visible ${editable ? "cursor-move" : ""}`}
@@ -385,25 +455,6 @@ export function OutfitCollageCanvas({
                               [item.id]: nextAspectRatio,
                             },
                       );
-                      void measureImageContentBounds({
-                        imageUrl: item.image_url!,
-                      }).then((nextBounds) => {
-                        if (!nextBounds) {
-                          return;
-                        }
-
-                        setImageContentBoundsByItemId((current) => {
-                          const previous = current[item.id];
-                          if (previous && imageContentBoundsEqual(previous, nextBounds)) {
-                            return current;
-                          }
-
-                          return {
-                            ...current,
-                            [item.id]: nextBounds,
-                          };
-                        });
-                      });
                     }}
                   />
                 </div>
@@ -437,7 +488,7 @@ export function OutfitCollageCanvas({
           target={selectedTarget}
           container={stageRef.current ?? undefined}
           draggable
-          resizable
+          resizable={selectedItemResizeReady}
           rotatable
           keepRatio
           edge={false}
@@ -484,16 +535,6 @@ function imageStyleForContentBounds(bounds?: ImageContentBounds): CSSProperties 
     top: `${-(bounds.topFraction / bounds.heightFraction) * 100}%`,
     width: `${100 / bounds.widthFraction}%`,
   };
-}
-
-function imageContentBoundsEqual(left: ImageContentBounds, right: ImageContentBounds) {
-  return (
-    nearlyEqual(left.leftFraction, right.leftFraction, 0.001)
-    && nearlyEqual(left.topFraction, right.topFraction, 0.001)
-    && nearlyEqual(left.widthFraction, right.widthFraction, 0.001)
-    && nearlyEqual(left.heightFraction, right.heightFraction, 0.001)
-    && nearlyEqual(left.aspectRatio, right.aspectRatio, 0.001)
-  );
 }
 
 function nearlyEqual(left: number, right: number, tolerance = 0.002) {

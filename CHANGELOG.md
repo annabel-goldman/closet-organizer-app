@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed the outfit editor's first resize gesture so image controls wait for visible garment bounds to finish measuring, preventing the initial resize from briefly using the source canvas's incorrect dimensions before later edits snap to the proper proportions.
 - Added a private `My Decorations` PNG library with progressive bulk upload, rename/delete controls, and the shared crop/rotate/magic-wand editor. Reusable decorations can now be placed, dragged, resized, rotated, and removed independently on saved outfit flat lays and magazine pages; flat-lay decorations also appear in gallery fallbacks and modeled-outfit composition snapshots.
 - Extended the Outfit Cart metadata fields and AI feedback message across the full usable width of the sidebar while preserving space for its header actions.
 - Removed the redundant supporting sentence from the model reference photos dialog.
