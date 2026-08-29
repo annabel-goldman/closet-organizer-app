@@ -985,13 +985,6 @@ export function MyOutfitsPage({
                     Edit Outfit
                   </PrimitiveText>
                 </DialogTitle>
-                <DialogDescription asChild>
-                  <PrimitiveText as="p" tone="muted">
-                    {editingOutfit?.generated_by_ai
-                      ? "Update the generated outfit details while keeping the current look in view."
-                      : "Update the saved outfit details while keeping the current look in view."}
-                  </PrimitiveText>
-                </DialogDescription>
               </DialogHeader>
 
               {flash ? (
