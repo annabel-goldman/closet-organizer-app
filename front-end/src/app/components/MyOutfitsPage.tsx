@@ -5,6 +5,7 @@ import {
   LayoutGrid,
   Pencil,
   Plus,
+  Search,
   Sparkles,
   Trash2,
   Upload,
@@ -58,6 +59,7 @@ import { OutfitMagazineDialog } from "./OutfitMagazineDialog";
 import { OutfitGalleryPreview } from "./OutfitGalleryPreview";
 import { MAX_OUTFIT_NAME, MAX_OUTFIT_NOTES } from "../lib/inputLengthPolicy";
 import { useOutfitMagazines } from "./outfits/useOutfitMagazines";
+import { matchesOutfitSearchQuery } from "../lib/closetFilters";
 
 interface MyOutfitsPageProps {
   isLoading: boolean;
@@ -120,6 +122,7 @@ export function MyOutfitsPage({
   const [isAutofillingOutfitDetails, setIsAutofillingOutfitDetails] = useState(false);
   const [galleryView, setGalleryView] = useState<OutfitGalleryView>("flatlay");
   const [pageView, setPageView] = useState<OutfitsPageView>("outfits");
+  const [outfitSearchQuery, setOutfitSearchQuery] = useState("");
   const [regenerationConfirmationOutfitId, setRegenerationConfirmationOutfitId] = useState<number | null>(null);
   const outfitDetailsRequestIdRef = useRef(0);
   const showFlash = useCallback((kind: FlashState["kind"], message: string) => {
@@ -167,6 +170,10 @@ export function MyOutfitsPage({
   const availableItems = useMemo(
     () => sortedItems.filter((item) => !formState.itemIds.includes(item.id)),
     [formState.itemIds, sortedItems],
+  );
+  const filteredOutfits = useMemo(
+    () => outfits.filter((outfit) => matchesOutfitSearchQuery(outfit, outfitSearchQuery)),
+    [outfitSearchQuery, outfits],
   );
   const editingOutfit = editingOutfitId
     ? outfits.find((outfit) => outfit.id === editingOutfitId) ?? null
@@ -642,6 +649,38 @@ export function MyOutfitsPage({
         </section>
       ) : (
       <section className="space-y-4">
+        {!isLoading && !loadErrorMessage && outfits.length > 0 ? (
+          <div className="relative max-w-xl">
+            <label htmlFor="outfit-search" className="sr-only">
+              Search outfits
+            </label>
+            <Search
+              className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              id="outfit-search"
+              type="search"
+              value={outfitSearchQuery}
+              onChange={(event) => setOutfitSearchQuery(event.target.value)}
+              placeholder="Search outfits by name, tags, notes, or pieces"
+              className="h-12 rounded-none border-border bg-background pl-11 pr-11"
+            />
+            {outfitSearchQuery ? (
+              <PrimitiveButton
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 h-10 w-10 -translate-y-1/2"
+                onClick={() => setOutfitSearchQuery("")}
+                aria-label="Clear outfit search"
+              >
+                <X className="h-4 w-4" />
+              </PrimitiveButton>
+            ) : null}
+          </div>
+        ) : null}
+
         {isLoading ? (
           <div className="grid gap-4 md:grid-cols-2">
             {Array.from({ length: 2 }).map((_, index) => (
@@ -670,9 +709,26 @@ export function MyOutfitsPage({
               Create your first look from the closet cart and it will appear here.
             </PrimitiveText>
           </div>
+        ) : filteredOutfits.length === 0 ? (
+          <div className="border border-dashed border-border p-8 text-center" role="status">
+            <PrimitiveText as="p" variant="display" font="serif" className="mb-2">
+              No matching outfits
+            </PrimitiveText>
+            <PrimitiveText as="p" tone="muted">
+              Try another name, tag, note, or closet piece.
+            </PrimitiveText>
+            <PrimitiveButton
+              type="button"
+              variant="outline"
+              className="mt-5"
+              onClick={() => setOutfitSearchQuery("")}
+            >
+              Clear search
+            </PrimitiveButton>
+          </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {outfits.map((outfit, index) => {
+            {filteredOutfits.map((outfit, index) => {
               const galleryModelPreview = resolveOutfitGalleryModelPreview(outfit.modeled_workflow);
 
               return (
