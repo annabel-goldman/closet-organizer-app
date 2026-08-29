@@ -1,21 +1,20 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { OutfitFolderDialog } from "../../src/app/components/OutfitFolderDialog";
+import { MagazineEditorForm } from "../../src/app/components/MagazineEditorForm";
 import type { Outfit } from "../../src/app/lib/closet";
 
 afterEach(cleanup);
 
-describe("OutfitFolderDialog", () => {
+describe("MagazineEditorForm", () => {
   it("creates magazines without exposing or submitting a style choice", () => {
     const onSave = vi.fn();
 
     render(
-      <OutfitFolderDialog
+      <MagazineEditorForm
         isSaving={false}
-        onOpenChange={() => undefined}
+        onCancel={() => undefined}
         onSave={onSave}
-        open
         outfits={[]}
       />,
     );
@@ -54,11 +53,10 @@ describe("OutfitFolderDialog", () => {
 
     try {
       render(
-        <OutfitFolderDialog
+        <MagazineEditorForm
           isSaving={false}
-          onOpenChange={() => undefined}
+          onCancel={() => undefined}
           onSave={() => undefined}
-          open
           outfits={[outfit]}
         />,
       );
@@ -135,11 +133,10 @@ describe("OutfitFolderDialog", () => {
     ];
 
     render(
-      <OutfitFolderDialog
+      <MagazineEditorForm
         isSaving={false}
-        onOpenChange={() => undefined}
+        onCancel={() => undefined}
         onSave={() => undefined}
-        open
         outfits={outfits}
       />,
     );

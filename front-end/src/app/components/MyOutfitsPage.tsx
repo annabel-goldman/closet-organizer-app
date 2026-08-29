@@ -54,12 +54,11 @@ import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveConfirmationDialog } from "./primitives/PrimitiveConfirmationDialog";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
-import { OutfitFolderDialog } from "./OutfitFolderDialog";
-import { OutfitMagazineDialog } from "./OutfitMagazineDialog";
 import { OutfitGalleryPreview } from "./OutfitGalleryPreview";
 import { MAX_OUTFIT_NAME, MAX_OUTFIT_NOTES } from "../lib/inputLengthPolicy";
 import { useOutfitMagazines } from "./outfits/useOutfitMagazines";
 import { matchesOutfitSearchQuery } from "../lib/closetFilters";
+import { navigateTo } from "../lib/routes";
 
 interface MyOutfitsPageProps {
   isLoading: boolean;
@@ -121,7 +120,9 @@ export function MyOutfitsPage({
   const [isDeletingModeledPreview, setIsDeletingModeledPreview] = useState(false);
   const [isAutofillingOutfitDetails, setIsAutofillingOutfitDetails] = useState(false);
   const [galleryView, setGalleryView] = useState<OutfitGalleryView>("flatlay");
-  const [pageView, setPageView] = useState<OutfitsPageView>("outfits");
+  const [pageView, setPageView] = useState<OutfitsPageView>(() => (
+    new URLSearchParams(window.location.search).get("view") === "magazines" ? "magazines" : "outfits"
+  ));
   const [outfitSearchQuery, setOutfitSearchQuery] = useState("");
   const [regenerationConfirmationOutfitId, setRegenerationConfirmationOutfitId] = useState<number | null>(null);
   const outfitDetailsRequestIdRef = useRef(0);
@@ -134,24 +135,12 @@ export function MyOutfitsPage({
     userId: user.id,
   });
   const {
-    closeFolderDialog,
-    closeMagazine,
     deleteRequestedFolder: handleDeleteFolder,
-    editingFolder,
     folderToDeleteId,
     hydratedFolders,
-    isFolderDialogOpen,
     isLoading: isLoadingFolders,
-    isMagazineOpen,
-    isSaving: isSavingFolder,
-    openCreateFolder: openCreateFolderDialog,
-    openEditFolder: openEditFolderDialog,
-    openMagazine,
     removeOutfit: removeOutfitFromFolders,
     requestFolderDelete,
-    saveFolder,
-    selectedFolder: hydratedSelectedFolder,
-    updateFolder: handleFolderUpdated,
   } = magazines;
 
   const sortedItems = useMemo(
@@ -275,13 +264,6 @@ export function MyOutfitsPage({
       showFlash("success", "Outfit deleted.");
     } catch (error) {
       showFlash("error", error instanceof Error ? error.message : "Unable to delete outfit.");
-    }
-  }
-
-  async function handleSaveFolder(draft: Parameters<typeof saveFolder>[0]) {
-    setFlash(null);
-    if (await saveFolder(draft)) {
-      setPageView("magazines");
     }
   }
 
@@ -571,7 +553,7 @@ export function MyOutfitsPage({
             <PrimitiveButton
               type="button"
               variant="outline"
-              onClick={openCreateFolderDialog}
+              onClick={() => navigateTo("/magazines/new")}
               disabled={isLoadingFolders}
             >
               <Plus className="h-4 w-4" />
@@ -591,7 +573,7 @@ export function MyOutfitsPage({
               <PrimitiveText as="h3" variant="display" font="serif" className="mb-2">
                 Create your first magazine
               </PrimitiveText>
-              <PrimitiveButton type="button" className="mt-6" onClick={openCreateFolderDialog}>
+              <PrimitiveButton type="button" className="mt-6" onClick={() => navigateTo("/magazines/new")}>
                 <Plus className="h-4 w-4" />
                 New magazine
               </PrimitiveButton>
@@ -622,13 +604,15 @@ export function MyOutfitsPage({
                       {folder.notes ? ` · ${folder.notes}` : ""}
                     </PrimitiveText>
                     <div className="flex flex-wrap gap-2">
-                      <PrimitiveButton type="button" onClick={() => openMagazine(folder)}>
-                        <BookOpen className="h-4 w-4" />
-                        Open magazine
+                      <PrimitiveButton asChild>
+                        <a href={`/magazines/${folder.id}`} target="_blank" rel="noopener noreferrer">
+                          <BookOpen className="h-4 w-4" />
+                          Open magazine
+                        </a>
                       </PrimitiveButton>
-                      <PrimitiveButton type="button" variant="outline" onClick={() => openEditFolderDialog(folder)}>
+                      <PrimitiveButton type="button" variant="outline" onClick={() => navigateTo(`/magazines/${folder.id}/edit`)}>
                         <Pencil className="h-4 w-4" />
-                        Add or arrange outfits
+                        Edit magazine
                       </PrimitiveButton>
                       <PrimitiveButton
                         type="button"
@@ -1027,22 +1011,6 @@ export function MyOutfitsPage({
           </div>
         </DialogContent>
       </Dialog>
-
-      <OutfitFolderDialog
-        open={isFolderDialogOpen}
-        onOpenChange={(open) => !open && closeFolderDialog()}
-        folder={editingFolder}
-        outfits={outfits}
-        isSaving={isSavingFolder}
-        onSave={(draft) => void handleSaveFolder(draft)}
-      />
-
-      <OutfitMagazineDialog
-        open={isMagazineOpen}
-        onOpenChange={(open) => !open && closeMagazine()}
-        folder={hydratedSelectedFolder}
-        onFolderUpdated={handleFolderUpdated}
-      />
 
       <PrimitiveConfirmationDialog
         open={folderToDeleteId !== null}

@@ -6,6 +6,7 @@ import {
   createOutfitFolder,
   createOutfitFolderDecoration,
   deleteModeledPreview,
+  fetchOutfitFolder,
   fetchOutfitFolders,
   generateClothingItemCleanImage,
   generateMagazineMetadataSuggestions,
@@ -139,6 +140,33 @@ test("outfit folder APIs preserve magazine order and upload page-specific clip a
     assert.equal((requests[2].init?.body as FormData).get("decoration[image]"), clipArt);
     assert.equal((requests[2].init?.body as FormData).get("decoration[page_key]"), "cover");
     assert.equal(movedDecoration.x, 42);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchOutfitFolder loads one independently routable magazine", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedPath = "";
+
+  globalThis.fetch = async (input) => {
+    requestedPath = String(input);
+    return new Response(JSON.stringify({
+      id: 8,
+      user_id: 1,
+      name: "Paris Weekend",
+      occasion: null,
+      notes: "Three days",
+      outfit_ids: [],
+      outfits: [],
+      decorations: [],
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const folder = await fetchOutfitFolder(8);
+    assert.equal(requestedPath, "/api/outfit_folders/8");
+    assert.equal(folder.name, "Paris Weekend");
   } finally {
     globalThis.fetch = originalFetch;
   }

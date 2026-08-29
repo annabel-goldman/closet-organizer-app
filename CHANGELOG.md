@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Moved magazine creation and editing out of constrained dialogs into dedicated full-page workspaces. Opening a magazine now launches an independent immersive reader tab with animated book-like page turns, keyboard navigation, decoration controls, and flat-lay fallback pages when a modeled image is unavailable.
 - Added fuzzy search to the outfits gallery across outfit names, tags, notes, and contained closet pieces, with clear and empty-result states.
 - Moved the `My Outfits` header action beside `Closet` so the app's two primary destinations stay grouped together.
 - Polished the outfits gallery's Flatlay/Model switch with a fixed-size overlapping crossfade, subtle scale/vertical easing, a stable toggle width, and a reduced-motion fallback.

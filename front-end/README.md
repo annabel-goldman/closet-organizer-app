@@ -64,6 +64,9 @@ Routes are parsed in `src/app/lib/routes.ts` and composed lazily by `src/app/App
   [two-minute product demo](https://closet-organizer-165f918adeda.herokuapp.com/demo/curated-closet-demo.mp4)
 - `/closet` signed-in closet home with search, filters, and sorting
 - `/outfits` saved outfit gallery and editor
+- `/magazines/new` full-page magazine creation workspace
+- `/magazines/:id/edit` full-page magazine metadata, outfit selection, and ordering workspace
+- `/magazines/:id` immersive magazine reader, normally launched in a separate tab
 - `/users` admin-only users directory
 - `/users/:id` admin-only user detail page
 - `/items/:id` clothing item detail editor
@@ -80,8 +83,8 @@ Routes are parsed in `src/app/lib/routes.ts` and composed lazily by `src/app/App
 - Non-admin users are blocked from `/users` and `/users/:id` in both backend authorization and frontend navigation.
 - The admin users directory at `/users` is paginated (24 per page) and uses a `clothing_items_count` field per user instead of shipping each user's full items array.
 - The closet page now treats outfit selection like a cart: `Add to Outfit` updates a cart button in the closet action row beside `Add Item`, the selected pieces can be reviewed in a right-side tray, and the tray can capture outfit name, tags, and notes before creating the outfit. The cart's icon-only `AI fill details` header action uses the selected pieces to draft all three fields through the unsaved-outfit metadata endpoint, while leaving creation to the user. The `/outfits` page now focuses on browsing, editing, and deleting saved outfits. Its page-level `Model view` toggle switches every gallery card from the flat lay to the saved modeled image through a fixed-frame crossfade with reduced-motion support, and uses a neutral placeholder where no modeled preview exists. Editing opens a modal with the outfit preview on the left, direct collage editing controls (move, resize, rotate, layer reordering, and searchable add-item thumbnails), and editable metadata on the right; editors launched from `Model view` begin on the modeled slide and retain left-arrow navigation to the flat lay. Its matching `AI fill details` action uses the exact current editor pieces—including unsaved additions or removals—to draft the title, tags, and notes, but leaves saving to the user. Both actions appear beside their surface's close control through the shared dialog/sheet header-action slot.
-- `/outfits` includes separate `All outfits` and `My Magazines` views. The magazine library lets users create a magazine, add or reorder saved outfits, open the finished magazine, or delete the magazine without deleting its source outfits. The editor's scrollable outfit picker displays each modeled preview when available, falls back to the saved flat lay, and supports fuzzy search across outfit and contained-piece metadata. Its icon-only AI action uses an optional draft title/notes as a creative brief, then fills an editable concept and selects and orders matching saved outfits without persisting until the user saves. Every magazine uses the same minimal white presentation, with a cover followed by one portrait page per look using each outfit's modeled preview or a consistent missing-preview treatment. In decorate mode, uploaded clip-art images are private magazine assets tied to the current page and can be dragged, resized, rotated, and deleted without modifying the outfit or modeled image.
-- The saved outfits collection is cached in `App.tsx` after the first `/outfits` load. Navigating away and back reuses that cache, while outfit creation, edits, deletes, AI generation, and clothing-item edits patch the cached records directly. Magazine loading and editor/viewer state live in `components/outfits/useOutfitMagazines.ts` rather than the route component.
+- `/outfits` includes separate `All outfits` and `My Magazines` views. The magazine library lets users create a magazine, add or reorder saved outfits, open the finished magazine, or delete the magazine without deleting its source outfits. Creating or editing navigates to a dedicated full-page workspace whose scrollable outfit picker displays each modeled preview when available, falls back to the saved flat lay, and supports fuzzy search across outfit and contained-piece metadata. Its icon-only AI action uses an optional draft title/notes as a creative brief, then fills an editable concept and selects and orders matching saved outfits without persisting until the user saves. Opening a magazine launches `/magazines/:id` in a separate tab as an immersive, app-shell-free book reader with animated page turns, arrow-key controls, and one portrait page per look; pages use modeled imagery when available and the saved flat lay otherwise. In decorate mode, uploaded clip-art images are private magazine assets tied to the current page and can be dragged, resized, rotated, and deleted without modifying the outfit or modeled image.
+- The saved outfits collection is cached in `App.tsx` after the first `/outfits` load. Navigating away and back reuses that cache, while outfit creation, edits, deletes, AI generation, and clothing-item edits patch the cached records directly. `components/outfits/useOutfitMagazines.ts` owns the gallery's magazine collection and deletion state; the route-level editor and reader independently load the data they need so direct URLs and separate tabs work reliably.
 - The saved-outfit collage editor is library-backed: `react-moveable` owns the move/resize/rotate controls, while `OutfitCollageCanvas` keeps the rendered image viewport and persisted collage layout data in sync.
 - The saved card and edit modal intentionally share the same collage-layout math: the editor seeds its layouts from the saved API payload, supports adding/removing closet pieces while editing, and both views normalize those layouts through the same render-math helpers so the saved preview matches what the editor shows after save.
 - Item and outfit text inputs are length-capped through `src/app/lib/inputLengthPolicy.ts`, which mirrors the backend `InputLengthPolicy` constants and applies them as `maxLength` on the relevant `<input>` and `<textarea>` controls.
@@ -154,11 +157,11 @@ Routes are parsed in `src/app/lib/routes.ts` and composed lazily by `src/app/App
 - `src/app/components/MyOutfitsPage.tsx`
   Saved outfit gallery/editor, draft-level AI title/tag/note autofill, and automatically published full-look modeled-preview actions
 - `src/app/components/outfits/useOutfitMagazines.ts`
-  Magazine collection, membership, dialog, deletion, and viewer state
-- `src/app/components/OutfitFolderDialog.tsx`
-  Magazine metadata, searchable modeled/flat-lay outfit selection, ordering, and editable AI concept/outfit autofill
-- `src/app/components/OutfitMagazineDialog.tsx`
-  Animated portrait magazine viewer and page-scoped clip-art layout editor
+  Magazine-library loading, outfit hydration, and deletion state
+- `src/app/components/MagazineEditorPage.tsx` and `src/app/components/MagazineEditorForm.tsx`
+  Full-page magazine loading/saving plus metadata, searchable modeled/flat-lay outfit selection, ordering, and editable AI concept/outfit autofill
+- `src/app/components/MagazineReaderPage.tsx`
+  Immersive animated book reader and page-scoped clip-art layout editor
 - `src/app/components/shared/ModeledPreviewPanel.tsx`
   Minimal modeled-item image surface with a confirmed deletion control; workflow stages remain internal
 - `src/app/components/shared/GenerationTaskToasts.tsx`

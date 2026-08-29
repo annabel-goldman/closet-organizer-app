@@ -86,6 +86,12 @@ const ItemDetailPage = lazy(() => import("./components/ItemDetailPage").then((mo
 const MyOutfitsPage = lazy(() => import("./components/MyOutfitsPage").then((module) => ({
   default: module.MyOutfitsPage,
 })));
+const MagazineEditorPage = lazy(() => import("./components/MagazineEditorPage").then((module) => ({
+  default: module.MagazineEditorPage,
+})));
+const MagazineReaderPage = lazy(() => import("./components/MagazineReaderPage").then((module) => ({
+  default: module.MagazineReaderPage,
+})));
 const UserDetailPage = lazy(() => import("./components/UserDetailPage").then((module) => ({
   default: module.UserDetailPage,
 })));
@@ -713,7 +719,7 @@ export default function App() {
   let pageContent;
 
   if ((route.kind === "home" || isLoggedOutProtectedRoute) && isLoading) {
-    return <div className="min-h-screen bg-background" />;
+    return <div className={`min-h-screen ${route.kind === "magazine-reader" ? "bg-[#191714]" : "bg-background"}`} />;
   }
 
   if ((!user && route.kind === "home") || (isLoggedOutProtectedRoute && !isLoading)) {
@@ -832,6 +838,10 @@ export default function App() {
         user={user}
       />
     ) : null;
+  } else if (route.kind === "magazine-editor") {
+    pageContent = <MagazineEditorPage magazineId={route.magazineId} />;
+  } else if (route.kind === "magazine-reader") {
+    pageContent = <MagazineReaderPage magazineId={route.magazineId} />;
   } else {
     pageContent = (
       <div className="max-w-7xl mx-auto px-6 py-12">
@@ -1083,6 +1093,10 @@ export default function App() {
         <SiteFooter />
       </div>
     );
+  }
+
+  if (route.kind === "magazine-reader" && user) {
+    return <Suspense fallback={<RouteLoadingState />}>{pageContent}</Suspense>;
   }
 
   return (

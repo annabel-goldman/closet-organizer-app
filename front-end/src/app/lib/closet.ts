@@ -671,6 +671,12 @@ export async function fetchOutfitFolders(signal?: AbortSignal) {
     .map(normalizeOutfitFolderPayload);
 }
 
+export async function fetchOutfitFolder(id: number, signal?: AbortSignal) {
+  return normalizeOutfitFolderPayload(
+    await requestJson<OutfitFolder>(`${API_BASE_URL}/outfit_folders/${id}`, { signal }),
+  );
+}
+
 interface SaveOutfitFolderInput {
   name: string;
   occasion?: string;

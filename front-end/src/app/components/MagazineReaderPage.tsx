@@ -1,6 +1,7 @@
 import { ChangeEvent, PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
+  ArrowLeft,
   BookOpen,
   ChevronLeft,
   ChevronRight,
@@ -11,26 +12,24 @@ import {
   RotateCw,
   Sparkles,
   Trash2,
-  UserRound,
 } from "lucide-react";
 import {
   createOutfitFolderDecoration,
   destroyOutfitFolderDecoration,
+  fetchOutfitFolder,
   type Outfit,
   type OutfitFolder,
   type OutfitFolderDecoration,
   updateOutfitFolderDecoration,
 } from "../lib/closet";
+import { navigateTo } from "../lib/routes";
 import { resolveModeledWorkflowImageUrl } from "../lib/modeledPreview";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import { OutfitCollageCanvas } from "./OutfitCollageCanvas";
 
-interface OutfitMagazineDialogProps {
-  folder: OutfitFolder | null;
-  onFolderUpdated: (folder: OutfitFolder) => void;
-  onOpenChange: (open: boolean) => void;
-  open: boolean;
+interface MagazineReaderPageProps {
+  magazineId: number;
 }
 
 interface MagazinePage {
@@ -50,14 +49,11 @@ interface DecorationDrag {
   pointerY: number;
 }
 
-export function OutfitMagazineDialog({
-  folder,
-  onFolderUpdated,
-  onOpenChange,
-  open,
-}: OutfitMagazineDialogProps) {
+export function MagazineReaderPage({ magazineId }: MagazineReaderPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [folder, setFolder] = useState<OutfitFolder | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [pageIndex, setPageIndex] = useState(0);
   const [direction, setDirection] = useState(1);
   const [decorations, setDecorations] = useState<OutfitFolderDecoration[]>([]);
@@ -67,16 +63,68 @@ export function OutfitMagazineDialog({
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    if (!folder || !open) return;
-    setPageIndex(0);
-    setDirection(1);
-    setDecorations(folder.decorations);
-    setSelectedDecorationId(null);
-    setIsDecorating(false);
+    const controller = new AbortController();
+    setIsLoading(true);
     setErrorMessage("");
-  }, [folder?.id, open]);
 
-  if (!folder) return null;
+    fetchOutfitFolder(magazineId, controller.signal)
+      .then((nextFolder) => {
+        setFolder(nextFolder);
+        setPageIndex(0);
+        setDirection(1);
+        setDecorations(nextFolder.decorations);
+        setSelectedDecorationId(null);
+        setIsDecorating(false);
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setErrorMessage(error instanceof Error ? error.message : "Unable to load this magazine.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [magazineId]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (isDecorating) return;
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setDirection(-1);
+        setPageIndex((current) => Math.max(0, current - 1));
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setDirection(1);
+        setPageIndex((current) => Math.min(folder?.outfits.length ?? 0, current + 1));
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [folder?.outfits.length, isDecorating]);
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#191714] text-white" role="status">
+        <PrimitiveText className="text-white/65">Opening magazine…</PrimitiveText>
+      </div>
+    );
+  }
+
+  if (!folder) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#191714] px-6 text-center text-white">
+        <PrimitiveText as="h1" variant="display" font="serif" className="text-white">Magazine unavailable</PrimitiveText>
+        <PrimitiveText as="p" className="mt-3 text-white/65">{errorMessage || "This magazine could not be found."}</PrimitiveText>
+        <PrimitiveButton type="button" variant="outline" className="mt-6 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => navigateTo("/outfits?view=magazines")}>
+          <ArrowLeft /> Back to magazines
+        </PrimitiveButton>
+      </div>
+    );
+  }
 
   const pages: MagazinePage[] = [
     { key: "cover", outfit: null },
@@ -91,7 +139,7 @@ export function OutfitMagazineDialog({
 
   function syncFolder(nextDecorations: OutfitFolderDecoration[]) {
     setDecorations(nextDecorations);
-    onFolderUpdated({ ...folder!, decorations: nextDecorations });
+    setFolder((current) => current ? { ...current, decorations: nextDecorations } : current);
   }
 
   function turnPage(nextIndex: number) {
@@ -203,21 +251,28 @@ export function OutfitMagazineDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[96vh] max-w-[96vw] grid-rows-[auto_1fr] overflow-hidden rounded-none border-0 bg-[#191714] p-0 text-white">
-        <DialogHeader className="border-b border-white/15 px-5 py-4 pr-14">
+    <div className="grid min-h-screen grid-rows-[auto_1fr] overflow-hidden bg-[#191714] text-white">
+        <header className="border-b border-white/15 px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <DialogTitle asChild>
-                <PrimitiveText as="h2" variant="display" font="serif" className="text-2xl text-white">
+            <div className="flex min-w-0 items-center gap-3">
+              <PrimitiveButton
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-white/10 hover:text-white"
+                onClick={() => navigateTo("/outfits?view=magazines")}
+                aria-label="Back to magazines"
+              >
+                <ArrowLeft />
+              </PrimitiveButton>
+              <div className="min-w-0">
+                <PrimitiveText as="h1" variant="display" font="serif" className="truncate text-2xl text-white">
                   {folder.name}
                 </PrimitiveText>
-              </DialogTitle>
-              <DialogDescription asChild>
                 <PrimitiveText as="p" variant="bodySm" className="text-white/60">
-                  Magazine mode · {pages.length} {pages.length === 1 ? "page" : "pages"}
+                  {pages.length} {pages.length === 1 ? "page" : "pages"} · use arrow keys or the page controls to flip
                 </PrimitiveText>
-              </DialogDescription>
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <input
@@ -228,6 +283,14 @@ export function OutfitMagazineDialog({
                 className="sr-only"
                 onChange={(event) => void handleClipArtUpload(event)}
               />
+              <PrimitiveButton
+                type="button"
+                variant="outline"
+                className="border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white"
+                onClick={() => navigateTo(`/magazines/${folder.id}/edit`)}
+              >
+                Edit magazine
+              </PrimitiveButton>
               <PrimitiveButton
                 type="button"
                 variant="outline"
@@ -252,9 +315,9 @@ export function OutfitMagazineDialog({
               ) : null}
             </div>
           </div>
-        </DialogHeader>
+        </header>
 
-        <div className="relative flex min-h-0 flex-col items-center justify-center gap-3 overflow-hidden px-4 py-4">
+        <main className="relative flex min-h-0 flex-col items-center justify-center gap-3 overflow-hidden px-3 py-3 sm:px-6 sm:py-5">
           {errorMessage ? (
             <div className="absolute left-1/2 top-3 z-50 -translate-x-1/2 border border-red-300/50 bg-red-950/90 px-4 py-2 text-sm text-white">
               {errorMessage}
@@ -284,7 +347,7 @@ export function OutfitMagazineDialog({
               aria-label="Previous magazine page"
             ><ChevronLeft className="h-6 w-6" /></PrimitiveButton>
 
-            <div className="flex h-full max-h-[72vh] min-h-0 items-center justify-center [perspective:1400px]">
+            <div className="flex h-full max-h-[calc(100vh-10rem)] min-h-0 items-center justify-center [perspective:1800px]">
               <AnimatePresence mode="wait" initial={false} custom={direction}>
                 <motion.div
                   key={page.key}
@@ -293,11 +356,11 @@ export function OutfitMagazineDialog({
                   animate={{ opacity: 1, rotateY: 0, x: 0 }}
                   exit={{ opacity: 0, rotateY: direction > 0 ? -18 : 18, x: direction > 0 ? -30 : 30 }}
                   transition={{ duration: 0.28, ease: "easeOut" }}
-                  className="h-full max-w-full origin-center"
+                  className="h-full max-w-full origin-left"
                 >
                   <div
                     ref={pageRef}
-                    className="relative aspect-[4/5] h-full max-w-full overflow-hidden bg-white text-black shadow-[0_28px_90px_rgba(0,0,0,0.5)]"
+                    className="relative aspect-[4/5] h-full max-w-full overflow-hidden border-l border-black/10 bg-white text-black shadow-[0_28px_90px_rgba(0,0,0,0.55)] after:pointer-events-none after:absolute after:inset-y-0 after:left-0 after:w-[3%] after:bg-gradient-to-r after:from-black/10 after:to-transparent"
                     onPointerDown={() => setSelectedDecorationId(null)}
                   >
                     {page.outfit ? (
@@ -355,9 +418,8 @@ export function OutfitMagazineDialog({
               ))}
             </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </main>
+    </div>
   );
 }
 
@@ -421,12 +483,12 @@ function OutfitMagazinePage({
             className="h-full w-full object-contain"
           />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center border border-current/20 bg-black/[0.025] text-center">
-            <UserRound className="mb-4 h-16 w-16 stroke-1 opacity-35" />
-            <PrimitiveText as="p" variant="title" font="serif">Model preview coming soon</PrimitiveText>
-            <PrimitiveText as="p" variant="caption" className="mt-2 max-w-[55%] opacity-60">
-              Generate a modeled image from Model view to complete this page.
-            </PrimitiveText>
+          <div className="flex h-full items-center justify-center overflow-hidden bg-white">
+            <OutfitCollageCanvas
+              items={outfit.items}
+              maxVisibleItems={6}
+              className="w-full"
+            />
           </div>
         )}
       </div>

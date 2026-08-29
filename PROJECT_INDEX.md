@@ -70,10 +70,10 @@ project-closet-organizer/
 - `src/app/lib/usePageData.ts`: shared async page-loading hook
 - `src/app/components/MyOutfitsPage.tsx`: saved outfit gallery/editor with an `All outfits` / `My Magazines` switch, model viewing, draft metadata/model generation, and preview editing/deletion
 - `src/app/components/OutfitGalleryPreview.tsx`: fixed-frame, reduced-motion-aware crossfade between each gallery card's flat lay and modeled preview
-- `src/app/components/outfits/useOutfitMagazines.ts`: magazine loading, editing, membership synchronization, deletion, and viewer state kept outside the route component
+- `src/app/components/outfits/useOutfitMagazines.ts`: magazine-library loading, outfit hydration, and deletion state for the `/outfits` collection view
 - `src/app/components/CreateItemPage.tsx`: manual item creation and progressive multi-photo item import, including per-source pre-detection focus/edit/replace/delete state and independent cancellable detection workflows aggregated into one review surface
-- `src/app/components/OutfitFolderDialog.tsx`: magazine metadata, searchable modeled/flat-lay outfit selection, ordered membership, and editable AI concept/outfit autofill
-- `src/app/components/OutfitMagazineDialog.tsx`: cover-and-look magazine viewer with modeled-image pages and movable, resizable, rotatable page clip art
+- `src/app/components/MagazineEditorPage.tsx` and `MagazineEditorForm.tsx`: route-level full-page magazine create/edit loading plus metadata, searchable modeled/flat-lay outfit selection, ordered membership, and editable AI concept/outfit autofill
+- `src/app/components/MagazineReaderPage.tsx`: independently routable immersive cover-and-look book reader with modeled/flat-lay pages, animated turns, and movable, resizable, rotatable page clip art
 - `src/app/lib/useOutfitDraftState.ts`: persisted outfit draft state management
 - `tests/`: Node contract tests plus Vitest/jsdom component and hook regression tests
 - `src/styles/`: fonts, theme, and global styling
