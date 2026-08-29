@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Removed 40 unreachable frontend modules—including the retired staged-AI review surfaces and unused generated UI-kit components—and removed the 27 direct packages used only by that dead subtree, reducing maintained frontend source without changing the production feature graph.
 - Refactored the AI and image workflow foundations without changing their user-facing behavior: a single app-level task manager now owns durable workflow polling and cancellation, repeated OpenRouter request setup and Rails job terminal-state handling are centralized, and image downloads share one authenticated Active Storage proxy pipeline.
 - Fixed the item image editor so unrelated app updates—including background generation polling—no longer reload the source image or leave the editor stuck behind its loading state; editor sources now have explicit stable identities and component regression coverage.
 - Split closet controls, magazine state, AI workflow APIs/types, and route-level page bundles out of oversized frontend modules. Added strict TypeScript checking, ESLint, Vitest component coverage, and matching CI checks alongside the existing contract tests and production build.
@@ -39,7 +40,6 @@
 - Added durable staged AI workflow, stage, and artifact records with user-scoped status payloads for outfit imports and modeled previews.
 - Added a private per-user model-reference photo with validation, explicit consent timestamp, and purge endpoint; no model-reference URL is exposed in user payloads.
 - Added an on-demand `Model on me` surface to the existing item editor, backed by Solid Queue and an OpenRouter modeled-preview prompt, with in-place polling and automatic publication when generation succeeds.
-- Added shared AI stage timeline and before/after comparison primitives for future review surfaces while keeping active generation status in the global toast instead of a separate AI workspace.
 - Added production Solid Queue configuration, worker entrypoint, queue schema, and queue adapter readiness reporting.
 - Updated architecture documentation and project index for the new workflow, artifact, queue, and private-reference boundaries.
 - Added a two-minute product demo to the public frontend assets and linked it from the logged-out homepage and project documentation.

@@ -163,8 +163,6 @@ Routes are parsed in `src/app/lib/routes.ts` and composed lazily by `src/app/App
   Minimal modeled-item image surface with a confirmed deletion control; workflow stages remain internal
 - `src/app/components/shared/GenerationTaskToasts.tsx`
   App-level generation, completion, failure, cancellation, and result-navigation notices for durable AI workflows that persist across route changes
-- `src/app/components/shared/ai/`
-  Shared stage timeline and before/after artifact comparison primitives for AI surfaces
 - `src/app/components/OutfitCartSheet.tsx`
   Cart-style right-side tray for reviewing selected closet items, drafting editable metadata with AI, and creating an outfit directly from the closet page
 - `src/app/components/OutfitCollageCanvas.tsx`

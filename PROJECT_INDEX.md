@@ -38,8 +38,7 @@ project-closet-organizer/
 ## Frontend (`front-end`)
 
 - `src/app/App.tsx`: auth-aware shell, lazy route composition, Outfit Cart draft/autofill state, and cache reconciliation for durable generation results
-- `src/app/components/primitives/` and `src/app/components/ui/`: shared controls and typography plus dialog/sheet shells with optional top-right header actions
-- `src/app/components/shared/ai/`: reusable AI stage timeline and before/after artifact comparison primitives; active generation status is surfaced by global task toasts
+- `src/app/components/primitives/` and `src/app/components/ui/`: the reachable shared controls, typography, and lower-level dialog/sheet/form helpers; unused generated UI-kit modules are intentionally not retained
 - `src/app/components/shared/ModelReferenceDialog.tsx`: private three-photo model-reference uploader, primary-order controls, authenticated thumbnails, and removal controls surfaced from the existing header
 - `src/app/components/shared/ModeledPreviewPanel.tsx`: minimal modeled-item image and confirmed deletion surface; successful previews are published automatically and workflow stages stay out of the UI
 - `src/app/components/shared/ModeledPreviewImageEditor.tsx`: shared modeled-item/outfit edit dialog that loads private workflow imagery into the existing crop, rotate, magic-wand, and undo/redo editor and persists the resulting image

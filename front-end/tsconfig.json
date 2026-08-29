@@ -16,10 +16,5 @@
     "target": "ES2022",
     "types": ["node", "vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["src", "tests/components", "vite.config.ts", "vitest.config.ts"],
-  "exclude": [
-    "src/app/components/ui/calendar.tsx",
-    "src/app/components/ui/chart.tsx",
-    "src/app/components/ui/resizable.tsx"
-  ]
+  "include": ["src", "tests/components", "vite.config.ts", "vitest.config.ts"]
 }
