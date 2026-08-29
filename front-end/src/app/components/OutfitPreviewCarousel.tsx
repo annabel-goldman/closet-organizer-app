@@ -12,6 +12,7 @@ import { ModeledPreviewImageEditor } from "./shared/ModeledPreviewImageEditor";
 
 interface OutfitPreviewCarouselProps {
   flatlay: ReactNode;
+  initialSlide?: OutfitPreviewSlide;
   modeledImageUrl: string | null;
   modeledWorkflow?: AiWorkflow | null;
   canDeleteModeledImage?: boolean;
@@ -27,6 +28,7 @@ interface TouchOrigin {
 
 export function OutfitPreviewCarousel({
   flatlay,
+  initialSlide = "flatlay",
   modeledImageUrl,
   modeledWorkflow,
   canDeleteModeledImage = false,
@@ -34,16 +36,14 @@ export function OutfitPreviewCarousel({
   onDeleteModeledImage,
   onModeledWorkflowUpdated,
 }: OutfitPreviewCarouselProps) {
-  const [activeSlide, setActiveSlide] = useState<OutfitPreviewSlide>("flatlay");
+  const [activeSlide, setActiveSlide] = useState<OutfitPreviewSlide>(initialSlide);
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
   const touchOriginRef = useRef<TouchOrigin | null>(null);
   const hasModeledImage = Boolean(modeledImageUrl);
 
   useEffect(() => {
-    if (!hasModeledImage) {
-      setActiveSlide("flatlay");
-    }
-  }, [hasModeledImage]);
+    setActiveSlide(initialSlide === "modeled" && hasModeledImage ? "modeled" : "flatlay");
+  }, [hasModeledImage, initialSlide]);
 
   function handleTouchStart(event: TouchEvent<HTMLDivElement>) {
     if (!hasModeledImage) {

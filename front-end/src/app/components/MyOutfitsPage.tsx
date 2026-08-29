@@ -849,6 +849,7 @@ export function MyOutfitsPage({
                       <div className="min-w-0">
                         <div className="mx-auto w-full max-w-[min(20rem,calc((100vh-20rem)*0.8))] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.16)] sm:max-w-[min(32rem,calc((100vh-22rem)*0.8))] lg:max-w-[min(72rem,calc((100vh-16rem)*0.8))]">
                           <OutfitPreviewCarousel
+                            initialSlide={galleryView}
                             modeledImageUrl={modeledImageUrl}
                             modeledWorkflow={modeledWorkflow}
                             canDeleteModeledImage={modeledWorkflow?.status === "succeeded" || modeledWorkflow?.status === "review"}
