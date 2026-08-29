@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Polished the outfits gallery's Flatlay/Model switch with a fixed-size overlapping crossfade, subtle scale/vertical easing, a stable toggle width, and a reduced-motion fallback.
 - Replaced the magazine editor's text-only outfit checklist with a scrollable visual picker that favors modeled previews, falls back to saved flat lays, and supports fuzzy search across outfit and contained-piece metadata.
 - Added AI magazine autofill: an icon-only action expands the current title/notes into a cohesive concept and selects and orders matching owned saved outfits, leaving the complete draft editable and unsaved until confirmation.
 - Simplified magazines to one minimal white presentation, removing the style selector and the retired editorial/scrapbook theme field across the frontend and backend.

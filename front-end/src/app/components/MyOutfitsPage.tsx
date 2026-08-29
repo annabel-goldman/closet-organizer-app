@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { motion } from "motion/react";
 import {
   BookOpen,
+  LayoutGrid,
   Pencil,
   Plus,
   Sparkles,
@@ -54,6 +55,7 @@ import { PrimitiveText } from "./primitives/PrimitiveText";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import { OutfitFolderDialog } from "./OutfitFolderDialog";
 import { OutfitMagazineDialog } from "./OutfitMagazineDialog";
+import { OutfitGalleryPreview } from "./OutfitGalleryPreview";
 import { MAX_OUTFIT_NAME, MAX_OUTFIT_NOTES } from "../lib/inputLengthPolicy";
 import { useOutfitMagazines } from "./outfits/useOutfitMagazines";
 
@@ -517,11 +519,14 @@ export function MyOutfitsPage({
                   type="button"
                   variant={galleryView === "modeled" ? "default" : "outline"}
                   size="sm"
+                  className="min-w-32"
                   aria-pressed={galleryView === "modeled"}
                   onClick={() => setGalleryView((current) => current === "modeled" ? "flatlay" : "modeled")}
                   title={galleryView === "modeled" ? "Show outfit flat lays" : "Show modeled outfits"}
                 >
-                  <UserRound className="h-4 w-4" />
+                  {galleryView === "modeled"
+                    ? <LayoutGrid className="h-4 w-4" />
+                    : <UserRound className="h-4 w-4" />}
                   {galleryView === "modeled" ? "Flatlay view" : "Model view"}
                 </PrimitiveButton>
                 <PrimitiveButton
@@ -679,34 +684,7 @@ export function MyOutfitsPage({
                   className="mx-auto w-full max-w-[22rem] overflow-hidden border border-border bg-card"
                 >
                   <div className="px-5 pt-5">
-                    {galleryView === "modeled" ? (
-                      galleryModelPreview.kind === "image" ? (
-                        <div className="relative mx-auto aspect-[4/5] w-full max-w-[15.5rem] overflow-hidden bg-white">
-                          <img
-                            src={galleryModelPreview.imageUrl}
-                            alt={`Modeled version of ${outfit.name}`}
-                            className="h-full w-full object-contain"
-                          />
-                        </div>
-                      ) : (
-                        <div className="relative mx-auto flex aspect-[4/5] w-full max-w-[15.5rem] flex-col items-center justify-center overflow-hidden border border-border/70 bg-stone-100 px-6 text-center">
-                          <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/80 to-transparent" aria-hidden="true" />
-                          <UserRound className="relative mb-5 h-16 w-16 stroke-[1.1] text-muted-foreground/55" aria-hidden="true" />
-                          <PrimitiveText as="p" variant="title" font="serif" className="relative mb-2">
-                            Model preview
-                          </PrimitiveText>
-                          <PrimitiveText as="p" variant="caption" tone="muted" className="relative max-w-40">
-                            No modeled version has been created yet.
-                          </PrimitiveText>
-                        </div>
-                      )
-                    ) : (
-                      <OutfitCollageCanvas
-                        items={outfit.items}
-                        maxVisibleItems={6}
-                        className="mx-auto w-full max-w-[15.5rem]"
-                      />
-                    )}
+                    <OutfitGalleryPreview outfit={outfit} view={galleryView} />
                   </div>
 
                   <div className="space-y-4 border-t border-border p-6">

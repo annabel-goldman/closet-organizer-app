@@ -69,6 +69,7 @@ project-closet-organizer/
 - `src/app/lib/useUndoRedoShortcuts.ts`: shared keyboard shortcut wiring for undo/redo controls outside the image editor
 - `src/app/lib/usePageData.ts`: shared async page-loading hook
 - `src/app/components/MyOutfitsPage.tsx`: saved outfit gallery/editor with an `All outfits` / `My Magazines` switch, model viewing, draft metadata/model generation, and preview editing/deletion
+- `src/app/components/OutfitGalleryPreview.tsx`: fixed-frame, reduced-motion-aware crossfade between each gallery card's flat lay and modeled preview
 - `src/app/components/outfits/useOutfitMagazines.ts`: magazine loading, editing, membership synchronization, deletion, and viewer state kept outside the route component
 - `src/app/components/CreateItemPage.tsx`: manual item creation and progressive multi-photo item import, including per-source pre-detection focus/edit/replace/delete state and independent cancellable detection workflows aggregated into one review surface
 - `src/app/components/OutfitFolderDialog.tsx`: magazine metadata, searchable modeled/flat-lay outfit selection, ordered membership, and editable AI concept/outfit autofill
