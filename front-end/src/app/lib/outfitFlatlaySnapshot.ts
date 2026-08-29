@@ -1,4 +1,4 @@
-import type { ClothingItem } from "./closet.ts";
+import type { ClothingItem, OutfitDecoration } from "./closet.ts";
 import { loadImageSource } from "./imageSources.ts";
 import {
   resolveOutfitCollageLayouts,
@@ -17,6 +17,7 @@ const SNAPSHOT_HEIGHT = Math.round(SNAPSHOT_WIDTH / COLLAGE_STAGE_ASPECT_RATIO);
 interface CreateOutfitFlatlaySnapshotOptions {
   items: ClothingItem[];
   layouts?: Record<number, OutfitCollageLayout>;
+  decorations?: OutfitDecoration[];
   outfitName: string;
 }
 
@@ -31,6 +32,7 @@ export async function createOutfitFlatlaySnapshot({
   items,
   layouts = {},
   outfitName,
+  decorations = [],
 }: CreateOutfitFlatlaySnapshotOptions) {
   if (items.length === 0 || items.some((item) => !item.image_url)) {
     throw new Error("Every outfit item needs a photo before its flat lay can be captured.");
@@ -39,6 +41,7 @@ export async function createOutfitFlatlaySnapshot({
   const resolvedLayouts = resolveOutfitCollageLayouts(items, layouts);
   const orderedItems = sortItemsByCollageLayer(items, resolvedLayouts);
   const loadedImages: LoadedSnapshotImage[] = [];
+  const loadedDecorations: Array<{ cleanup: () => void; image: HTMLImageElement; placement: OutfitDecoration }> = [];
 
   try {
     for (const item of orderedItems) {
@@ -55,6 +58,10 @@ export async function createOutfitFlatlaySnapshot({
         throw error;
       }
     }
+    for (const placement of decorations) {
+      const loaded = await loadSnapshotImage(placement.image_url);
+      loadedDecorations.push({ ...loaded, placement });
+    }
 
     const canvas = document.createElement("canvas");
     canvas.width = SNAPSHOT_WIDTH;
@@ -67,6 +74,9 @@ export async function createOutfitFlatlaySnapshot({
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, canvas.width, canvas.height);
     loadedImages.forEach((loaded) => drawSnapshotItem(context, loaded));
+    loadedDecorations
+      .sort((left, right) => left.placement.layer_order - right.placement.layer_order)
+      .forEach((loaded) => drawSnapshotDecoration(context, loaded));
 
     const blob = await canvasToBlob(canvas);
     return new File(
@@ -76,7 +86,23 @@ export async function createOutfitFlatlaySnapshot({
     );
   } finally {
     loadedImages.forEach((loaded) => loaded.cleanup());
+    loadedDecorations.forEach((loaded) => loaded.cleanup());
   }
+}
+
+function drawSnapshotDecoration(
+  context: CanvasRenderingContext2D,
+  { image, placement }: { image: HTMLImageElement; placement: OutfitDecoration },
+) {
+  const width = (placement.width / 100) * SNAPSHOT_WIDTH;
+  const height = width * (image.naturalHeight / Math.max(image.naturalWidth, 1));
+  const x = (placement.x / 100) * SNAPSHOT_WIDTH;
+  const y = (placement.y / 100) * SNAPSHOT_HEIGHT;
+  context.save();
+  context.translate(x + width / 2, y + height / 2);
+  context.rotate((placement.rotation * Math.PI) / 180);
+  context.drawImage(image, -width / 2, -height / 2, width, height);
+  context.restore();
 }
 
 function drawSnapshotItem(

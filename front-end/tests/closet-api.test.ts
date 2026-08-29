@@ -3,8 +3,11 @@ import test from "node:test";
 
 import {
   cancelAiWorkflow,
+  createDecoration,
+  createOutfitDecoration,
   createOutfitFolder,
   createOutfitFolderDecoration,
+  fetchDecorations,
   deleteModeledPreview,
   fetchOutfitFolder,
   fetchOutfitFolders,
@@ -18,6 +21,8 @@ import {
   saveModelReferences,
   updateModeledPreview,
   updateOutfitFolderDecoration,
+  updateDecoration,
+  updateOutfitDecoration,
 } from "../src/app/lib/closet.ts";
 import { validateClothingItemForm } from "../src/app/lib/itemFormValidation.ts";
 import { normalizeCategory } from "../src/app/lib/wardrobeTaxonomy.ts";
@@ -140,6 +145,50 @@ test("outfit folder APIs preserve magazine order and upload page-specific clip a
     assert.equal((requests[2].init?.body as FormData).get("decoration[image]"), clipArt);
     assert.equal((requests[2].init?.body as FormData).get("decoration[page_key]"), "cover");
     assert.equal(movedDecoration.x, 42);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("decoration library and flatlay placement APIs keep assets reusable", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ path: string; init?: RequestInit }> = [];
+  globalThis.fetch = async (input, init) => {
+    const path = String(input);
+    requests.push({ path, init });
+    if (path === "/api/decorations" && !init?.method) {
+      return new Response(JSON.stringify([{ id: 7, user_id: 1, name: "Star", image_url: "/star.png" }]), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (path === "/api/decorations" && init?.method === "POST") {
+      return new Response(JSON.stringify({ id: 7, user_id: 1, name: "Star", image_url: "/star.png" }), { status: 201, headers: { "Content-Type": "application/json" } });
+    }
+    if (path === "/api/decorations/7") {
+      return new Response(JSON.stringify({ id: 7, user_id: 1, name: "Bright star", image_url: "/star.png" }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    const placement = { id: 9, outfit_id: 4, decoration_id: 7, name: "Star", image_url: "/star.png", x: init?.method === "PATCH" ? 40 : 35, y: 35, width: 20, rotation: 0, layer_order: 0 };
+    return new Response(JSON.stringify(placement), { status: init?.method === "POST" ? 201 : 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const file = new File(["png"], "star.png", { type: "image/png" });
+    await fetchDecorations();
+    await createDecoration({ file });
+    await updateDecoration(7, { name: "Bright star" });
+    await createOutfitDecoration(4, { decorationId: 7 });
+    await updateOutfitDecoration(4, 9, { x: 40 });
+
+    assert.deepEqual(requests.map((request) => request.path), [
+      "/api/decorations",
+      "/api/decorations",
+      "/api/decorations/7",
+      "/api/outfits/4/decorations",
+      "/api/outfits/4/decorations/9",
+    ]);
+    assert.ok(requests[1].init?.body instanceof FormData);
+    assert.equal((requests[1].init?.body as FormData).get("decoration[image]"), file);
+    assert.deepEqual(JSON.parse(String(requests[3].init?.body)), {
+      decoration: { decoration_id: 7 },
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }

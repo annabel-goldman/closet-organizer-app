@@ -103,6 +103,13 @@ GET     /outfits/:id
 PATCH   /outfits/:id
 DELETE  /outfits/:id
 POST    /outfits/:id/generate_metadata_suggestions
+POST    /outfits/:outfit_id/decorations
+PATCH   /outfits/:outfit_id/decorations/:id
+DELETE  /outfits/:outfit_id/decorations/:id
+GET     /decorations
+POST    /decorations
+PATCH   /decorations/:id
+DELETE  /decorations/:id
 GET     /outfit_folders
 POST    /outfit_folders
 POST    /outfit_folders/generate_metadata_suggestions
@@ -130,7 +137,7 @@ Notes:
 - Text input length is capped at every layer: `app/models/concerns/input_length_policy.rb` exposes the limits (username 60, email 254, item name 120, brand 80, category 60, outfit name 120, notes 2_000, tag 40 chars × 30 per record); the `User`/`ClothingItem`/`Outfit` models validate against the same constants and surface friendly errors; the `AddInputLengthConstraints` migration enforces matching `limit:` and `null: false` constraints at the database. SQL injection is mitigated by ActiveRecord's parameterized queries — the only raw SQL fragment in the app (`where("lower(email) = ?", ...)` in `User`) uses bound placeholders.
 - `GET /users` is paginated via Kaminari. It accepts `page` and `per_page` query params (default 24, max 100) and returns `{ users: [...], meta: { page, per_page, total_pages, total_count } }`. The index payload omits each user's `clothing_items` array and only includes a `clothing_items_count` field; per-user `GET /users/:id` still returns the full items array.
 - Outfit payloads now preserve per-piece collage presentation through `outfit_items`: each embedded outfit item can include `outfit_item_id`, `layer_order`, and `collage_layout` (`x`, `y`, `width`, `height`, `rotation`) so the frontend can reopen and edit saved collages faithfully. AI-generated outfits also include optional `generation_id`, `generated_by_ai`, and `generated_item_ids` fields. The outfit integration suite covers the round-trip contract that the collage layout returned by `PATCH /outfits/:id` matches the subsequent `GET /outfits/:id` payload used by the saved gallery.
-- Outfit folders are user-scoped collections with ordered many-to-many outfit membership; one outfit may appear in multiple folders and deleting a folder never deletes an outfit. Folder payloads embed outfits in magazine order. The collection/member `generate_metadata_suggestions` endpoints send the authenticated user's saved outfit list and contained piece metadata through the shared OpenRouter structured-response plumbing, using the current title, notes, and selection as editable creative context; they return a polished title/notes concept and validated ordered outfit IDs without saving the magazine. Decorations are private Active Storage images assigned to either the cover or an outfit page, with validated percentage position, width, rotation, and layer order. Removing an outfit from a folder also purges decorations for its retired page.
+- Decorations are user-owned PNG assets with private proxy-served Active Storage images. The `/decorations` CRUD endpoints power progressive bulk upload and shared image replacement; deleting a library asset cascades to its outfit and magazine placements. `OutfitDecoration` stores flat-lay position, width, rotation, and layer order independently from `OutfitItem` geometry. Outfit folders remain user-scoped collections with ordered many-to-many outfit membership, and `OutfitFolderDecoration` can reference a reusable library asset while retaining backward compatibility with older directly attached magazine clip art. Ownership is checked at every placement boundary, and removing an outfit from a folder purges placements for its retired page.
 - `POST /outfits/generate` accepts JSON `{ "occasion": "optional vibe or event" }` or multipart form data with `occasion` plus an optional `reference_photo` flatlay image. It snapshots the current owned closet item IDs, persists the optional reference on an `outfit_generation` workflow, queues `OutfitGenerationJob`, and immediately returns the workflow with `202 Accepted`. The job analyzes a reference into structured target slots, shortlists candidates while preserving required slots and cross-slot visual anchors, applies complete-look rules, and performs visual refinement. It creates the outfit and preference-learning run only after the provider returns and a final cancellation check succeeds, then stores `outfit_id` and `result_name` in workflow metadata. A cancelled late response never creates an outfit, and the temporary reference attachment is purged when the job reaches a terminal state.
 - `POST /outfits/generate_metadata_suggestions` accepts an unsaved Outfit Cart draft, while `POST /outfits/:id/generate_metadata_suggestions` accepts the saved editor's current draft. Both take `item_ids`, title, tags, and notes, verify that every item belongs to the authenticated user, and return a structured title/tag/note suggestion grounded in those pieces without persisting an outfit or metadata changes.
 - AI outfit feedback is stored as recommender-style logs. Each generated outfit creates an `outfit_generation_run` with candidate item IDs, generated item IDs, the structured reference profile, and generator version. Save/delete behavior appends `outfit_generation_events`: unchanged saves become positive keep signals, item-list edits become added/removed/kept correction signals, layout-only edits do not become item-change feedback, and deletes become weak negative feedback for the generated combination. Runs survive outfit deletion through a nullable `outfit_id`.
@@ -151,8 +158,8 @@ Notes:
   Handles clothing item CRUD, photo attachment and cropping, clean-image generation, and metadata suggestions
 - `app/controllers/outfit_detections_controller.rb`
   Handles detection-based clean-image and metadata suggestion requests
-- `app/controllers/outfit_folders_controller.rb` and `app/controllers/outfit_folder_decorations_controller.rb`
-  Handle user-scoped lookbook folders, ordered memberships, and private magazine clip-art layout
+- `app/controllers/decorations_controller.rb`, `app/controllers/outfit_decorations_controller.rb`, `app/controllers/outfit_folders_controller.rb`, and `app/controllers/outfit_folder_decorations_controller.rb`
+  Handle the private reusable PNG library plus user-scoped flat-lay and magazine placements
 - `app/controllers/image_variants_controller.rb`
   Handles temporary AI preview generation and metadata suggestions for uploaded but unsaved images
 - `app/controllers/ai_status_controller.rb`, `app/controllers/ai_workflows_controller.rb`, `app/controllers/modeled_images_controller.rb`, and `app/controllers/modeled_outfit_images_controller.rb`
@@ -205,6 +212,7 @@ Notes:
 - `has_many :clothing_items`
 - `has_many :outfits`
 - `has_many :outfit_folders`
+- `has_many :decorations`
 - `has_many :outfit_generation_runs`
 - `has_many :outfit_uploads`
 - `has_many :ai_workflows`
@@ -262,11 +270,17 @@ Supported `size` enum values:
 - `collage_height`
 - `collage_rotation`
 
+### `Decoration` and `OutfitDecoration`
+
+- `Decoration` belongs to one user, has one private PNG image, and is the reusable asset edited from `/decorations`
+- `OutfitDecoration` joins an owned decoration to an owned outfit with percentage `x`, `y`, `width`, `rotation`, and `layer_order`
+- deleting the library asset removes all of its outfit and magazine placements
+
 ### `OutfitFolder`
 
 - belongs to one user and stores a name plus optional occasion/notes; presentation is the frontend's single minimal magazine style
 - has ordered `OutfitFolderMembership` records so outfits can be reused across multiple folders
-- has page-scoped `OutfitFolderDecoration` records whose private Active Storage images carry percentage layout and layer data
+- has page-scoped `OutfitFolderDecoration` records that normally reference the user's reusable decoration library and carry percentage layout/layer data; legacy records may retain their own attached image
 
 ### `OutfitGenerationRun`
 

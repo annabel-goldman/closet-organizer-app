@@ -1,6 +1,6 @@
 # Project Structure Index
 
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 
 This file is intentionally concise and focused on repository structure.
 For the product purpose and problem statement, see `wiki.md`.
@@ -26,8 +26,8 @@ project-closet-organizer/
 
 ## Backend (`back-end`)
 
-- `app/models`: `user`, ordered private `model_reference_image` records, `clothing_item`, `outfit`, `outfit_item`, user-owned outfit folders with ordered memberships and private page decorations, generated-outfit feedback logs, `outfit_upload`, `outfit_detection`, and staged `ai_workflow`/`ai_workflow_stage`/`ai_artifact` records
-- `app/controllers`: auth/session handling, JSON CRUD controllers, authenticated private model-reference management/thumbnails, outfit collage/layout-aware outfit updates, outfit-folder and magazine-decoration persistence, upload flows, AI readiness/workflow/model-preview endpoints, and SPA fallback
+- `app/models`: `user`, ordered private `model_reference_image` records, `clothing_item`, `outfit`, `outfit_item`, reusable private `decoration` assets with outfit/magazine placements, user-owned outfit folders with ordered memberships, generated-outfit feedback logs, `outfit_upload`, `outfit_detection`, and staged `ai_workflow`/`ai_workflow_stage`/`ai_artifact` records
+- `app/controllers`: auth/session handling, JSON CRUD controllers, authenticated private model-reference and decoration-library management, outfit collage/layout-aware outfit updates and decoration placements, outfit-folder and magazine-decoration persistence, upload flows, AI readiness/workflow/model-preview endpoints, and SPA fallback
 - `app/jobs`: asynchronous outfit-upload analysis, saved-item image cleaning, AI outfit creation, and staged modeled item/full-outfit image generation jobs, with shared cancellation and failure helpers in `ApplicationJob`
 - `app/presenters`: API payload shaping for users, clothing items, outfits, uploads, and detections, including saved outfit collage layout data, modeled workflow state, and optional AI generation metadata
 - `app/services/`: OpenRouter detection, item/outfit/magazine metadata suggestion, two-stage outfit generation, generated-outfit preference feedback, crop refinement, crop verification, Gemini catalog/modeled-item generation, Seedream full-outfit generation through the dedicated Images API, image-cleaning and background-removal logic, and shared OpenRouter transport/tempfile/image-source helpers
@@ -42,10 +42,11 @@ project-closet-organizer/
 - `src/app/components/shared/ModelReferenceDialog.tsx`: private three-photo model-reference uploader, primary-order controls, authenticated thumbnails, and removal controls surfaced from the existing header
 - `src/app/components/shared/ModeledPreviewPanel.tsx`: minimal modeled-item image and confirmed deletion surface; successful previews are published automatically and workflow stages stay out of the UI
 - `src/app/components/shared/ModeledPreviewImageEditor.tsx`: shared modeled-item/outfit edit dialog that loads private workflow imagery into the existing crop, rotate, magic-wand, and undo/redo editor and persists the resulting image
+- `src/app/components/MyDecorationsPage.tsx` and `src/app/components/decorations/`: private progressive PNG library, shared image-editor adapter, reusable picker, and outfit decoration placement layer
 - `src/app/components/shared/GenerationTaskToasts.tsx`: global lower-right modeled outfit/item, image-cleaning, outfit-creation, and photo-detection notices with cross-route cancellation, completion states, and result navigation
 - `src/app/components/`: routed pages, the closet outfit-cart tray, item editor flows, extracted create-item/restricted-state components, and supporting UI
 - `public/demo/curated-closet-demo.mp4`: production-served product demo linked from the logged-out homepage and repository documentation
-- `src/app/components/OutfitCollageCanvas.tsx`: saved-outfit collage renderer plus the `react-moveable`-backed edit-modal move/resize/rotate interactions and the shared normalized-layout/stage-aspect contract used by both saved and editable outfit previews
+- `src/app/components/OutfitCollageCanvas.tsx`: saved-outfit collage renderer plus the `react-moveable`-backed edit-modal move/resize/rotate interactions, decoration overlay slot, and shared normalized-layout/stage-aspect contract used by both saved and editable outfit previews
 - `src/app/components/OutfitPreviewCarousel.tsx`: outfit-editor preview carousel that keeps the editable flat lay as the base slide and unlocks arrow/touch navigation to the latest modeled artifact
 - `src/app/components/OutfitCollageLayersPanel.tsx`: focused layers sidebar for thumbnail selection plus pointer and keyboard-accessible layer reordering
 - `src/app/lib/routes.ts`: route parsing, navigation helpers, and route guards
@@ -59,7 +60,7 @@ project-closet-organizer/
 - `src/app/lib/outfitCollageRenderMath.ts`: shared proportional media-containment and resize-aspect helpers that keep saved frame geometry stable across gallery, editor, and generated snapshot rendering
 - `src/app/lib/outfitImageBounds.ts`: cached, proxy-safe image-content-bounds measurement helpers for saved-outfit collage rendering and editing
 - `src/app/lib/imageEditorGeometry.ts`: aspect-ratio-safe source-image fitting for the shared crop and magic-wand editor
-- `src/app/lib/outfitFlatlaySnapshot.ts`: downloads item imagery through the same-origin proxy and renders the current saved-frame outfit collage into a private 4:5 PNG using the same proportional containment math as the visible flat lay
+- `src/app/lib/outfitFlatlaySnapshot.ts`: downloads item and reusable decoration imagery through the same-origin proxy and renders the current saved-frame outfit collage into a private 4:5 PNG using the same proportional containment math and decoration placement data as the visible flat lay
 - `src/app/lib/modeledPreview.ts`: modeled-artifact selection and flat-lay/modeled swipe-resolution helpers
 - `src/app/lib/generationTasks.ts`: workflow-kind-aware labels, running-state rules, and completion copy for the global task toasts
 - `src/app/lib/useGenerationTaskManager.ts`: the single non-overlapping polling, cancellation, dismissal, and owner-reset lifecycle for cross-route generation tasks

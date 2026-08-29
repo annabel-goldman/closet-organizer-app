@@ -86,6 +86,9 @@ const ItemDetailPage = lazy(() => import("./components/ItemDetailPage").then((mo
 const MyOutfitsPage = lazy(() => import("./components/MyOutfitsPage").then((module) => ({
   default: module.MyOutfitsPage,
 })));
+const MyDecorationsPage = lazy(() => import("./components/MyDecorationsPage").then((module) => ({
+  default: module.MyDecorationsPage,
+})));
 const MagazineEditorPage = lazy(() => import("./components/MagazineEditorPage").then((module) => ({
   default: module.MagazineEditorPage,
 })));
@@ -838,6 +841,27 @@ export default function App() {
         user={user}
       />
     ) : null;
+  } else if (route.kind === "decorations") {
+    pageContent = (
+      <MyDecorationsPage
+        onDecorationDeleted={(decorationId) => {
+          setOutfitsCache((current) => current.map((outfit) => ({
+            ...outfit,
+            decorations: outfit.decorations?.filter((placement) => placement.decoration_id !== decorationId),
+          })));
+        }}
+        onDecorationUpdated={(decoration) => {
+          setOutfitsCache((current) => current.map((outfit) => ({
+            ...outfit,
+            decorations: outfit.decorations?.map((placement) => (
+              placement.decoration_id === decoration.id
+                ? { ...placement, image_url: decoration.image_url, name: decoration.name }
+                : placement
+            )),
+          })));
+        }}
+      />
+    );
   } else if (route.kind === "magazine-editor") {
     pageContent = <MagazineEditorPage magazineId={route.magazineId} />;
   } else if (route.kind === "magazine-reader") {

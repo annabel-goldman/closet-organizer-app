@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a private `My Decorations` PNG library with progressive bulk upload, rename/delete controls, and the shared crop/rotate/magic-wand editor. Reusable decorations can now be placed, dragged, resized, rotated, and removed independently on saved outfit flat lays and magazine pages; flat-lay decorations also appear in gallery fallbacks and modeled-outfit composition snapshots.
 - Extended the Outfit Cart metadata fields and AI feedback message across the full usable width of the sidebar while preserving space for its header actions.
 - Removed the redundant supporting sentence from the model reference photos dialog.
 - Moved magazine creation and editing out of constrained dialogs into dedicated full-page workspaces. Opening a magazine now launches an independent immersive reader tab with animated book-like page turns, keyboard navigation, decoration controls, and flat-lay fallback pages when a modeled image is unavailable.

@@ -1,6 +1,6 @@
 import { ArrowRight, Users } from "lucide-react";
 import type { AppRoute } from "../../lib/routes";
-import { isClosetRoute, isOutfitRoute, isUsersRoute, navigateTo } from "../../lib/routes";
+import { isClosetRoute, isDecorationsRoute, isOutfitRoute, isUsersRoute, navigateTo } from "../../lib/routes";
 import type { User } from "../../lib/closet";
 import { beginGoogleSignIn } from "../../lib/closet";
 import { PrimitiveButton } from "../primitives/PrimitiveButton";
@@ -53,6 +53,17 @@ export function SiteHeader({ route, user, onSignOut, onUserUpdated }: SiteHeader
                 }
               >
                 My Outfits
+              </PrimitiveButton>
+            ) : null}
+            {user ? (
+              <PrimitiveButton
+                onClick={() => navigateTo("/decorations")}
+                variant="outline"
+                className={isDecorationsRoute(route)
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border text-foreground hover:border-foreground"}
+              >
+                My Decorations
               </PrimitiveButton>
             ) : null}
           </nav>

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getRouteFromLocation, isOutfitRoute } from "../src/app/lib/routes.ts";
+import { getRouteFromLocation, isDecorationsRoute, isOutfitRoute } from "../src/app/lib/routes.ts";
 
 test("magazine routes distinguish creation, full-page editing, and reading", () => {
   const createRoute = getRouteFromLocation("/magazines/new", "");
@@ -13,4 +13,10 @@ test("magazine routes distinguish creation, full-page editing, and reading", () 
   assert.deepEqual(readerRoute, { kind: "magazine-reader", magazineId: 42 });
   assert.equal(isOutfitRoute(editRoute), true);
   assert.equal(isOutfitRoute(readerRoute), true);
+});
+
+test("decorations have a private library route", () => {
+  const route = getRouteFromLocation("/decorations", "");
+  assert.deepEqual(route, { kind: "decorations" });
+  assert.equal(isDecorationsRoute(route), true);
 });

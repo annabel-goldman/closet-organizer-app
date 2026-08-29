@@ -147,6 +147,7 @@ export interface Outfit {
   notes?: string | null;
   item_ids: number[];
   items: ClothingItem[];
+  decorations?: OutfitDecoration[];
   generation_id?: number | null;
   generated_by_ai?: boolean;
   generated_item_ids?: number[];
@@ -155,9 +156,38 @@ export interface Outfit {
   updated_at?: string;
 }
 
+export interface Decoration {
+  id: number;
+  user_id: number;
+  name: string;
+  image_url: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DecorationPlacement {
+  id: number;
+  decoration_id: number;
+  name: string;
+  image_url: string;
+  x: number;
+  y: number;
+  width: number;
+  rotation: number;
+  layer_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface OutfitDecoration extends DecorationPlacement {
+  outfit_id: number;
+}
+
 export interface OutfitFolderDecoration {
   id: number;
   outfit_folder_id: number;
+  decoration_id?: number | null;
+  name?: string | null;
   page_key: string;
   image_url: string;
   x: number;
@@ -592,6 +622,77 @@ export async function fetchOutfits(signal?: AbortSignal) {
   return (await requestJson<Outfit[]>(`${API_BASE_URL}/outfits`, { signal })).map(normalizeOutfitPayload);
 }
 
+export async function fetchDecorations(signal?: AbortSignal) {
+  return (await requestJson<Decoration[]>(`${API_BASE_URL}/decorations`, { signal }))
+    .map(normalizeDecorationPayload);
+}
+
+export async function createDecoration(input: { file: File; name?: string }) {
+  const formData = new FormData();
+  formData.append("decoration[image]", input.file);
+  formData.append("decoration[name]", input.name?.trim() || decorationNameFromFile(input.file));
+  return normalizeDecorationPayload(await requestJson<Decoration>(`${API_BASE_URL}/decorations`, {
+    method: "POST",
+    body: formData,
+  }));
+}
+
+export async function updateDecoration(id: number, input: { file?: File; name?: string }) {
+  const formData = new FormData();
+  if (input.file) formData.append("decoration[image]", input.file);
+  if (input.name != null) formData.append("decoration[name]", input.name);
+  return normalizeDecorationPayload(await requestJson<Decoration>(`${API_BASE_URL}/decorations/${id}`, {
+    method: "PATCH",
+    body: formData,
+  }));
+}
+
+export async function destroyDecoration(id: number) {
+  await requestVoid(`${API_BASE_URL}/decorations/${id}`, { method: "DELETE" });
+}
+
+export async function createOutfitDecoration(
+  outfitId: number,
+  input: { decorationId: number; x?: number; y?: number; width?: number; rotation?: number; layerOrder?: number },
+) {
+  return normalizeOutfitDecorationPayload(await requestJson<OutfitDecoration>(
+    `${API_BASE_URL}/outfits/${outfitId}/decorations`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        decoration: {
+          decoration_id: input.decorationId,
+          x: input.x,
+          y: input.y,
+          width: input.width,
+          rotation: input.rotation,
+          layer_order: input.layerOrder,
+        },
+      }),
+    },
+  ));
+}
+
+export async function updateOutfitDecoration(
+  outfitId: number,
+  placementId: number,
+  input: Partial<Pick<OutfitDecoration, "x" | "y" | "width" | "rotation" | "layer_order">>,
+) {
+  return normalizeOutfitDecorationPayload(await requestJson<OutfitDecoration>(
+    `${API_BASE_URL}/outfits/${outfitId}/decorations/${placementId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decoration: input }),
+    },
+  ));
+}
+
+export async function destroyOutfitDecoration(outfitId: number, placementId: number) {
+  await requestVoid(`${API_BASE_URL}/outfits/${outfitId}/decorations/${placementId}`, { method: "DELETE" });
+}
+
 export async function fetchOutfit(id: number, signal?: AbortSignal) {
   return normalizeOutfitPayload(
     await requestJson<Outfit>(`${API_BASE_URL}/outfits/${id}`, { signal }),
@@ -741,7 +842,8 @@ export async function destroyOutfitFolder(id: number) {
 export async function createOutfitFolderDecoration(
   outfitFolderId: number,
   input: {
-    file: File;
+    file?: File;
+    decorationId?: number;
     pageKey: string;
     x?: number;
     y?: number;
@@ -751,7 +853,8 @@ export async function createOutfitFolderDecoration(
   },
 ) {
   const formData = new FormData();
-  formData.append("decoration[image]", input.file);
+  if (input.file) formData.append("decoration[image]", input.file);
+  if (input.decorationId != null) formData.append("decoration[decoration_id]", String(input.decorationId));
   formData.append("decoration[page_key]", input.pageKey);
   if (input.x != null) formData.append("decoration[x]", String(input.x));
   if (input.y != null) formData.append("decoration[y]", String(input.y));
@@ -1085,6 +1188,21 @@ function normalizeOutfitPayload(outfit: Outfit): Outfit {
       ? normalizeAiWorkflowPayload(outfit.modeled_workflow)
       : null,
     items: (outfit.items ?? []).map(normalizeClothingItemPayload),
+    decorations: (outfit.decorations ?? []).map(normalizeOutfitDecorationPayload),
+  };
+}
+
+function normalizeDecorationPayload(decoration: Decoration): Decoration {
+  return {
+    ...decoration,
+    image_url: normalizeAttachmentUrl(decoration.image_url) ?? "",
+  };
+}
+
+function normalizeOutfitDecorationPayload(decoration: OutfitDecoration): OutfitDecoration {
+  return {
+    ...decoration,
+    image_url: normalizeAttachmentUrl(decoration.image_url) ?? "",
   };
 }
 
@@ -1104,6 +1222,10 @@ function normalizeOutfitFolderPayload(folder: OutfitFolder): OutfitFolder {
     outfits: (folder.outfits ?? []).map(normalizeOutfitPayload),
     decorations: (folder.decorations ?? []).map(normalizeOutfitFolderDecorationPayload),
   };
+}
+
+function decorationNameFromFile(file: File) {
+  return file.name.replace(/\.png$/i, "").replace(/[-_]+/g, " ").trim() || "Decoration";
 }
 
 function normalizeMetadataSuggestionPayload(

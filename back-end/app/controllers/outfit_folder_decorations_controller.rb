@@ -4,7 +4,8 @@ class OutfitFolderDecorationsController < ApplicationController
   before_action :set_decoration, only: %i[update destroy]
 
   def create
-    decoration = @outfit_folder.decorations.new(decoration_params.except(:image))
+    decoration = @outfit_folder.decorations.new(decoration_params.except(:image, :decoration_id))
+    decoration.decoration = current_user.decorations.find(decoration_params[:decoration_id]) if decoration_params[:decoration_id].present?
     decoration.image.attach(decoration_params[:image]) if decoration_params[:image].present?
 
     if decoration.save
@@ -38,6 +39,6 @@ class OutfitFolderDecorationsController < ApplicationController
   end
 
   def decoration_params
-    params.require(:decoration).permit(:image, :page_key, :x, :y, :width, :rotation, :layer_order)
+    params.require(:decoration).permit(:image, :decoration_id, :page_key, :x, :y, :width, :rotation, :layer_order)
   end
 end

@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Moveable, {
   type OnDrag,
@@ -44,6 +44,7 @@ interface OutfitCollageCanvasProps {
   onLayoutsChange?: (layouts: Record<number, OutfitCollageLayout>) => void;
   onSelectItem?: (itemId: number | null) => void;
   selectedItemId?: number | null;
+  overlay?: ReactNode;
 }
 export function OutfitCollageCanvas({
   className = "",
@@ -54,6 +55,7 @@ export function OutfitCollageCanvas({
   onLayoutsChange,
   onSelectItem,
   selectedItemId = null,
+  overlay,
 }: OutfitCollageCanvasProps) {
   const moveableRef = useRef<Moveable | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -308,6 +310,7 @@ export function OutfitCollageCanvas({
   return (
     <div
       ref={stageRef}
+      data-outfit-collage-stage="true"
       className={`relative overflow-hidden bg-white ${editable ? "touch-none" : ""} ${className}`.trim()}
       style={{
         aspectRatio: String(COLLAGE_STAGE_ASPECT_RATIO),
@@ -425,6 +428,8 @@ export function OutfitCollageCanvas({
           </div>
         );
       })}
+
+      {overlay}
 
       {editable && selectedTarget ? (
         <Moveable

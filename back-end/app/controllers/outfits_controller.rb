@@ -5,7 +5,12 @@ class OutfitsController < ApplicationController
     if: -> { params[:id].present? }
 
   def index
-    outfits = current_user.outfits.includes(:outfit_generation_run, :ai_workflows, outfit_items: :clothing_item).order(created_at: :desc)
+    outfits = current_user.outfits.includes(
+      :outfit_generation_run,
+      :ai_workflows,
+      outfit_items: :clothing_item,
+      outfit_decorations: { decoration: { image_attachment: :blob } }
+    ).order(created_at: :desc)
     render json: outfits.map { |outfit| payloads.outfit(outfit) }
   end
 
@@ -83,7 +88,12 @@ class OutfitsController < ApplicationController
   private
 
   def set_outfit
-    @outfit = current_user.outfits.includes(:outfit_generation_run, :ai_workflows, outfit_items: :clothing_item).find(params[:id])
+    @outfit = current_user.outfits.includes(
+      :outfit_generation_run,
+      :ai_workflows,
+      outfit_items: :clothing_item,
+      outfit_decorations: { decoration: { image_attachment: :blob } }
+    ).find(params[:id])
   end
 
   def outfit_params

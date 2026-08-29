@@ -186,7 +186,36 @@ class ApiPayloads
         "collage_layout" => outfit_item.collage_layout_payload
       )
     end
+    payload["decorations"] = outfit.outfit_decorations.map { |placement| outfit_decoration(placement) }
     payload
+  end
+
+  def decoration(decoration)
+    {
+      id: decoration.id,
+      user_id: decoration.user_id,
+      name: decoration.name,
+      image_url: attachment_url(decoration.image, proxy: true),
+      created_at: decoration.created_at,
+      updated_at: decoration.updated_at
+    }
+  end
+
+  def outfit_decoration(placement)
+    {
+      id: placement.id,
+      outfit_id: placement.outfit_id,
+      decoration_id: placement.decoration_id,
+      name: placement.decoration.name,
+      image_url: attachment_url(placement.decoration.image, proxy: true),
+      x: placement.x.to_f,
+      y: placement.y.to_f,
+      width: placement.width.to_f,
+      rotation: placement.rotation.to_f,
+      layer_order: placement.layer_order,
+      created_at: placement.created_at,
+      updated_at: placement.updated_at
+    }
   end
 
   def outfit_folder(folder)
@@ -207,11 +236,15 @@ class ApiPayloads
   end
 
   def outfit_folder_decoration(decoration)
+    library_decoration = decoration.decoration
+    image_attachment = library_decoration&.image || decoration.image
     {
       id: decoration.id,
       outfit_folder_id: decoration.outfit_folder_id,
       page_key: decoration.page_key,
-      image_url: attachment_url(decoration.image, proxy: true),
+      decoration_id: decoration.decoration_id,
+      name: library_decoration&.name,
+      image_url: attachment_url(image_attachment, proxy: true),
       x: decoration.x.to_f,
       y: decoration.y.to_f,
       width: decoration.width.to_f,

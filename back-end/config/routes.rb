@@ -37,11 +37,13 @@ Rails.application.routes.draw do
       post :generate_metadata_suggestions, on: :member
       post :generate_modeled_image, on: :member, controller: :modeled_images, action: :create
     end
+    resources :decorations, only: %i[index create update destroy]
     resources :outfits, except: %i[new edit] do
       post :generate, on: :collection
       post :generate_metadata_suggestions, on: :collection
       post :generate_metadata_suggestions, on: :member
       post :generate_modeled_image, on: :member, controller: :modeled_outfit_images, action: :create
+      resources :decorations, only: %i[create update destroy], controller: :outfit_decorations
     end
     resources :outfit_folders, except: %i[new edit] do
       post :generate_metadata_suggestions, on: :collection

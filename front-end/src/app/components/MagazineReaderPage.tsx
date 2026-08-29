@@ -1,11 +1,10 @@
-import { ChangeEvent, PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
+import { PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowLeft,
   BookOpen,
   ChevronLeft,
   ChevronRight,
-  ImagePlus,
   Maximize2,
   Minimize2,
   RotateCcw,
@@ -18,6 +17,7 @@ import {
   destroyOutfitFolderDecoration,
   fetchOutfitFolder,
   type Outfit,
+  type Decoration,
   type OutfitFolder,
   type OutfitFolderDecoration,
   updateOutfitFolderDecoration,
@@ -27,6 +27,8 @@ import { resolveModeledWorkflowImageUrl } from "../lib/modeledPreview";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { OutfitCollageCanvas } from "./OutfitCollageCanvas";
+import { OutfitDecorationLayer } from "./decorations/OutfitDecorationLayer";
+import { DecorationPickerPopover } from "./decorations/DecorationPickerPopover";
 
 interface MagazineReaderPageProps {
   magazineId: number;
@@ -51,7 +53,6 @@ interface DecorationDrag {
 
 export function MagazineReaderPage({ magazineId }: MagazineReaderPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
-  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [folder, setFolder] = useState<OutfitFolder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pageIndex, setPageIndex] = useState(0);
@@ -59,7 +60,6 @@ export function MagazineReaderPage({ magazineId }: MagazineReaderPageProps) {
   const [decorations, setDecorations] = useState<OutfitFolderDecoration[]>([]);
   const [selectedDecorationId, setSelectedDecorationId] = useState<number | null>(null);
   const [isDecorating, setIsDecorating] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
@@ -149,33 +149,22 @@ export function MagazineReaderPage({ magazineId }: MagazineReaderPageProps) {
     setSelectedDecorationId(null);
   }
 
-  async function handleClipArtUpload(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = "";
-    if (files.length === 0) return;
-
-    setIsUploading(true);
+  async function addLibraryDecoration(libraryDecoration: Decoration) {
     setErrorMessage("");
     try {
-      let nextDecorations = decorations;
-      for (const [index, file] of files.entries()) {
-        const decoration = await createOutfitFolderDecoration(folder!.id, {
-          file,
-          pageKey: page.key,
-          x: 8 + ((pageDecorations.length + index) * 7) % 42,
-          y: 8 + ((pageDecorations.length + index) * 9) % 48,
-          width: 20,
-          layerOrder: pageDecorations.length + index,
-        });
-        nextDecorations = [...nextDecorations, decoration];
-        setSelectedDecorationId(decoration.id);
-      }
-      syncFolder(nextDecorations);
+      const decoration = await createOutfitFolderDecoration(folder!.id, {
+        decorationId: libraryDecoration.id,
+        pageKey: page.key,
+        x: 8 + (pageDecorations.length * 7) % 42,
+        y: 8 + (pageDecorations.length * 9) % 48,
+        width: 20,
+        layerOrder: pageDecorations.length,
+      });
+      syncFolder([...decorations, decoration]);
+      setSelectedDecorationId(decoration.id);
       setIsDecorating(true);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to add this clip art.");
-    } finally {
-      setIsUploading(false);
+      setErrorMessage(error instanceof Error ? error.message : "Unable to add this decoration.");
     }
   }
 
@@ -275,14 +264,6 @@ export function MagazineReaderPage({ magazineId }: MagazineReaderPageProps) {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <input
-                ref={uploadInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="sr-only"
-                onChange={(event) => void handleClipArtUpload(event)}
-              />
               <PrimitiveButton
                 type="button"
                 variant="outline"
@@ -302,16 +283,11 @@ export function MagazineReaderPage({ magazineId }: MagazineReaderPageProps) {
                 {isDecorating ? "Done decorating" : "Decorate"}
               </PrimitiveButton>
               {isDecorating ? (
-                <PrimitiveButton
-                  type="button"
-                  variant="outline"
-                  className="border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white"
-                  disabled={isUploading}
-                  onClick={() => uploadInputRef.current?.click()}
-                >
-                  <ImagePlus />
-                  {isUploading ? "Adding…" : "Add clip art"}
-                </PrimitiveButton>
+                <DecorationPickerPopover
+                  buttonClassName="border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white"
+                  buttonLabel="Add decoration to magazine page"
+                  onSelect={(decoration) => void addLibraryDecoration(decoration)}
+                />
               ) : null}
             </div>
           </div>
@@ -488,6 +464,7 @@ function OutfitMagazinePage({
               items={outfit.items}
               maxVisibleItems={6}
               className="w-full"
+              overlay={<OutfitDecorationLayer placements={outfit.decorations} />}
             />
           </div>
         )}

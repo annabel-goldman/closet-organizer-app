@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_28_221500) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_29_010000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -126,6 +126,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_221500) do
     t.index ["user_id"], name: "index_clothing_items_on_user_id"
   end
 
+  create_table "decorations", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["user_id"], name: "index_decorations_on_user_id"
+  end
+
   create_table "model_reference_images", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "position", null: false
@@ -133,6 +141,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_221500) do
     t.integer "user_id", null: false
     t.index ["user_id", "position"], name: "index_model_reference_images_on_user_id_and_position", unique: true
     t.index ["user_id"], name: "index_model_reference_images_on_user_id"
+  end
+
+  create_table "outfit_decorations", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "decoration_id", null: false
+    t.integer "layer_order", default: 0, null: false
+    t.integer "outfit_id", null: false
+    t.decimal "rotation", precision: 6, scale: 2, default: "0.0", null: false
+    t.datetime "updated_at", null: false
+    t.decimal "width", precision: 6, scale: 2, default: "20.0", null: false
+    t.decimal "x", precision: 6, scale: 2, default: "35.0", null: false
+    t.decimal "y", precision: 6, scale: 2, default: "35.0", null: false
+    t.index ["decoration_id"], name: "index_outfit_decorations_on_decoration_id"
+    t.index ["outfit_id"], name: "index_outfit_decorations_on_outfit_id"
   end
 
   create_table "outfit_detections", force: :cascade do |t|
@@ -177,6 +199,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_221500) do
 
   create_table "outfit_folder_decorations", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.integer "decoration_id"
     t.integer "layer_order", default: 0, null: false
     t.integer "outfit_folder_id", null: false
     t.string "page_key", limit: 80, null: false
@@ -185,6 +208,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_221500) do
     t.decimal "width", precision: 7, scale: 3, default: "20.0", null: false
     t.decimal "x", precision: 7, scale: 3, default: "8.0", null: false
     t.decimal "y", precision: 7, scale: 3, default: "8.0", null: false
+    t.index ["decoration_id"], name: "index_outfit_folder_decorations_on_decoration_id"
     t.index ["outfit_folder_id", "page_key", "layer_order"], name: "index_outfit_folder_decorations_on_page_order"
     t.index ["outfit_folder_id"], name: "index_outfit_folder_decorations_on_outfit_folder_id"
   end
@@ -301,8 +325,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_221500) do
   add_foreign_key "ai_workflow_stages", "ai_workflows"
   add_foreign_key "ai_workflows", "users"
   add_foreign_key "clothing_items", "users"
+  add_foreign_key "decorations", "users"
   add_foreign_key "model_reference_images", "users"
+  add_foreign_key "outfit_decorations", "decorations"
+  add_foreign_key "outfit_decorations", "outfits"
   add_foreign_key "outfit_detections", "outfit_uploads"
+  add_foreign_key "outfit_folder_decorations", "decorations"
   add_foreign_key "outfit_folder_decorations", "outfit_folders"
   add_foreign_key "outfit_folder_memberships", "outfit_folders"
   add_foreign_key "outfit_folder_memberships", "outfits"

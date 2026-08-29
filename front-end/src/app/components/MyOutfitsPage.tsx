@@ -26,6 +26,11 @@ import {
   updateOutfit,
   User,
   AiWorkflow,
+  createOutfitDecoration,
+  destroyOutfitDecoration,
+  type Decoration,
+  type OutfitDecoration,
+  updateOutfitDecoration,
 } from "../lib/closet";
 import { OutfitCollageCanvas } from "./OutfitCollageCanvas";
 import { OutfitCollageLayersPanel } from "./OutfitCollageLayersPanel";
@@ -59,6 +64,7 @@ import { MAX_OUTFIT_NAME, MAX_OUTFIT_NOTES } from "../lib/inputLengthPolicy";
 import { useOutfitMagazines } from "./outfits/useOutfitMagazines";
 import { matchesOutfitSearchQuery } from "../lib/closetFilters";
 import { navigateTo } from "../lib/routes";
+import { OutfitDecorationLayer } from "./decorations/OutfitDecorationLayer";
 
 interface MyOutfitsPageProps {
   isLoading: boolean;
@@ -110,6 +116,8 @@ export function MyOutfitsPage({
   });
   const [editorLayouts, setEditorLayouts] = useState<Record<number, OutfitCollageLayout>>({});
   const [selectedCollageItemId, setSelectedCollageItemId] = useState<number | null>(null);
+  const [editorDecorations, setEditorDecorations] = useState<OutfitDecoration[]>([]);
+  const [selectedDecorationId, setSelectedDecorationId] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false);
   const [generationOccasion, setGenerationOccasion] = useState("");
@@ -298,6 +306,8 @@ export function MyOutfitsPage({
     const nextLayouts = resolveOutfitCollageLayouts(outfit.items);
     setEditorLayouts(nextLayouts);
     setSelectedCollageItemId(outfit.items[0]?.id ?? null);
+    setEditorDecorations(outfit.decorations ?? []);
+    setSelectedDecorationId(null);
     setModeledWorkflow(outfit.modeled_workflow ?? null);
     setFlash(null);
   }
@@ -314,7 +324,59 @@ export function MyOutfitsPage({
     });
     setEditorLayouts({});
     setSelectedCollageItemId(null);
+    setEditorDecorations([]);
+    setSelectedDecorationId(null);
     setModeledWorkflow(null);
+  }
+
+  function syncEditorDecorations(nextDecorations: OutfitDecoration[]) {
+    setEditorDecorations(nextDecorations);
+    if (editingOutfit) {
+      onOutfitUpdated({ ...editingOutfit, decorations: nextDecorations });
+    }
+  }
+
+  async function addDecorationToFlatlay(decoration: Decoration) {
+    if (!editingOutfitId) return;
+    try {
+      const placement = await createOutfitDecoration(editingOutfitId, {
+        decorationId: decoration.id,
+        x: 36 + (editorDecorations.length * 5) % 28,
+        y: 34 + (editorDecorations.length * 7) % 32,
+        width: 20,
+        layerOrder: editorDecorations.length,
+      });
+      syncEditorDecorations([...editorDecorations, placement]);
+      setSelectedDecorationId(placement.id);
+      setSelectedCollageItemId(null);
+    } catch (error) {
+      showFlash("error", error instanceof Error ? error.message : "Unable to add this decoration.");
+    }
+  }
+
+  async function changeFlatlayDecoration(placement: OutfitDecoration, changes: Partial<OutfitDecoration>) {
+    if (!editingOutfitId) return;
+    const previous = editorDecorations;
+    const optimistic = previous.map((entry) => entry.id === placement.id ? { ...entry, ...changes } : entry);
+    syncEditorDecorations(optimistic);
+    try {
+      const saved = await updateOutfitDecoration(editingOutfitId, placement.id, changes);
+      syncEditorDecorations(optimistic.map((entry) => entry.id === saved.id ? saved : entry));
+    } catch (error) {
+      syncEditorDecorations(previous);
+      showFlash("error", error instanceof Error ? error.message : "Unable to save this decoration.");
+    }
+  }
+
+  async function removeFlatlayDecoration(placement: OutfitDecoration) {
+    if (!editingOutfitId) return;
+    try {
+      await destroyOutfitDecoration(editingOutfitId, placement.id);
+      syncEditorDecorations(editorDecorations.filter((entry) => entry.id !== placement.id));
+      setSelectedDecorationId(null);
+    } catch (error) {
+      showFlash("error", error instanceof Error ? error.message : "Unable to remove this decoration.");
+    }
   }
 
   async function handleRequestModeledPreview(
@@ -344,6 +406,7 @@ export function MyOutfitsPage({
       const flatlaySnapshot = await createOutfitFlatlaySnapshot({
         items: draftItems,
         layouts,
+        decorations: editorDecorations,
         outfitName: draft.name,
       });
       const workflow = await requestModeledOutfit(outfitId, {
@@ -851,7 +914,10 @@ export function MyOutfitsPage({
                           onAddItem={addItemToEditingOutfit}
                           onRemoveItem={removeItemFromEditingOutfit}
                           selectedItemId={selectedCollageItemId}
-                          onSelectItem={setSelectedCollageItemId}
+                          onSelectItem={(itemId) => {
+                            setSelectedCollageItemId(itemId);
+                            setSelectedDecorationId(null);
+                          }}
                           onReorder={(orderedItemIds) => {
                             setEditorLayouts((current) => reorderCollageLayers(current, orderedItemIds));
                             setFormState((current) => ({
@@ -881,9 +947,26 @@ export function MyOutfitsPage({
                                 layouts={editorLayouts}
                                 editable
                                 selectedItemId={selectedCollageItemId}
-                                onSelectItem={setSelectedCollageItemId}
+                                onSelectItem={(itemId) => {
+                                  setSelectedCollageItemId(itemId);
+                                  if (itemId) setSelectedDecorationId(null);
+                                }}
                                 onLayoutsChange={setEditorLayouts}
                                 className="w-full"
+                                overlay={(
+                                  <OutfitDecorationLayer
+                                    editable
+                                    placements={editorDecorations}
+                                    selectedPlacementId={selectedDecorationId}
+                                    onSelectionChange={(placementId) => {
+                                      setSelectedDecorationId(placementId);
+                                      if (placementId) setSelectedCollageItemId(null);
+                                    }}
+                                    onAdd={(decoration) => void addDecorationToFlatlay(decoration)}
+                                    onChange={(placement, changes) => void changeFlatlayDecoration(placement, changes)}
+                                    onDelete={(placement) => void removeFlatlayDecoration(placement)}
+                                  />
+                                )}
                               />
                             )}
                           />
