@@ -74,8 +74,8 @@ export function OutfitCartSheet({
           />
         )}
       >
-        <SheetHeader className="gap-2 border-b border-border px-5 py-4 pr-28">
-          <div className="flex items-center gap-3">
+        <SheetHeader className="gap-2 border-b border-border px-5 py-4">
+          <div className="flex items-center gap-3 pr-24">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground text-background">
               <ShoppingBag className="h-4 w-4" />
             </div>

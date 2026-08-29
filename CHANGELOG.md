@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Extended the Outfit Cart metadata fields and AI feedback message across the full usable width of the sidebar while preserving space for its header actions.
 - Removed the redundant supporting sentence from the model reference photos dialog.
 - Moved magazine creation and editing out of constrained dialogs into dedicated full-page workspaces. Opening a magazine now launches an independent immersive reader tab with animated book-like page turns, keyboard navigation, decoration controls, and flat-lay fallback pages when a modeled image is unavailable.
 - Added fuzzy search to the outfits gallery across outfit names, tags, notes, and contained closet pieces, with clear and empty-result states.
