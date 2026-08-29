@@ -662,7 +662,7 @@ export function CreateItemPage({
         photoState.updateSelectedFile(cleanedFile);
       }
     } catch (error) {
-      if (pendingManualCleanModeRef.current !== "ignore") {
+      if ((pendingManualCleanModeRef.current as "preview" | "attach" | "ignore") !== "ignore") {
         setErrorMessage(
           error instanceof Error ? error.message : "Unable to create an AI-cleaned item image.",
         );
@@ -1125,6 +1125,7 @@ export function CreateItemPage({
         onApply: (file, context) => {
           applyImageFileSelection(file, context.imageKind);
         },
+        sourceKey: photoState.imageUrl ?? `manual-upload-${photoState.selectedFile.name}-${photoState.selectedFile.lastModified}`,
       } : undefined}
       onSubmit={handleManualSubmit}
       previewAriaLabel={photoState.selectedFile ? "Preview image" : "Upload photo"}

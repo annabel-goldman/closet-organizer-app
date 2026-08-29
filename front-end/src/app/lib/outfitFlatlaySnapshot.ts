@@ -1,4 +1,5 @@
-import { resolveEditableImageFetchUrl, type ClothingItem } from "./closet.ts";
+import type { ClothingItem } from "./closet.ts";
+import { loadImageSource } from "./imageSources.ts";
 import {
   resolveOutfitCollageLayouts,
   sortItemsByCollageLayer,
@@ -122,32 +123,10 @@ function drawSnapshotItem(
 }
 
 async function loadSnapshotImage(imageUrl: string) {
-  const response = await fetch(resolveEditableImageFetchUrl(imageUrl), { credentials: "include" });
-  if (!response.ok) {
-    throw new Error("One of this outfit's images could not be loaded for the flat-lay reference.");
-  }
-
-  const objectUrl = URL.createObjectURL(await response.blob());
-
-  try {
-    return {
-      cleanup: () => URL.revokeObjectURL(objectUrl),
-      image: await loadImageElement(objectUrl),
-    };
-  } catch (error) {
-    URL.revokeObjectURL(objectUrl);
-    throw error;
-  }
-}
-
-function loadImageElement(src: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.decoding = "async";
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("An outfit image could not be decoded for the flat-lay reference."));
-    image.src = src;
-  });
+  return loadImageSource(
+    imageUrl,
+    "An outfit image could not be decoded for the flat-lay reference.",
+  );
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement) {

@@ -21,13 +21,7 @@ import {
   PrimitiveSelectValue,
 } from "./primitives/PrimitiveSelect";
 import { PrimitiveText } from "./primitives/PrimitiveText";
-
-export interface OutfitFolderDraft {
-  name: string;
-  notes: string;
-  theme: OutfitFolder["theme"];
-  outfitIds: number[];
-}
+import type { OutfitFolderDraft } from "./outfits/useOutfitMagazines";
 
 interface OutfitFolderDialogProps {
   folder?: OutfitFolder | null;

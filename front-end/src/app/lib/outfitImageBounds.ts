@@ -1,4 +1,4 @@
-import { resolveEditableImageFetchUrl } from "./closet.ts";
+import { loadImageSource } from "./imageSources.ts";
 
 const EDGE_BACKGROUND_ALPHA_THRESHOLD = 8;
 const EDGE_BACKGROUND_MIN_RGB = 250;
@@ -264,43 +264,7 @@ function isOpaqueNeutralWhitePixel(data: Uint8ClampedArray, pixelIndex: number) 
 }
 
 async function loadCanvasSafeImage(imageUrl: string): Promise<LoadedCanvasImage> {
-  if (imageUrl.startsWith("data:") || imageUrl.startsWith("blob:")) {
-    return {
-      cleanup: () => {},
-      image: await loadImageElement(imageUrl),
-    };
-  }
-
-  const response = await fetch(resolveEditableImageFetchUrl(imageUrl), {
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error(`Unable to load image ${imageUrl}: ${response.status}`);
-  }
-
-  const blob = await response.blob();
-  const objectUrl = URL.createObjectURL(blob);
-
-  try {
-    return {
-      cleanup: () => URL.revokeObjectURL(objectUrl),
-      image: await loadImageElement(objectUrl),
-    };
-  } catch (error) {
-    URL.revokeObjectURL(objectUrl);
-    throw error;
-  }
-}
-
-function loadImageElement(src: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.decoding = "async";
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error(`Unable to decode image: ${src}`));
-    image.src = src;
-  });
+  return loadImageSource(imageUrl, `Unable to decode image: ${imageUrl}`);
 }
 
 function nearlyEqual(left: number, right: number, tolerance = 0.002) {

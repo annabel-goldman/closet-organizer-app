@@ -3,7 +3,7 @@ class ModeledImageGenerationJob < ApplicationJob
 
   def perform(workflow_id)
     workflow = AiWorkflow.includes(:stages, :user).find(workflow_id)
-    return if workflow.cancelled? || workflow.succeeded? || workflow.failed?
+    return if ai_workflow_terminal?(workflow)
 
     item = workflow.subject
     raise "Modeled previews currently require a clothing item." unless item.is_a?(ClothingItem)
@@ -91,11 +91,7 @@ class ModeledImageGenerationJob < ApplicationJob
       workflow.mark_succeeded!
     end
   rescue StandardError => error
-    return if workflow&.reload&.cancelled?
-
-    workflow&.stages&.each { |stage| stage.fail!(error.message) if stage.status.in?(%w[pending processing]) }
-    workflow&.mark_failed!(error.message)
-    Rails.logger.error("Modeled image workflow #{workflow_id} failed: #{error.class}: #{error.message}")
+    fail_ai_workflow!(workflow, error, context: "Modeled image workflow #{workflow_id}")
   ensure
     generated&.fetch(:tempfile, nil)&.close! if defined?(generated)
   end

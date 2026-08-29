@@ -1,15 +1,10 @@
-import { Dispatch, SetStateAction, useDeferredValue, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ShoppingBag } from "lucide-react";
 import { AddItemMenu } from "./components/AddItemMenu";
 import { ClothingCard } from "./components/ClothingCard";
-import { CreateItemPage } from "./components/CreateItemPage";
-import { ItemDetailPage } from "./components/ItemDetailPage";
-import { MyOutfitsPage } from "./components/MyOutfitsPage";
 import { OutfitCartSheet } from "./components/OutfitCartSheet";
 import { OutfitCreatedDialog } from "./components/OutfitCreatedDialog";
-import { UserDetailPage } from "./components/UserDetailPage";
-import { UsersDirectoryPage } from "./components/UsersDirectoryPage";
 import {
   PrimitiveButton,
 } from "./components/primitives/PrimitiveButton";
@@ -31,7 +26,6 @@ import {
 } from "./components/primitives/PrimitiveSelect";
 import { PrimitiveText } from "./components/primitives/PrimitiveText";
 import { AboutPage } from "./components/info/AboutPage";
-import { HomeFooterLinks } from "./components/info/HomeFooterLinks";
 import { PrivacyPage } from "./components/info/PrivacyPage";
 import { TermsPage } from "./components/info/TermsPage";
 import { AccessRestrictedState } from "./components/shared/AccessRestrictedState";
@@ -43,15 +37,12 @@ import { SiteHeader } from "./components/shared/SiteHeader";
 import {
   GenerationTaskToasts,
 } from "./components/shared/GenerationTaskToasts";
-import type { GenerationTask } from "./lib/generationTasks";
 import { ClosetSearchField } from "./components/ClosetSearchField";
 import {
-  cancelAiWorkflow,
   ClothingItem,
   createOutfit,
   AiWorkflow,
   fetchClothingItem,
-  fetchAiWorkflow,
   fetchOutfit,
   fetchOutfits,
   fetchCurrentUser,
@@ -66,31 +57,48 @@ import {
   titleize,
   User,
 } from "./lib/closet";
-import {
-  buildGroupedTagOptions,
-  ClosetSortOption,
-  filterClothingItems,
-  formatClosetSearchSuggestionLabel,
-  getClosetSearchSuggestions,
-  hasActiveClosetControls,
-} from "./lib/closetFilters";
+import { formatClosetSearchSuggestionLabel } from "./lib/closetFilters";
 import {
   AppRoute,
   authErrorMessage,
   getRouteFromLocation,
   isClosetRoute,
-  isOutfitRoute,
   isPublicInfoRoute,
   isProtectedRoute,
-  isUsersRoute,
   navigateTo,
 } from "./lib/routes";
 import { collectClosetSuggestions } from "./lib/itemFormValidation";
 import { useOutfitDraftState } from "./lib/useOutfitDraftState";
+import { useGenerationTaskManager } from "./lib/useGenerationTaskManager";
+import { useClosetControls } from "./lib/useClosetControls";
 
 interface HomeMessageState {
   kind: "error" | "success";
   text: string;
+}
+
+const CreateItemPage = lazy(() => import("./components/CreateItemPage").then((module) => ({
+  default: module.CreateItemPage,
+})));
+const ItemDetailPage = lazy(() => import("./components/ItemDetailPage").then((module) => ({
+  default: module.ItemDetailPage,
+})));
+const MyOutfitsPage = lazy(() => import("./components/MyOutfitsPage").then((module) => ({
+  default: module.MyOutfitsPage,
+})));
+const UserDetailPage = lazy(() => import("./components/UserDetailPage").then((module) => ({
+  default: module.UserDetailPage,
+})));
+const UsersDirectoryPage = lazy(() => import("./components/UsersDirectoryPage").then((module) => ({
+  default: module.UsersDirectoryPage,
+})));
+
+function RouteLoadingState() {
+  return (
+    <div className="mx-auto flex min-h-72 w-full max-w-7xl items-center justify-center px-6 py-12" role="status">
+      <PrimitiveText tone="muted">Loading page…</PrimitiveText>
+    </div>
+  );
 }
 
 interface OutfitCartAutofillMessage {
@@ -111,7 +119,6 @@ interface ClosetFilterMenuProps {
   label: string;
   options: string[];
   selectedValues: string[];
-  onClear: () => void;
   onToggleValue: (value: string) => void;
 }
 
@@ -162,7 +169,6 @@ function ClosetFilterMenu({
   label,
   options,
   selectedValues,
-  onClear,
   onToggleValue,
 }: ClosetFilterMenuProps) {
   const triggerLabel = formatFilterMenuTrigger(label, selectedValues);
@@ -207,18 +213,10 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [homeMessage, setHomeMessage] = useState<HomeMessageState | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
-  const [selectedColors, setSelectedColors] = useState<string[]>([]);
-  const [selectedOtherTags, setSelectedOtherTags] = useState<string[]>([]);
-  const [sortOption, setSortOption] = useState<ClosetSortOption>("name-asc");
   const [isOutfitCartOpen, setIsOutfitCartOpen] = useState(false);
   const [isOutfitCreatedDialogOpen, setIsOutfitCreatedDialogOpen] = useState(false);
   const [isCreatingOutfitFromCart, setIsCreatingOutfitFromCart] = useState(false);
   const [outfitsCache, setOutfitsCache] = useState<Outfit[]>([]);
-  const [generationTasks, setGenerationTasks] = useState<
-    Record<number, GenerationTask>
-  >({});
   const [hasLoadedOutfits, setHasLoadedOutfits] = useState(false);
   const [isLoadingOutfits, setIsLoadingOutfits] = useState(false);
   const [outfitsErrorMessage, setOutfitsErrorMessage] = useState("");
@@ -231,6 +229,42 @@ export default function App() {
   const topOutfitCartButtonRef = useRef<HTMLSpanElement | null>(null);
   const outfitCartAutofillRequestIdRef = useRef(0);
   const [outfitDraft, setOutfitDraft] = useOutfitDraftState(user);
+  const {
+    cancel: cancelGenerationTask,
+    dismiss: dismissGenerationTask,
+    tasks: generationTasks,
+    track: trackGenerationTask,
+    updateTracked: updateTrackedGenerationTask,
+  } = useGenerationTaskManager({
+    ownerId: user?.id,
+    onWorkflowUpdated: async (workflow, _reason, signal) => {
+      if (workflow.kind === "modeled_outfit") {
+        const outfitId = Number(workflow.metadata?.outfit_id);
+        if (outfitId) {
+          setOutfitsCache((current) => current.map((outfit) => (
+            outfit.id === outfitId ? { ...outfit, modeled_workflow: workflow } : outfit
+          )));
+        }
+      }
+
+      if (["succeeded", "cancelled"].includes(workflow.status) && workflow.kind === "item_clean") {
+        const itemId = Number(workflow.metadata?.item_id);
+        if (itemId) {
+          const nextItem = await fetchClothingItem(itemId, signal);
+          setUser((current) => updateUserItem(current, nextItem));
+          syncCachedOutfitItem(nextItem);
+        }
+      }
+
+      if (workflow.status === "succeeded" && workflow.kind === "outfit_generation") {
+        const outfitId = Number(workflow.metadata?.outfit_id);
+        if (outfitId) {
+          upsertCachedOutfit(await fetchOutfit(outfitId, signal));
+          setHasLoadedOutfits(true);
+        }
+      }
+    },
+  });
 
   useEffect(() => {
     const handlePopState = () => setRoute(getRouteFromLocation());
@@ -318,78 +352,10 @@ export default function App() {
 
   useEffect(() => {
     setOutfitsCache([]);
-    setGenerationTasks({});
     setHasLoadedOutfits(false);
     setIsLoadingOutfits(false);
     setOutfitsErrorMessage("");
   }, [user?.id]);
-
-  const activeGenerationTaskKey = Object.values(generationTasks)
-    .filter((task) => ["pending", "processing"].includes(task.workflow.status))
-    .map((task) => task.workflow.id)
-    .sort((left, right) => left - right)
-    .join(":");
-
-  useEffect(() => {
-    if (!activeGenerationTaskKey) {
-      return;
-    }
-
-    const workflowIds = activeGenerationTaskKey.split(":").map(Number);
-    const controller = new AbortController();
-    const interval = window.setInterval(() => {
-      void Promise.all(
-        workflowIds.map(async (workflowId) => {
-          try {
-            const nextWorkflow = await fetchAiWorkflow(workflowId, controller.signal);
-            if (nextWorkflow.kind === "modeled_outfit") {
-              setOutfitsCache((current) => current.map((outfit) => (
-                outfit.id === nextWorkflow.metadata?.outfit_id
-                  ? { ...outfit, modeled_workflow: nextWorkflow }
-                  : outfit
-              )));
-            }
-
-            if (nextWorkflow.status === "succeeded" && nextWorkflow.kind === "item_clean") {
-              const itemId = Number(nextWorkflow.metadata?.item_id);
-              if (itemId) {
-                const nextItem = await fetchClothingItem(itemId, controller.signal);
-                setUser((current) => updateUserItem(current, nextItem));
-                syncCachedOutfitItem(nextItem);
-              }
-            }
-
-            if (nextWorkflow.status === "succeeded" && nextWorkflow.kind === "outfit_generation") {
-              const outfitId = Number(nextWorkflow.metadata?.outfit_id);
-              if (outfitId) {
-                upsertCachedOutfit(await fetchOutfit(outfitId, controller.signal));
-                setHasLoadedOutfits(true);
-              }
-            }
-
-            setGenerationTasks((current) => {
-              const task = current[workflowId];
-              if (!task) {
-                return current;
-              }
-
-              return {
-                ...current,
-                [workflowId]: { ...task, workflow: nextWorkflow },
-              };
-            });
-          } catch {
-            // A temporary refresh error should not end a background generation task.
-          }
-        }),
-      );
-    }, 1400);
-
-    return () => {
-      controller.abort();
-      window.clearInterval(interval);
-    };
-  }, [activeGenerationTaskKey]);
 
   useEffect(() => {
     if (!user || route.kind !== "outfits" || hasLoadedOutfits) {
@@ -475,12 +441,12 @@ export default function App() {
   }, [user]);
 
   const clothingItems = user?.clothing_items ?? [];
+  const closetControls = useClosetControls(clothingItems);
   const outfitDraftItems = outfitDraft.itemIds
     .map((itemId) => clothingItems.find((item) => item.id === itemId))
     .filter((item): item is ClothingItem => Boolean(item));
   const outfitCartBadgeLabel =
     outfitDraftItems.length > 9 ? "9+" : String(outfitDraftItems.length);
-  const deferredSearchQuery = useDeferredValue(searchQuery);
   const isLoggedOutProtectedRoute = isProtectedRoute(route) && !user;
   const closetTitle = user ? formatPossessive(titleize(user.username)) : "Your Closet";
   const preferredStyle = formatPreferredStyle(user?.preferred_style);
@@ -509,52 +475,29 @@ export default function App() {
     .filter((uploadId) => uploadId > 0)));
   const isAdminRoute = route.kind === "users" || route.kind === "user";
   const isUnauthorizedAdminRoute = Boolean(user && !user.admin && isAdminRoute);
-  const groupedTagOptions = buildGroupedTagOptions(clothingItems);
-  const filteredClothingItems = filterClothingItems(
-    clothingItems,
-    deferredSearchQuery,
-    selectedBrands,
-    selectedColors,
-    selectedOtherTags,
-    sortOption,
-  );
-  const closetSearchSuggestions = getClosetSearchSuggestions(
-    clothingItems,
+  const {
+    clearAll,
+    filteredItems: filteredClothingItems,
+    groupedTagOptions,
+    hasActiveFilters,
     searchQuery,
     selectedBrands,
     selectedColors,
     selectedOtherTags,
+    setSearchQuery,
+    setSortOption,
     sortOption,
-    { limit: 8 },
-  );
-  const hasActiveFilters = hasActiveClosetControls(
-    searchQuery,
-    selectedBrands,
-    selectedColors,
-    selectedOtherTags,
-    sortOption,
-  );
+    suggestions: closetSearchSuggestions,
+    toggleBrand,
+    toggleColor,
+    toggleOtherTag,
+  } = closetControls;
   const showFloatingOutfitCartButton = Boolean(
     user && isClosetRoute(route) && !isOutfitCartOpen && !isTopOutfitCartButtonVisible,
   );
   const outfitCartStatusMessageClassName = showFloatingOutfitCartButton
     ? "fixed right-20 top-[calc(30%-1.5rem)] z-[70] max-w-[calc(100vw-7rem)] border border-foreground/15 bg-background/95 px-4 py-3 text-sm text-foreground shadow-lg backdrop-blur sm:max-w-sm"
     : "fixed bottom-6 right-6 z-[70] max-w-sm border border-foreground/15 bg-background/95 px-4 py-3 text-sm text-foreground shadow-lg backdrop-blur";
-
-  function toggleSelectedValue(
-    value: string,
-    setSelectedValues: Dispatch<SetStateAction<string[]>>,
-  ) {
-    setSelectedValues((current) =>
-      current.includes(value)
-        ? current.filter((entry) => entry !== value)
-        : [...current, value].sort((left, right) => left.localeCompare(right)),
-    );
-  }
-
-  function clearSelectedValues(setSelectedValues: Dispatch<SetStateAction<string[]>>) {
-    setSelectedValues([]);
-  }
 
   function addItemToOutfitDraft(itemId: number) {
     if (outfitDraft.itemIds.includes(itemId)) {
@@ -605,101 +548,7 @@ export default function App() {
       )),
     );
 
-    setGenerationTasks((current) => {
-      if (["rejected", "deleted"].includes(workflow.status)) {
-        const next = { ...current };
-        delete next[workflow.id];
-        return next;
-      }
-
-      const existing = current[workflow.id];
-      if (!existing && !["pending", "processing"].includes(workflow.status)) {
-        return current;
-      }
-
-      return {
-        ...current,
-        [workflow.id]: {
-          label: existing?.label ?? outfitName,
-          workflow,
-        },
-      };
-    });
-  }
-
-  function trackGenerationTask(workflow: AiWorkflow, label: string) {
-    setGenerationTasks((current) => {
-      if (["deleted", "rejected"].includes(workflow.status)) {
-        const next = { ...current };
-        delete next[workflow.id];
-        return next;
-      }
-
-      return {
-        ...current,
-        [workflow.id]: {
-          label: current[workflow.id]?.label ?? label,
-          workflow,
-        },
-      };
-    });
-  }
-
-  async function handleCancelGenerationTask(workflowId: number) {
-    setGenerationTasks((current) => {
-      const task = current[workflowId];
-      return task
-        ? { ...current, [workflowId]: { ...task, isCancelling: true, cancelError: undefined } }
-        : current;
-    });
-
-    try {
-      const workflow = await cancelAiWorkflow(workflowId);
-      if (workflow.kind === "modeled_outfit") {
-        const outfitId = Number(workflow.metadata?.outfit_id);
-        if (outfitId) {
-          setOutfitsCache((current) => current.map((outfit) => (
-            outfit.id === outfitId ? { ...outfit, modeled_workflow: workflow } : outfit
-          )));
-        }
-      }
-
-      if (workflow.kind === "item_clean") {
-        const itemId = Number(workflow.metadata?.item_id);
-        if (itemId) {
-          const nextItem = await fetchClothingItem(itemId);
-          setUser((current) => updateUserItem(current, nextItem));
-          syncCachedOutfitItem(nextItem);
-        }
-      }
-
-      setGenerationTasks((current) => {
-        const task = current[workflowId];
-        return task ? { ...current, [workflowId]: { ...task, workflow, isCancelling: false } } : current;
-      });
-    } catch (error) {
-      setGenerationTasks((current) => {
-        const task = current[workflowId];
-        return task
-          ? {
-              ...current,
-              [workflowId]: {
-                ...task,
-                isCancelling: false,
-                cancelError: error instanceof Error ? error.message : "Unable to cancel this task.",
-              },
-            }
-          : current;
-      });
-    }
-  }
-
-  function dismissGenerationTask(workflowId: number) {
-    setGenerationTasks((current) => {
-      const next = { ...current };
-      delete next[workflowId];
-      return next;
-    });
+    updateTrackedGenerationTask(workflow, outfitName);
   }
 
   function openGenerationResult(workflow: AiWorkflow) {
@@ -1123,8 +972,7 @@ export default function App() {
                       label="Tags"
                       options={groupedTagOptions.other}
                       selectedValues={selectedOtherTags}
-                      onClear={() => clearSelectedValues(setSelectedOtherTags)}
-                      onToggleValue={(value) => toggleSelectedValue(value, setSelectedOtherTags)}
+                      onToggleValue={toggleOtherTag}
                     />
                   </div>
 
@@ -1133,8 +981,7 @@ export default function App() {
                       label="Colors"
                       options={groupedTagOptions.colors}
                       selectedValues={selectedColors}
-                      onClear={() => clearSelectedValues(setSelectedColors)}
-                      onToggleValue={(value) => toggleSelectedValue(value, setSelectedColors)}
+                      onToggleValue={toggleColor}
                     />
                   </div>
 
@@ -1143,8 +990,7 @@ export default function App() {
                       label="Brands"
                       options={groupedTagOptions.brands}
                       selectedValues={selectedBrands}
-                      onClear={() => clearSelectedValues(setSelectedBrands)}
-                      onToggleValue={(value) => toggleSelectedValue(value, setSelectedBrands)}
+                      onToggleValue={toggleBrand}
                     />
                   </div>
 
@@ -1152,7 +998,7 @@ export default function App() {
                     <label id="closet-sort-label" className="sr-only">
                       Sort closet items
                     </label>
-                    <PrimitiveSelect value={sortOption} onValueChange={(value) => setSortOption(value as ClosetSortOption)}>
+                    <PrimitiveSelect value={sortOption} onValueChange={setSortOption}>
                       <PrimitiveSelectTrigger
                         aria-labelledby="closet-sort-label"
                         className="h-14 w-full gap-1.5 bg-stone-200 px-2.5 hover:bg-stone-200"
@@ -1177,13 +1023,7 @@ export default function App() {
                   <PrimitiveButton
                     type="button"
                     variant="outline"
-                    onClick={() => {
-                      setSearchQuery("");
-                      setSelectedOtherTags([]);
-                      setSelectedColors([]);
-                      setSelectedBrands([]);
-                      setSortOption("name-asc");
-                    }}
+                    onClick={clearAll}
                   >
                     Clear filters
                   </PrimitiveButton>
@@ -1238,7 +1078,7 @@ export default function App() {
           Skip to main content
         </a>
         <main id="main-content" className="flex flex-1 flex-col">
-          {pageContent}
+          <Suspense fallback={<RouteLoadingState />}>{pageContent}</Suspense>
         </main>
         <SiteFooter />
       </div>
@@ -1265,7 +1105,7 @@ export default function App() {
         id="main-content"
         className={`${isPublicInfoRoute(route) ? "" : "flex-1"} ${route.kind === "home" ? "flex" : ""}`}
       >
-        {pageContent}
+        <Suspense fallback={<RouteLoadingState />}>{pageContent}</Suspense>
       </main>
 
       <OutfitCartSheet
@@ -1356,7 +1196,7 @@ export default function App() {
 
       <GenerationTaskToasts
         tasks={Object.values(generationTasks)}
-        onCancel={(workflowId) => void handleCancelGenerationTask(workflowId)}
+        onCancel={(workflowId) => void cancelGenerationTask(workflowId)}
         onDismiss={dismissGenerationTask}
         onOpen={openGenerationResult}
       />

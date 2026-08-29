@@ -61,6 +61,7 @@ export function OutfitCollageLayersPanel({
     if (!draggingItemId) {
       return;
     }
+    const sourceItemId = draggingItemId;
 
     function handleWindowPointerMove(event: PointerEvent) {
       const hoveredElement = document.elementFromPoint(event.clientX, event.clientY);
@@ -83,7 +84,7 @@ export function OutfitCollageLayersPanel({
         return;
       }
 
-      reorderItems(draggingItemId, targetItemId);
+      reorderItems(sourceItemId, targetItemId);
       lastDropTargetIdRef.current = targetItemId;
     }
 

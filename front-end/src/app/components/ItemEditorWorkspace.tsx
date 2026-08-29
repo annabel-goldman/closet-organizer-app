@@ -27,6 +27,7 @@ interface ItemEditorWorkspaceProps {
     getEditableFile: () => Promise<File | null>;
     imageActions?: ExpandedImageEditorImageActions;
     onApply: (file: File, context: ExpandedImageEditorApplyContext) => Promise<void> | void;
+    sourceKey: string;
   };
   isPreviewProcessing?: boolean;
   previewLabel: string;

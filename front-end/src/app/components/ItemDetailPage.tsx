@@ -11,7 +11,6 @@ import {
   fetchClothingItem,
   generateClothingItemCleanImage,
   generateClothingItemMetadataSuggestions,
-  fetchAiWorkflow,
   mergeMetadataSuggestion,
   parseTagInput,
   previewMetadataSuggestions,
@@ -132,26 +131,6 @@ export function ItemDetailPage({
       setModeledWorkflow(backgroundModeledWorkflow);
     }
   }, [backgroundModeledWorkflow]);
-
-  useEffect(() => {
-    if (!modeledWorkflow || !["pending", "processing"].includes(modeledWorkflow.status)) {
-      return;
-    }
-
-    const controller = new AbortController();
-    const timeout = window.setTimeout(async () => {
-      try {
-        setModeledWorkflow(await fetchAiWorkflow(modeledWorkflow.id, controller.signal));
-      } catch {
-        // The main item editor remains usable if a background status refresh fails.
-      }
-    }, 1400);
-
-    return () => {
-      controller.abort();
-      window.clearTimeout(timeout);
-    };
-  }, [modeledWorkflow]);
 
   const isDirty = useMemo(() => {
     if (!item || !formValues) {
@@ -606,6 +585,7 @@ export function ItemDetailPage({
           onClean: createItemEditorCleanImage,
         },
         onApply: handleEditImageFileChange,
+        sourceKey: photoState.imageUrl ?? item.image_url ?? `item-${item.id}-no-image`,
       }}
       onSubmit={handleSubmit}
       previewAriaLabel={photoState.imageUrl ? "Preview image" : "Upload photo"}

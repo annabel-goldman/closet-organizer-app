@@ -157,8 +157,10 @@ Notes:
   Expose authenticated AI readiness, workflow lifecycle, and on-demand modeled item/full-outfit preview requests
 - `app/services/openrouter_image_cleaner.rb`
   Calls OpenRouter image generation for cleaned catalog imagery, private modeled item previews, and labeled full-outfit previews
+- `app/services/openrouter_client.rb`
+  Owns shared OpenRouter JSON POST transport, authentication/application headers, timeouts, response parsing, and provider error extraction for metadata and outfit-generation services
 - `app/jobs/clean_image_generation_job.rb`, `app/jobs/outfit_generation_job.rb`, `app/jobs/modeled_image_generation_job.rb`, and `app/jobs/modeled_outfit_generation_job.rb`
-  Run cancellation-safe saved-item cleaning, outfit creation, and prepare/generate/verify modeled-preview lifecycles outside request threads
+  Run cancellation-safe saved-item cleaning, outfit creation, and prepare/generate/verify modeled-preview lifecycles outside request threads; shared terminal-state checks and failure recording live in `ApplicationJob`
 - `app/services/clean_image_background_remover.rb`
   Removes the white studio backdrop from generated clean images and produces the final transparent PNG attachment
 - `app/services/openrouter_metadata_suggester.rb`
@@ -377,7 +379,7 @@ bin/brakeman --no-pager
 bin/bundler-audit
 ```
 
-Current backend coverage includes model tests plus integration coverage for auth-sensitive flows, clothing items, outfits, image variants, uploads, and clean-image services.
+Current backend coverage includes model tests plus integration/service coverage for auth-sensitive flows, clothing items, outfits, image variants, uploads, clean-image services, and shared OpenRouter transport behavior.
 
 ## Frontend Integration
 

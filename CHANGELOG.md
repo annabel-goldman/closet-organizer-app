@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Refactored the AI and image workflow foundations without changing their user-facing behavior: a single app-level task manager now owns durable workflow polling and cancellation, repeated OpenRouter request setup and Rails job terminal-state handling are centralized, and image downloads share one authenticated Active Storage proxy pipeline.
+- Fixed the item image editor so unrelated app updates—including background generation polling—no longer reload the source image or leave the editor stuck behind its loading state; editor sources now have explicit stable identities and component regression coverage.
+- Split closet controls, magazine state, AI workflow APIs/types, and route-level page bundles out of oversized frontend modules. Added strict TypeScript checking, ESLint, Vitest component coverage, and matching CI checks alongside the existing contract tests and production build.
 - Added the icon-only `AI fill details` action to the Outfit Cart so selected pieces can draft an editable outfit name, tags, and notes before creation; both cart and saved-outfit autofill actions now sit beside their modal close control in a shared header-action row.
 - Removed the redundant `My Outfits` page heading and added an `All outfits` / `My Magazines` view switch. The magazine library now collects existing magazines in one place with actions to create a magazine, add or reorder its outfits, open it, or delete it, while outfit-only actions stay within the outfits view.
 - Added a subtle divider between each saved outfit card's visual preview and its title/action area.

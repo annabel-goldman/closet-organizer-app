@@ -1,37 +1,28 @@
 import { requestJson, requestJsonOrNull, requestVoid } from "./api.ts";
+import { API_BASE_URL, BACKEND_BASE_URL } from "./apiConfig.ts";
+import { normalizeAttachmentUrl } from "./imageSources.ts";
+import { normalizeAiWorkflowPayload } from "./api/workflows.ts";
 import type { OutfitCollageLayout } from "./outfitCollage.ts";
+import type { AiWorkflow } from "./types/ai.ts";
 import { normalizeCategory } from "./wardrobeTaxonomy.ts";
 
-const LOCAL_BACKEND_BASE_URL = "http://127.0.0.1:3000";
-
-function isLocalDevelopmentHost(hostname: string) {
-  return hostname === "localhost" || hostname === "127.0.0.1";
-}
-
-function defaultApiBaseUrl() {
-  if (typeof window === "undefined") {
-    return "/api";
-  }
-
-  return isLocalDevelopmentHost(window.location.hostname) && window.location.port !== "3000" ? "/api" : "";
-}
-
-function defaultBackendBaseUrl() {
-  if (typeof window === "undefined") {
-    return LOCAL_BACKEND_BASE_URL;
-  }
-
-  return isLocalDevelopmentHost(window.location.hostname) && window.location.port !== "3000"
-    ? LOCAL_BACKEND_BASE_URL
-    : window.location.origin;
-}
-
-const importMetaEnv = (import.meta as ImportMeta & {
-  env?: Record<string, string | undefined>;
-}).env ?? {};
-
-const API_BASE_URL = importMetaEnv.VITE_API_BASE_URL ?? defaultApiBaseUrl();
-const BACKEND_BASE_URL = importMetaEnv.VITE_BACKEND_BASE_URL ?? defaultBackendBaseUrl();
+export { fetchImageFileFromUrl, resolveEditableImageFetchUrl } from "./imageSources.ts";
+export type {
+  AiArtifact,
+  AiStatus,
+  AiWorkflow,
+  AiWorkflowStage,
+  AiWorkflowStageStatus,
+} from "./types/ai.ts";
+export {
+  cancelAiWorkflow,
+  createAiWorkflow,
+  deleteModeledPreview,
+  fetchAiStatus,
+  fetchAiWorkflow,
+  requestModeledImage,
+  updateModeledPreview,
+} from "./api/workflows.ts";
 
 export interface UserSummary {
   id: number;
@@ -133,72 +124,6 @@ export interface OutfitDetectionBoundingBox {
   height: number;
 }
 
-export type AiWorkflowStageStatus =
-  | "pending"
-  | "processing"
-  | "review"
-  | "approved"
-  | "rejected"
-  | "cancelled"
-  | "failed"
-  | "skipped";
-
-export interface AiWorkflowStage {
-  id?: number;
-  key: string;
-  status: AiWorkflowStageStatus;
-  decision?: "approve" | "reject" | null;
-  attempts?: number;
-  diagnostics?: Record<string, unknown>;
-  error_message?: string | null;
-  artifact_ids?: number[];
-  artifacts?: AiArtifact[];
-}
-
-export interface AiArtifact {
-  id: number;
-  kind: string;
-  status: "pending" | "processing" | "review" | "approved" | "rejected" | "cancelled" | "deleted" | "failed";
-  file_url?: string | null;
-  provider?: string | null;
-  model?: string | null;
-  prompt_version?: string | null;
-  diagnostics?: Record<string, unknown>;
-  error_message?: string | null;
-}
-
-export interface AiWorkflow {
-  id: number;
-  kind: string;
-  status: "pending" | "processing" | "review" | "succeeded" | "rejected" | "deleted" | "failed" | "cancelled";
-  requested_count?: number | null;
-  completed_count: number;
-  failed_count: number;
-  provider?: string | null;
-  model?: string | null;
-  prompt_version?: string | null;
-  metadata?: Record<string, unknown>;
-  error_message?: string | null;
-  stages: AiWorkflowStage[];
-}
-
-export interface AiStatus {
-  provider: string;
-  configured: boolean;
-  model: string;
-  model_reference: {
-    attached: boolean;
-    count: number;
-    consented: boolean;
-  };
-  image_processing: {
-    image_processing_gem: boolean;
-    mini_magick: boolean;
-    vips: boolean;
-  };
-  queue_adapter: string;
-}
-
 export interface OutfitUpload {
   id: number;
   user_id: number;
@@ -256,75 +181,6 @@ export interface OutfitFolder {
   decorations: OutfitFolderDecoration[];
   created_at?: string;
   updated_at?: string;
-}
-
-function normalizeAttachmentUrl(rawUrl: unknown) {
-  if (typeof rawUrl !== "string" || rawUrl.trim().length === 0) {
-    return null;
-  }
-
-  const trimmed = rawUrl.trim();
-
-  if (typeof window === "undefined") {
-    return trimmed;
-  }
-
-  if (!isLocalDevelopmentHost(window.location.hostname) || window.location.port === "3000") {
-    return trimmed;
-  }
-
-  try {
-    const normalizedBackendOrigin = new URL(BACKEND_BASE_URL, window.location.origin).origin;
-    const parsed = new URL(trimmed, normalizedBackendOrigin);
-
-    if (isLocalBackendActiveStorageUrl(parsed, normalizedBackendOrigin)) {
-      return `${parsed.pathname}${parsed.search}`;
-    }
-  } catch {
-    return trimmed;
-  }
-
-  return trimmed;
-}
-
-function isLocalBackendActiveStorageUrl(parsed: URL, normalizedBackendOrigin: string) {
-  if (!parsed.pathname.startsWith("/rails/active_storage/")) {
-    return false;
-  }
-
-  if (parsed.origin === normalizedBackendOrigin) {
-    return true;
-  }
-
-  const backendUrl = new URL(normalizedBackendOrigin);
-  return (
-    isLocalDevelopmentHost(parsed.hostname)
-    && isLocalDevelopmentHost(backendUrl.hostname)
-    && parsed.port === backendUrl.port
-  );
-}
-
-export function resolveEditableImageFetchUrl(imageUrl: string) {
-  const normalizedUrl = normalizeAttachmentUrl(imageUrl) ?? imageUrl;
-
-  try {
-    const parsed = new URL(normalizedUrl, typeof window === "undefined" ? LOCAL_BACKEND_BASE_URL : window.location.origin);
-    if (!parsed.pathname.startsWith("/rails/active_storage/")) {
-      return normalizedUrl;
-    }
-
-    const proxiedPathname = parsed.pathname
-      .replace("/rails/active_storage/blobs/redirect/", "/rails/active_storage/blobs/proxy/")
-      .replace("/rails/active_storage/representations/redirect/", "/rails/active_storage/representations/proxy/");
-
-    if (proxiedPathname === parsed.pathname) {
-      return normalizedUrl;
-    }
-
-    return `${proxiedPathname}${parsed.search}`;
-  } catch {
-    return normalizedUrl;
-  }
 }
 
 export type CreateItemMode = "manual" | "image";
@@ -591,77 +447,6 @@ export function preferredDetectionBox(detection: OutfitDetection) {
 export async function fetchCurrentUser(signal?: AbortSignal) {
   const user = await requestJsonOrNull<User>(`${API_BASE_URL}/me`, 401, { signal });
   return user ? normalizeUserPayload(user) : null;
-}
-
-export async function fetchAiStatus(signal?: AbortSignal) {
-  return requestJson<AiStatus>(`${API_BASE_URL}/ai/status`, { signal });
-}
-
-function normalizeAiWorkflowPayload(workflow: AiWorkflow): AiWorkflow {
-  return {
-    ...workflow,
-    stages: (workflow.stages ?? []).map((stage) => ({
-      ...stage,
-      artifacts: (stage.artifacts ?? []).map((artifact) => ({
-        ...artifact,
-        file_url: normalizeAttachmentUrl(artifact.file_url),
-      })),
-    })),
-  };
-}
-
-export async function createAiWorkflow(input: {
-  kind: AiWorkflow["kind"];
-  requestedCount?: number;
-  promptVersion?: string;
-  metadata?: Record<string, unknown>;
-}) {
-  return requestJson<AiWorkflow>(`${API_BASE_URL}/ai_workflows`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      ai_workflow: {
-        kind: input.kind,
-        requested_count: input.requestedCount,
-        prompt_version: input.promptVersion,
-        metadata: input.metadata,
-      },
-    }),
-  }).then(normalizeAiWorkflowPayload);
-}
-
-export async function fetchAiWorkflow(id: number, signal?: AbortSignal) {
-  return requestJson<AiWorkflow>(`${API_BASE_URL}/ai_workflows/${id}`, { signal }).then(normalizeAiWorkflowPayload);
-}
-
-export async function cancelAiWorkflow(id: number) {
-  return requestJson<AiWorkflow>(`${API_BASE_URL}/ai_workflows/${id}/cancel`, {
-    method: "POST",
-  }).then(normalizeAiWorkflowPayload);
-}
-
-export async function deleteModeledPreview(workflowId: number) {
-  return requestJson<AiWorkflow>(`${API_BASE_URL}/ai_workflows/${workflowId}/preview`, {
-    method: "DELETE",
-  }).then(normalizeAiWorkflowPayload);
-}
-
-export async function updateModeledPreview(workflowId: number, photo: File) {
-  const formData = new FormData();
-  formData.append("modeled_preview[photo]", photo);
-
-  return requestJson<AiWorkflow>(`${API_BASE_URL}/ai_workflows/${workflowId}/preview`, {
-    method: "PATCH",
-    body: formData,
-  }).then(normalizeAiWorkflowPayload);
-}
-
-export async function requestModeledImage(itemId: number) {
-  return requestJson<AiWorkflow>(`${API_BASE_URL}/clothing_items/${itemId}/generate_modeled_image`, {
-    method: "POST",
-  }).then(normalizeAiWorkflowPayload);
 }
 
 export async function saveModelReferences(photos: File[]) {
@@ -1180,35 +965,10 @@ export async function createCleanPreviewFile(photo: File, options: AiImageOption
   return fileFromDataUrl(preview.data_url, preview.filename, preview.content_type);
 }
 
-export async function fetchImageFileFromUrl(imageUrl: string, filename?: string) {
-  const fetchUrl = resolveEditableImageFetchUrl(imageUrl);
-  const response = await fetch(fetchUrl, {
-    credentials: "include",
-  });
-  if (!response.ok) {
-    throw new Error("Unable to load the source image for editing.");
-  }
-
-  const blob = await response.blob();
-  return new File([blob], filename ?? inferFilenameFromUrl(imageUrl), {
-    type: blob.type || "image/png",
-  });
-}
-
 async function fileFromDataUrl(dataUrl: string, filename: string, contentType?: string) {
   const response = await fetch(dataUrl);
   const blob = await response.blob();
   return new File([blob], filename, { type: contentType || blob.type || "image/png" });
-}
-
-function inferFilenameFromUrl(imageUrl: string) {
-  try {
-    const url = new URL(imageUrl, window.location.origin);
-    const lastSegment = url.pathname.split("/").pop()?.trim();
-    return lastSegment && lastSegment.includes(".") ? lastSegment : "image.png";
-  } catch {
-    return "image.png";
-  }
 }
 
 function normalizeTagList(rawTags: unknown): string[] {

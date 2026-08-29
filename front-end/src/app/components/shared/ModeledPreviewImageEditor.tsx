@@ -97,6 +97,7 @@ export function ModeledPreviewImageEditor({
               getEditableFile={getEditableFile}
               isApplying={isApplying}
               onApply={(file) => handleApply(file)}
+              sourceKey={imageUrl}
               title={title}
             />
           </div>

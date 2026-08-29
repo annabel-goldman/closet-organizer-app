@@ -186,7 +186,9 @@ export function OutfitCollageCanvas({
       intrinsicAspectRatio: imageAspectRatioByItemId[selectedItemId],
       layout: selectedLayout,
     }));
-    event.dragStart?.set([ 0, 0 ]);
+    if (event.dragStart) {
+      event.dragStart.set([ 0, 0 ]);
+    }
   }
 
   function handleGestureEnd(_event: OnDragEnd | OnResizeEnd) {
@@ -381,7 +383,7 @@ export function OutfitCollageCanvas({
                             },
                       );
                       void measureImageContentBounds({
-                        imageUrl: item.image_url,
+                        imageUrl: item.image_url!,
                       }).then((nextBounds) => {
                         if (!nextBounds) {
                           return;

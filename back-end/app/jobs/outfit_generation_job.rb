@@ -3,7 +3,7 @@ class OutfitGenerationJob < ApplicationJob
 
   def perform(workflow_id)
     workflow = AiWorkflow.includes(:stages, :user).find(workflow_id)
-    return if workflow.cancelled? || workflow.succeeded? || workflow.failed?
+    return if ai_workflow_terminal?(workflow)
 
     items = workflow.user.clothing_items
       .with_attached_photo
@@ -53,11 +53,7 @@ class OutfitGenerationJob < ApplicationJob
       workflow.mark_succeeded!
     end
   rescue StandardError => error
-    return if workflow&.reload&.cancelled?
-
-    workflow&.stages&.each { |stage| stage.fail!(error.message) if stage.status.in?(%w[pending processing]) }
-    workflow&.mark_failed!(error.message)
-    Rails.logger.error("Outfit generation workflow #{workflow_id} failed: #{error.class}: #{error.message}")
+    fail_ai_workflow!(workflow, error, context: "Outfit generation workflow #{workflow_id}")
   ensure
     workflow&.input_file&.purge if workflow&.input_file&.attached? && workflow.status.in?(%w[succeeded failed cancelled])
   end

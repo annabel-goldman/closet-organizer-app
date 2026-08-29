@@ -59,6 +59,7 @@ interface ExpandedImageEditorProps {
   imageActions?: ExpandedImageEditorImageActions;
   isApplying?: boolean;
   onApply: (file: File, context: ExpandedImageEditorApplyContext) => Promise<void> | void;
+  sourceKey: string;
   title: string;
 }
 
@@ -76,6 +77,7 @@ export function ExpandedImageEditor({
   imageActions,
   isApplying = false,
   onApply,
+  sourceKey,
   title,
 }: ExpandedImageEditorProps) {
   const [isLoading, setIsLoading] = useState(true);
@@ -103,7 +105,12 @@ export function ExpandedImageEditor({
   const wandBaseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const wandOverlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const wandImageSourceRef = useRef<WandImageSource | null>(null);
+  const editableFileLoaderRef = useRef(getEditableFile);
   const imageUrl = useObjectUrl(currentFile);
+
+  useEffect(() => {
+    editableFileLoaderRef.current = getEditableFile;
+  }, [getEditableFile]);
 
   useEffect(() => {
     let isMounted = true;
@@ -113,7 +120,7 @@ export function ExpandedImageEditor({
       setLoadError("");
 
       try {
-        const file = await getEditableFile();
+        const file = await editableFileLoaderRef.current();
         if (!isMounted) {
           return;
         }
@@ -145,7 +152,9 @@ export function ExpandedImageEditor({
     return () => {
       isMounted = false;
     };
-  }, [getEditableFile, imageActions?.initialKind]);
+    // The parent may re-render while unrelated background work is polling. Reload only
+    // when the underlying image changes, not when an inline loader gets a new identity.
+  }, [sourceKey, imageActions?.initialKind]);
 
   useEffect(() => {
     setSelectionMask(null);

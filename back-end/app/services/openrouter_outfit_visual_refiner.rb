@@ -51,28 +51,16 @@ class OpenrouterOutfitVisualRefiner
   attr_reader :items, :occasion, :reference_photo, :reference_profile, :preference_context
 
   def perform_structured_request
-    uri = URI.parse("#{base_url}/chat/completions")
-    http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl = (uri.scheme == "https")
-    http.read_timeout = 45
-    http.open_timeout = 10
-
-    request = Net::HTTP::Post.new(uri)
-    request["Authorization"] = "Bearer #{api_key}"
-    request["Content-Type"] = "application/json"
-    request["HTTP-Referer"] = ENV["OPENROUTER_SITE_URL"] if ENV["OPENROUTER_SITE_URL"].present?
-    request["X-Title"] = ENV["OPENROUTER_APP_NAME"] if ENV["OPENROUTER_APP_NAME"].present?
-    request.body = request_body.to_json
-
-    response = http.request(request)
-    parsed = JSON.parse(response.body)
-
-    return parse_json_payload(extract_message_content(parsed)) if response.is_a?(Net::HTTPSuccess)
-
-    error_message = parsed.dig("error", "message") || "OpenRouter request failed with status #{response.code}"
-    raise error_message
-  rescue JSON::ParserError
-    raise "OpenRouter returned an unreadable outfit response."
+    parsed = OpenrouterClient.new(
+      api_key: api_key,
+      base_url: base_url,
+      read_timeout: 45
+    ).post_json(
+      path: "chat/completions",
+      body: request_body,
+      unreadable_message: "OpenRouter returned an unreadable outfit response."
+    )
+    parse_json_payload(extract_message_content(parsed))
   end
 
   def request_body

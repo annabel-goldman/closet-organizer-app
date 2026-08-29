@@ -28,16 +28,16 @@ project-closet-organizer/
 
 - `app/models`: `user`, ordered private `model_reference_image` records, `clothing_item`, `outfit`, `outfit_item`, user-owned outfit folders with ordered memberships and private page decorations, generated-outfit feedback logs, `outfit_upload`, `outfit_detection`, and staged `ai_workflow`/`ai_workflow_stage`/`ai_artifact` records
 - `app/controllers`: auth/session handling, JSON CRUD controllers, authenticated private model-reference management/thumbnails, outfit collage/layout-aware outfit updates, outfit-folder and magazine-decoration persistence, upload flows, AI readiness/workflow/model-preview endpoints, and SPA fallback
-- `app/jobs`: asynchronous outfit-upload analysis, saved-item image cleaning, AI outfit creation, and staged modeled item/full-outfit image generation jobs
+- `app/jobs`: asynchronous outfit-upload analysis, saved-item image cleaning, AI outfit creation, and staged modeled item/full-outfit image generation jobs, with shared cancellation and failure helpers in `ApplicationJob`
 - `app/presenters`: API payload shaping for users, clothing items, outfits, uploads, and detections, including saved outfit collage layout data, modeled workflow state, and optional AI generation metadata
-- `app/services/`: OpenRouter detection, item and outfit metadata suggestion, two-stage outfit generation, generated-outfit preference feedback, crop refinement, crop verification, Gemini catalog/modeled-item generation, Seedream full-outfit generation through the dedicated Images API, image-cleaning and background-removal logic, and shared tempfile/image-source helpers
+- `app/services/`: OpenRouter detection, item and outfit metadata suggestion, two-stage outfit generation, generated-outfit preference feedback, crop refinement, crop verification, Gemini catalog/modeled-item generation, Seedream full-outfit generation through the dedicated Images API, image-cleaning and background-removal logic, and shared OpenRouter transport/tempfile/image-source helpers
 - `config/routes.rb`: API routes plus HTML fallback routes
 - `db/seeds.rb`: demo admin user plus large-scale dev seed (~1k users, ~5k items, ~2k outfits) for pagination/perf testing
 - `test/`: model, integration, and service tests
 
 ## Frontend (`front-end`)
 
-- `src/app/App.tsx`: route handling, auth-aware layout, top-level page composition, Outfit Cart draft/autofill state, and cross-route polling/cancellation/result synchronization for durable generation tasks
+- `src/app/App.tsx`: auth-aware shell, lazy route composition, Outfit Cart draft/autofill state, and cache reconciliation for durable generation results
 - `src/app/components/primitives/` and `src/app/components/ui/`: shared controls and typography plus dialog/sheet shells with optional top-right header actions
 - `src/app/components/shared/ai/`: reusable AI stage timeline and before/after artifact comparison primitives; active generation status is surfaced by global task toasts
 - `src/app/components/shared/ModelReferenceDialog.tsx`: private three-photo model-reference uploader, primary-order controls, authenticated thumbnails, and removal controls surfaced from the existing header
@@ -51,7 +51,9 @@ project-closet-organizer/
 - `src/app/components/OutfitCollageLayersPanel.tsx`: focused layers sidebar for thumbnail selection plus pointer and keyboard-accessible layer reordering
 - `src/app/lib/routes.ts`: route parsing, navigation helpers, and route guards
 - `src/app/lib/api.ts`: shared request/error helpers for frontend API calls
-- `src/app/lib/closet.ts`: shared types, formatting helpers, and feature-specific API helpers, including outfit folders and magazine decorations, AI workflow polling, modeled-preview requests, AI readiness, and metadata/image suggestions
+- `src/app/lib/closet.ts`: compatibility-facing closet domain types, formatting helpers, and feature APIs while focused modules are extracted incrementally
+- `src/app/lib/api/workflows.ts` and `src/app/lib/types/ai.ts`: durable AI workflow requests, normalization, and domain types without coupling the task manager back to the large closet module
+- `src/app/lib/apiConfig.ts` and `src/app/lib/imageSources.ts`: shared backend URL policy plus authenticated, proxy-safe browser image fetch/decode helpers
 - `src/app/lib/asyncPool.ts`: order-preserving bounded-concurrency utility for independent multi-photo upload workflows
 - `src/app/lib/wardrobeTaxonomy.ts`: canonical clothing type options and category alias normalization for item forms and AI metadata suggestions
 - `src/app/lib/outfitCollage.ts`: shared default-layout and layer-order helpers for saved outfit collages
@@ -61,21 +63,24 @@ project-closet-organizer/
 - `src/app/lib/outfitFlatlaySnapshot.ts`: downloads item imagery through the same-origin proxy and renders the current saved-frame outfit collage into a private 4:5 PNG using the same proportional containment math as the visible flat lay
 - `src/app/lib/modeledPreview.ts`: modeled-artifact selection and flat-lay/modeled swipe-resolution helpers
 - `src/app/lib/generationTasks.ts`: workflow-kind-aware labels, running-state rules, and completion copy for the global task toasts
+- `src/app/lib/useGenerationTaskManager.ts`: the single non-overlapping polling, cancellation, dismissal, and owner-reset lifecycle for cross-route generation tasks
 - `src/app/lib/closetFilters.ts`: closet search, filter, and sort helpers
+- `src/app/lib/useClosetControls.ts`: closet-page filter/search/sort state and derived results extracted from the app shell
 - `src/app/lib/useItemPhotoState.ts`: shared photo upload and preview state management
 - `src/app/lib/useUndoRedoShortcuts.ts`: shared keyboard shortcut wiring for undo/redo controls outside the image editor
 - `src/app/lib/usePageData.ts`: shared async page-loading hook
-- `src/app/components/MyOutfitsPage.tsx`: saved outfit gallery/editor with an `All outfits` / `My Magazines` switch, magazine creation and outfit-membership management, global flat-lay/model view switching, missing-preview placeholders, draft-level AI title/tag/note autofill, live unsaved-draft full-look modeling, automatically published previews, carousel navigation, and preview deletion
+- `src/app/components/MyOutfitsPage.tsx`: saved outfit gallery/editor with an `All outfits` / `My Magazines` switch, model viewing, draft metadata/model generation, and preview editing/deletion
+- `src/app/components/outfits/useOutfitMagazines.ts`: magazine loading, editing, membership synchronization, deletion, and viewer state kept outside the route component
 - `src/app/components/CreateItemPage.tsx`: manual item creation and progressive multi-photo item import, aggregating independent cancellable detection workflows into one review surface
 - `src/app/components/OutfitFolderDialog.tsx`: folder name and notes, ordered outfit membership, and magazine-theme editor
 - `src/app/components/OutfitMagazineDialog.tsx`: cover-and-look magazine viewer with modeled-image pages and movable, resizable, rotatable page clip art
 - `src/app/lib/useOutfitDraftState.ts`: persisted outfit draft state management
-- `tests/`: frontend contract tests run with Node's built-in test runner
+- `tests/`: Node contract tests plus Vitest/jsdom component and hook regression tests
 - `src/styles/`: fonts, theme, and global styling
 
 ## CI
 
-- `.github/workflows/ci.yml`: backend lockfile check, security checks, linting, and tests
+- `.github/workflows/ci.yml`: backend lockfile/security/lint/test checks plus frontend lint, strict type-checking, contract/component tests, and production build
 - `.github/workflows/deploy.yml`: deploys successful `main` CI runs to the Heroku app `closet-organizer`
 
 ## Docs

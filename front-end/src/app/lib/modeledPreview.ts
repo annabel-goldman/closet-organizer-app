@@ -1,4 +1,5 @@
 import type { AiWorkflow } from "./closet";
+import { resolveActiveStorageProxyUrl } from "./imageSources.ts";
 
 export type OutfitPreviewSlide = "flatlay" | "modeled";
 
@@ -24,9 +25,7 @@ export function resolveModeledWorkflowImageUrl(workflow: AiWorkflow | null | und
     return null;
   }
 
-  return latestImageUrl
-    .replace("/rails/active_storage/blobs/redirect/", "/rails/active_storage/blobs/proxy/")
-    .replace("/rails/active_storage/representations/redirect/", "/rails/active_storage/representations/proxy/");
+  return resolveActiveStorageProxyUrl(latestImageUrl);
 }
 
 export function resolveOutfitGalleryModelPreview(

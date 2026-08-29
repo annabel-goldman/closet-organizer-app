@@ -3,7 +3,7 @@ class CleanImageGenerationJob < ApplicationJob
 
   def perform(workflow_id)
     workflow = AiWorkflow.includes(:stages, :user).find(workflow_id)
-    return if workflow.cancelled? || workflow.succeeded? || workflow.failed?
+    return if ai_workflow_terminal?(workflow)
 
     item = workflow.subject
     raise "Image cleaning currently requires a clothing item." unless item.is_a?(ClothingItem)
@@ -82,13 +82,11 @@ class CleanImageGenerationJob < ApplicationJob
       workflow.mark_succeeded!
     end
   rescue StandardError => error
-    return if workflow&.reload&.cancelled?
+    return if ai_workflow_cancelled_after_reload?(workflow)
 
     item&.update(clean_image_status: :failed, clean_image_error_message: error.message)
     artifact&.update(status: "failed", error_message: error.message)
-    workflow&.stages&.each { |stage| stage.fail!(error.message) if stage.status.in?(%w[pending processing]) }
-    workflow&.mark_failed!(error.message)
-    Rails.logger.error("Item clean workflow #{workflow_id} failed: #{error.class}: #{error.message}")
+    fail_ai_workflow!(workflow, error, context: "Item clean workflow #{workflow_id}")
   ensure
     temporary_files&.close_all
   end

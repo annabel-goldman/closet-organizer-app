@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import {
   BookOpen,
@@ -12,20 +12,15 @@ import {
 } from "lucide-react";
 import {
   ClothingItem,
-  createOutfitFolder,
   deleteModeledPreview,
-  destroyOutfitFolder,
   destroyOutfit,
-  fetchOutfitFolders,
   formatTagInput,
   generateOutfit,
   generateOutfitMetadataSuggestions,
   OutfitDraft,
   Outfit,
-  OutfitFolder,
   parseTagInput,
   requestModeledOutfit,
-  updateOutfitFolder,
   updateOutfit,
   User,
   AiWorkflow,
@@ -57,9 +52,10 @@ import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveConfirmationDialog } from "./primitives/PrimitiveConfirmationDialog";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
-import { OutfitFolderDialog, type OutfitFolderDraft } from "./OutfitFolderDialog";
+import { OutfitFolderDialog } from "./OutfitFolderDialog";
 import { OutfitMagazineDialog } from "./OutfitMagazineDialog";
 import { MAX_OUTFIT_NAME, MAX_OUTFIT_NOTES } from "../lib/inputLengthPolicy";
+import { useOutfitMagazines } from "./outfits/useOutfitMagazines";
 
 interface MyOutfitsPageProps {
   isLoading: boolean;
@@ -123,15 +119,35 @@ export function MyOutfitsPage({
   const [galleryView, setGalleryView] = useState<OutfitGalleryView>("flatlay");
   const [pageView, setPageView] = useState<OutfitsPageView>("outfits");
   const [regenerationConfirmationOutfitId, setRegenerationConfirmationOutfitId] = useState<number | null>(null);
-  const [outfitFolders, setOutfitFolders] = useState<OutfitFolder[]>([]);
-  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
-  const [editingFolderId, setEditingFolderId] = useState<number | null>(null);
-  const [isFolderDialogOpen, setIsFolderDialogOpen] = useState(false);
-  const [isMagazineOpen, setIsMagazineOpen] = useState(false);
-  const [isLoadingFolders, setIsLoadingFolders] = useState(false);
-  const [isSavingFolder, setIsSavingFolder] = useState(false);
-  const [folderToDeleteId, setFolderToDeleteId] = useState<number | null>(null);
   const outfitDetailsRequestIdRef = useRef(0);
+  const showFlash = useCallback((kind: FlashState["kind"], message: string) => {
+    setFlash({ kind, message });
+  }, []);
+  const magazines = useOutfitMagazines({
+    onFlash: showFlash,
+    outfits,
+    userId: user.id,
+  });
+  const {
+    closeFolderDialog,
+    closeMagazine,
+    deleteRequestedFolder: handleDeleteFolder,
+    editingFolder,
+    folderToDeleteId,
+    hydratedFolders,
+    isFolderDialogOpen,
+    isLoading: isLoadingFolders,
+    isMagazineOpen,
+    isSaving: isSavingFolder,
+    openCreateFolder: openCreateFolderDialog,
+    openEditFolder: openEditFolderDialog,
+    openMagazine,
+    removeOutfit: removeOutfitFromFolders,
+    requestFolderDelete,
+    saveFolder,
+    selectedFolder: hydratedSelectedFolder,
+    updateFolder: handleFolderUpdated,
+  } = magazines;
 
   const sortedItems = useMemo(
     () => [...user.clothing_items].sort((left, right) => left.name.localeCompare(right.name)),
@@ -155,22 +171,6 @@ export function MyOutfitsPage({
     : null;
   const selectedItemsCanBeModeled = selectedItems.length > 0 && selectedItems.every((item) => Boolean(item.image_url));
   const modeledImageUrl = resolveModeledWorkflowImageUrl(modeledWorkflow);
-  const editingFolder = outfitFolders.find((folder) => folder.id === editingFolderId) ?? null;
-  const hydratedFolders = useMemo(() => {
-    const currentOutfitsById = new Map(outfits.map((outfit) => [outfit.id, outfit]));
-    return outfitFolders.map((folder) => ({
-      ...folder,
-      outfits: folder.outfit_ids
-        .map((outfitId) => currentOutfitsById.get(outfitId) ?? folder.outfits.find((outfit) => outfit.id === outfitId))
-        .filter((outfit): outfit is Outfit => Boolean(outfit)),
-    }));
-  }, [outfitFolders, outfits]);
-  const hydratedSelectedFolder = hydratedFolders.find((folder) => folder.id === selectedFolderId) ?? null;
-
-  function showFlash(kind: FlashState["kind"], message: string) {
-    setFlash({ kind, message });
-  }
-
   function setFormField<Key extends keyof OutfitDraft>(key: Key, value: OutfitDraft[Key]) {
     setFormState((current) => ({
       ...current,
@@ -206,23 +206,6 @@ export function MyOutfitsPage({
       setModeledWorkflow(editingOutfit?.modeled_workflow ?? null);
     }
   }, [editingOutfit?.modeled_workflow, editingOutfitId]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setIsLoadingFolders(true);
-
-    fetchOutfitFolders(controller.signal)
-      .then((folders) => setOutfitFolders(folders))
-      .catch((error) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        showFlash("error", error instanceof Error ? error.message : "Unable to load magazines.");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setIsLoadingFolders(false);
-      });
-
-    return () => controller.abort();
-  }, [user.id]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -279,77 +262,18 @@ export function MyOutfitsPage({
     try {
       await destroyOutfit(outfitId);
       onOutfitDeleted(outfitId);
-      setOutfitFolders((current) => current.map((folder) => ({
-        ...folder,
-        outfit_ids: folder.outfit_ids.filter((id) => id !== outfitId),
-        outfits: folder.outfits.filter((outfit) => outfit.id !== outfitId),
-        decorations: folder.decorations.filter((decoration) => decoration.page_key !== `outfit:${outfitId}`),
-      })));
+      removeOutfitFromFolders(outfitId);
       showFlash("success", "Outfit deleted.");
     } catch (error) {
       showFlash("error", error instanceof Error ? error.message : "Unable to delete outfit.");
     }
   }
 
-  function openCreateFolderDialog() {
-    setEditingFolderId(null);
-    setIsFolderDialogOpen(true);
-  }
-
-  function openEditFolderDialog(folder: OutfitFolder) {
-    setEditingFolderId(folder.id);
-    setIsFolderDialogOpen(true);
-  }
-
-  async function handleSaveFolder(draft: OutfitFolderDraft) {
-    setIsSavingFolder(true);
+  async function handleSaveFolder(draft: Parameters<typeof saveFolder>[0]) {
     setFlash(null);
-
-    try {
-      const savedFolder = editingFolder
-        ? await updateOutfitFolder(editingFolder.id, draft)
-        : await createOutfitFolder(draft);
-
-      setOutfitFolders((current) => {
-        const exists = current.some((folder) => folder.id === savedFolder.id);
-        return exists
-          ? current.map((folder) => folder.id === savedFolder.id ? savedFolder : folder)
-          : [savedFolder, ...current];
-      });
-      setSelectedFolderId(savedFolder.id);
+    if (await saveFolder(draft)) {
       setPageView("magazines");
-      setIsFolderDialogOpen(false);
-      setEditingFolderId(null);
-      showFlash("success", editingFolder ? "Magazine updated." : "Magazine created.");
-    } catch (error) {
-      showFlash("error", error instanceof Error ? error.message : "Unable to save this magazine.");
-    } finally {
-      setIsSavingFolder(false);
     }
-  }
-
-  async function handleDeleteFolder() {
-    if (!folderToDeleteId) return;
-
-    const folderId = folderToDeleteId;
-    try {
-      await destroyOutfitFolder(folderId);
-      setOutfitFolders((current) => current.filter((folder) => folder.id !== folderId));
-      if (selectedFolderId === folderId) setSelectedFolderId(null);
-      setFolderToDeleteId(null);
-      showFlash("success", "Magazine deleted. Your outfits are still saved.");
-    } catch (error) {
-      showFlash("error", error instanceof Error ? error.message : "Unable to delete this magazine.");
-    }
-  }
-
-  function handleFolderUpdated(folder: OutfitFolder) {
-    setOutfitFolders((current) => current.map((entry) => entry.id === folder.id ? folder : entry));
-  }
-
-  function openMagazine(folder: OutfitFolder) {
-    setSelectedFolderId(folder.id);
-    setIsMagazineOpen(true);
   }
 
   async function handleGenerateOutfit(event: FormEvent<HTMLFormElement>) {
@@ -702,7 +626,7 @@ export function MyOutfitsPage({
                         variant="outline"
                         size="icon"
                         className="hover:border-destructive"
-                        onClick={() => setFolderToDeleteId(folder.id)}
+                        onClick={() => requestFolderDelete(folder.id)}
                         aria-label={`Delete ${folder.name} magazine`}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -1074,10 +998,7 @@ export function MyOutfitsPage({
 
       <OutfitFolderDialog
         open={isFolderDialogOpen}
-        onOpenChange={(open) => {
-          setIsFolderDialogOpen(open);
-          if (!open) setEditingFolderId(null);
-        }}
+        onOpenChange={(open) => !open && closeFolderDialog()}
         folder={editingFolder}
         outfits={outfits}
         isSaving={isSavingFolder}
@@ -1086,14 +1007,14 @@ export function MyOutfitsPage({
 
       <OutfitMagazineDialog
         open={isMagazineOpen}
-        onOpenChange={setIsMagazineOpen}
+        onOpenChange={(open) => !open && closeMagazine()}
         folder={hydratedSelectedFolder}
         onFolderUpdated={handleFolderUpdated}
       />
 
       <PrimitiveConfirmationDialog
         open={folderToDeleteId !== null}
-        onOpenChange={(open) => !open && setFolderToDeleteId(null)}
+        onOpenChange={(open) => !open && requestFolderDelete(null)}
         title="Delete magazine?"
         description="This removes the magazine layout and uploaded clip art. The outfits themselves will stay saved."
         cancelLabel="Keep magazine"

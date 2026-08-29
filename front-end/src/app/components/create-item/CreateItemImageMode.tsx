@@ -284,6 +284,10 @@ export function CreateItemImageMode({
                     : undefined,
                 },
                 onApply: (file, context) => onApplyDetectionImageEdits(previewDetection, file, context),
+                sourceKey: previewEditedImageUrl
+                  ?? previewDetection.cleaned_image_url
+                  ?? getDetectionSourceImageUrl(previewDetection)
+                  ?? `detection-${previewDetection.id}`,
               }
             : isSourceFocused
               && selectedFileCount === 1
@@ -294,6 +298,7 @@ export function CreateItemImageMode({
                 getEditableFile: onGetSourceImageEditorFile,
                 imageActions: sourceImageEditorActions,
                 onApply: onApplySourceImageEdits,
+                sourceKey: sourceImageUrl ?? selectedFileName,
               }
             : undefined
         }

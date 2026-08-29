@@ -17,8 +17,8 @@ interface PrimitiveConfirmationDialogProps {
   confirmLabel?: string;
   description: string;
   onConfirm: () => void;
-  onOpenChange: (open: boolean) => void;
-  open: boolean;
+  onOpenChange?: (open: boolean) => void;
+  open?: boolean;
   title?: string;
 }
 
