@@ -30,7 +30,7 @@ project-closet-organizer/
 - `app/controllers`: auth/session handling, JSON CRUD controllers, authenticated private model-reference management/thumbnails, outfit collage/layout-aware outfit updates, outfit-folder and magazine-decoration persistence, upload flows, AI readiness/workflow/model-preview endpoints, and SPA fallback
 - `app/jobs`: asynchronous outfit-upload analysis, saved-item image cleaning, AI outfit creation, and staged modeled item/full-outfit image generation jobs, with shared cancellation and failure helpers in `ApplicationJob`
 - `app/presenters`: API payload shaping for users, clothing items, outfits, uploads, and detections, including saved outfit collage layout data, modeled workflow state, and optional AI generation metadata
-- `app/services/`: OpenRouter detection, item and outfit metadata suggestion, two-stage outfit generation, generated-outfit preference feedback, crop refinement, crop verification, Gemini catalog/modeled-item generation, Seedream full-outfit generation through the dedicated Images API, image-cleaning and background-removal logic, and shared OpenRouter transport/tempfile/image-source helpers
+- `app/services/`: OpenRouter detection, item/outfit/magazine metadata suggestion, two-stage outfit generation, generated-outfit preference feedback, crop refinement, crop verification, Gemini catalog/modeled-item generation, Seedream full-outfit generation through the dedicated Images API, image-cleaning and background-removal logic, and shared OpenRouter transport/tempfile/image-source helpers
 - `config/routes.rb`: API routes plus HTML fallback routes
 - `db/seeds.rb`: demo admin user plus large-scale dev seed (~1k users, ~5k items, ~2k outfits) for pagination/perf testing
 - `test/`: model, integration, and service tests
@@ -71,7 +71,7 @@ project-closet-organizer/
 - `src/app/components/MyOutfitsPage.tsx`: saved outfit gallery/editor with an `All outfits` / `My Magazines` switch, model viewing, draft metadata/model generation, and preview editing/deletion
 - `src/app/components/outfits/useOutfitMagazines.ts`: magazine loading, editing, membership synchronization, deletion, and viewer state kept outside the route component
 - `src/app/components/CreateItemPage.tsx`: manual item creation and progressive multi-photo item import, including per-source pre-detection focus/edit/replace/delete state and independent cancellable detection workflows aggregated into one review surface
-- `src/app/components/OutfitFolderDialog.tsx`: magazine name and notes plus ordered outfit membership
+- `src/app/components/OutfitFolderDialog.tsx`: magazine name and notes, ordered outfit membership, and editable AI concept/outfit autofill
 - `src/app/components/OutfitMagazineDialog.tsx`: cover-and-look magazine viewer with modeled-image pages and movable, resizable, rotatable page clip art
 - `src/app/lib/useOutfitDraftState.ts`: persisted outfit draft state management
 - `tests/`: Node contract tests plus Vitest/jsdom component and hook regression tests

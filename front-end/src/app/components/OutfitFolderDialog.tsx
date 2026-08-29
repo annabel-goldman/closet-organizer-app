@@ -1,6 +1,10 @@
 import { FormEvent, useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, BookOpen } from "lucide-react";
-import type { Outfit, OutfitFolder } from "../lib/closet";
+import {
+  generateMagazineMetadataSuggestions,
+  type Outfit,
+  type OutfitFolder,
+} from "../lib/closet";
 import { Checkbox } from "./ui/checkbox";
 import {
   Dialog,
@@ -14,6 +18,7 @@ import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import type { OutfitFolderDraft } from "./outfits/useOutfitMagazines";
 
 interface OutfitFolderDialogProps {
@@ -23,6 +28,11 @@ interface OutfitFolderDialogProps {
   onSave: (draft: OutfitFolderDraft) => void;
   open: boolean;
   outfits: Outfit[];
+}
+
+interface AutofillMessage {
+  kind: "error" | "success";
+  text: string;
 }
 
 const EMPTY_DRAFT: OutfitFolderDraft = {
@@ -40,6 +50,8 @@ export function OutfitFolderDialog({
   outfits,
 }: OutfitFolderDialogProps) {
   const [draft, setDraft] = useState<OutfitFolderDraft>(EMPTY_DRAFT);
+  const [isAutofilling, setIsAutofilling] = useState(false);
+  const [autofillMessage, setAutofillMessage] = useState<AutofillMessage | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -49,7 +61,40 @@ export function OutfitFolderDialog({
       notes: folder.notes ?? "",
       outfitIds: folder.outfit_ids,
     } : EMPTY_DRAFT);
+    setIsAutofilling(false);
+    setAutofillMessage(null);
   }, [folder, open]);
+
+  async function handleAutofill() {
+    setIsAutofilling(true);
+    setAutofillMessage(null);
+
+    try {
+      const suggestion = await generateMagazineMetadataSuggestions({
+        folderId: folder?.id,
+        name: draft.name,
+        notes: draft.notes,
+        outfitIds: draft.outfitIds,
+      });
+      setDraft((current) => ({
+        ...current,
+        name: suggestion.name,
+        notes: suggestion.notes,
+        outfitIds: suggestion.outfit_ids,
+      }));
+      setAutofillMessage({
+        kind: "success",
+        text: "Magazine concept and outfit selection filled in. Review everything before saving.",
+      });
+    } catch (error) {
+      setAutofillMessage({
+        kind: "error",
+        text: error instanceof Error ? error.message : "Unable to fill magazine details.",
+      });
+    } finally {
+      setIsAutofilling(false);
+    }
+  }
 
   function toggleOutfit(outfitId: number, checked: boolean) {
     setDraft((current) => ({
@@ -74,7 +119,7 @@ export function OutfitFolderDialog({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft.name.trim()) return;
+    if (isAutofilling || !draft.name.trim()) return;
     onSave({ ...draft, name: draft.name.trim() });
   }
 
@@ -84,8 +129,19 @@ export function OutfitFolderDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-none sm:max-w-3xl">
-        <DialogHeader>
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto rounded-none sm:max-w-3xl"
+        headerActions={(
+          <AiMetadataAutofillButton
+            label="AI fill magazine details and outfits"
+            isLoading={isAutofilling}
+            disabled={isSaving || outfits.length === 0}
+            onClick={() => void handleAutofill()}
+            className="h-9 w-9 p-0"
+          />
+        )}
+      >
+        <DialogHeader className="pr-24">
           <DialogTitle asChild>
             <PrimitiveText as="h2" variant="display" font="serif">
               {folder ? "Edit magazine" : "Create magazine"}
@@ -97,6 +153,21 @@ export function OutfitFolderDialog({
             </PrimitiveText>
           </DialogDescription>
         </DialogHeader>
+
+        {autofillMessage ? (
+          <div
+            className={`border px-3 py-2 ${
+              autofillMessage.kind === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                : "border-destructive/25 bg-destructive/10 text-destructive"
+            }`}
+            role={autofillMessage.kind === "error" ? "alert" : "status"}
+            aria-live={autofillMessage.kind === "error" ? "assertive" : "polite"}
+            aria-atomic="true"
+          >
+            <PrimitiveText as="p" variant="caption">{autofillMessage.text}</PrimitiveText>
+          </div>
+        ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <label className="block space-y-2">
@@ -177,7 +248,7 @@ export function OutfitFolderDialog({
             <PrimitiveButton type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </PrimitiveButton>
-            <PrimitiveButton type="submit" disabled={isSaving || !draft.name.trim()}>
+            <PrimitiveButton type="submit" disabled={isSaving || isAutofilling || !draft.name.trim()}>
               <BookOpen />
               {isSaving ? "Saving…" : folder ? "Save magazine" : "Create magazine"}
             </PrimitiveButton>

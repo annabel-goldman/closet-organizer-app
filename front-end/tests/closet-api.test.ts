@@ -8,6 +8,7 @@ import {
   deleteModeledPreview,
   fetchOutfitFolders,
   generateClothingItemCleanImage,
+  generateMagazineMetadataSuggestions,
   generateOutfit,
   generateOutfitMetadataSuggestions,
   mergeMetadataSuggestion,
@@ -138,6 +139,48 @@ test("outfit folder APIs preserve magazine order and upload page-specific clip a
     assert.equal((requests[2].init?.body as FormData).get("decoration[image]"), clipArt);
     assert.equal((requests[2].init?.body as FormData).get("decoration[page_key]"), "cover");
     assert.equal(movedDecoration.x, 42);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("magazine metadata suggestions use collection and member routes without saving", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ path: string; init?: RequestInit }> = [];
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ path: String(input), init });
+    return new Response(JSON.stringify({
+      name: "Paris After Dark",
+      notes: "Gallery afternoons and late dinners.",
+      outfit_ids: [19, 12],
+      provider: "openrouter",
+      model: "test/metadata",
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    await generateMagazineMetadataSuggestions({
+      name: "Paris",
+      notes: "Gallery and dinner",
+      outfitIds: [19],
+    });
+    await generateMagazineMetadataSuggestions({
+      folderId: 8,
+      name: "Paris Weekend",
+      notes: "",
+      outfitIds: [12],
+    });
+
+    assert.equal(requests[0].path, "/api/outfit_folders/generate_metadata_suggestions");
+    assert.equal(requests[1].path, "/api/outfit_folders/8/generate_metadata_suggestions");
+    assert.deepEqual(JSON.parse(String(requests[0].init?.body)), {
+      outfit_folder: {
+        name: "Paris",
+        notes: "Gallery and dinner",
+        outfit_ids: [19],
+      },
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -243,6 +243,14 @@ export interface OutfitMetadataSuggestion {
   model?: string | null;
 }
 
+export interface MagazineMetadataSuggestion {
+  name: string;
+  notes: string;
+  outfit_ids: number[];
+  provider?: string | null;
+  model?: string | null;
+}
+
 export function emptyOutfitDraft(): OutfitDraft {
   return {
     name: "",
@@ -695,6 +703,29 @@ export async function updateOutfitFolder(id: number, input: SaveOutfitFolderInpu
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(outfitFolderPayload(input)),
   }));
+}
+
+export async function generateMagazineMetadataSuggestions(input: {
+  folderId?: number;
+  name: string;
+  notes: string;
+  outfitIds: number[];
+}) {
+  const path = input.folderId
+    ? `${API_BASE_URL}/outfit_folders/${input.folderId}/generate_metadata_suggestions`
+    : `${API_BASE_URL}/outfit_folders/generate_metadata_suggestions`;
+
+  return requestJson<MagazineMetadataSuggestion>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      outfit_folder: {
+        name: input.name,
+        notes: input.notes,
+        outfit_ids: input.outfitIds,
+      },
+    }),
+  });
 }
 
 export async function destroyOutfitFolder(id: number) {

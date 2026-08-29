@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added AI magazine autofill: an icon-only action expands the current title/notes into a cohesive concept and selects and orders matching owned saved outfits, leaving the complete draft editable and unsaved until confirmation.
 - Simplified magazines to one minimal white presentation, removing the style selector and the retired editorial/scrapbook theme field across the frontend and backend.
 - Open the outfit editor on the modeled preview when editing from Model view, with left-arrow navigation back to the flat lay.
 - Updated multi-photo item detection so every selected source photo appears in the upload strip before analysis; users can focus each source independently and replace, delete, crop, or erase its background without collapsing the rest of the batch.

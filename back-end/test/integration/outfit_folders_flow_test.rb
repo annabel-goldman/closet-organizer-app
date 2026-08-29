@@ -67,6 +67,51 @@ class OutfitFoldersFlowTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_content
   end
 
+  test "suggests an editable magazine concept and owned outfit selection without saving" do
+    captured = {}
+
+    with_magazine_suggester_stub(
+      capture: captured,
+      result: {
+        name: "Paris After Dark",
+        notes: "A polished sequence for gallery afternoons and late dinners.",
+        outfit_ids: [ @outfit.id ],
+        provider: "openrouter",
+        model: "test/metadata"
+      }
+    ) do
+      assert_no_difference("OutfitFolder.count") do
+        post generate_metadata_suggestions_outfit_folders_url, params: {
+          outfit_folder: {
+            name: "Paris",
+            notes: "Gallery and dinner",
+            outfit_ids: []
+          }
+        }, headers: auth_headers(@user), as: :json
+      end
+    end
+
+    assert_response :success
+    assert_equal "Paris After Dark", response_json.fetch("name")
+    assert_equal [ @outfit.id ], response_json.fetch("outfit_ids")
+    assert_equal [ @outfit.id ], captured.fetch(:outfits).map(&:id)
+    assert_equal "Paris", captured.dig(:current_metadata, :name)
+    assert_equal "Gallery and dinner", captured.dig(:current_metadata, :notes)
+    assert_equal [], captured.dig(:current_metadata, :outfit_ids)
+  end
+
+  test "magazine suggestions reject another user's selected outfit" do
+    post generate_metadata_suggestions_outfit_folders_url, params: {
+      outfit_folder: {
+        name: "Private",
+        outfit_ids: [ @other_outfit.id ]
+      }
+    }, headers: auth_headers(@user), as: :json
+
+    assert_response :unprocessable_content
+    assert_equal "Magazine suggestions can only use your saved outfits.", response_json.fetch("error")
+  end
+
   test "user cannot access another user's folder" do
     folder = @other_user.outfit_folders.create!(name: "Private trip")
 
@@ -145,5 +190,20 @@ class OutfitFoldersFlowTest < ActionDispatch::IntegrationTest
 
     assert_response :no_content
     assert folder.reload.persisted?
+  end
+
+  private
+
+  def with_magazine_suggester_stub(result:, capture: nil)
+    original = OpenrouterMagazineSuggester.method(:call)
+
+    OpenrouterMagazineSuggester.singleton_class.send(:define_method, :call) do |outfits:, current_metadata: {}|
+      capture&.replace(outfits: outfits, current_metadata: current_metadata)
+      result
+    end
+
+    yield
+  ensure
+    OpenrouterMagazineSuggester.singleton_class.send(:define_method, :call, original)
   end
 end

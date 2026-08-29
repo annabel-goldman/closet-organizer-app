@@ -1,6 +1,8 @@
 class OutfitFoldersController < ApplicationController
   before_action :require_login
-  before_action :set_outfit_folder, only: %i[show update destroy]
+  before_action :set_outfit_folder,
+    only: %i[show update destroy generate_metadata_suggestions],
+    if: -> { params[:id].present? }
 
   def index
     folders = current_user.outfit_folders
@@ -21,6 +23,29 @@ class OutfitFoldersController < ApplicationController
     persist_folder(@outfit_folder)
   end
 
+  def generate_metadata_suggestions
+    suggestion_params = outfit_folder_suggestion_params
+    outfits = current_user.outfits.includes(outfit_items: :clothing_item).order(updated_at: :desc).to_a
+    if outfits.empty?
+      render json: { error: "Save at least one outfit before filling magazine details." }, status: :unprocessable_content
+      return
+    end
+
+    current_outfit_ids = suggestion_outfit_ids(suggestion_params)
+    return if performed?
+
+    render json: OpenrouterMagazineSuggester.call(
+      outfits: outfits,
+      current_metadata: {
+        name: suggestion_params[:name].presence || @outfit_folder&.name,
+        notes: suggestion_params.key?(:notes) ? suggestion_params[:notes] : @outfit_folder&.notes,
+        outfit_ids: current_outfit_ids
+      }
+    )
+  rescue StandardError => error
+    render json: { error: error.message }, status: :unprocessable_content
+  end
+
   def destroy
     @outfit_folder.destroy!
     head :no_content
@@ -34,6 +59,25 @@ class OutfitFoldersController < ApplicationController
 
   def outfit_folder_params
     params.require(:outfit_folder).permit(:name, :occasion, :notes, outfit_ids: [])
+  end
+
+  def outfit_folder_suggestion_params
+    params.fetch(:outfit_folder, ActionController::Parameters.new).permit(:name, :notes, outfit_ids: [])
+  end
+
+  def suggestion_outfit_ids(suggestion_params)
+    outfit_ids = if suggestion_params.key?(:outfit_ids)
+      Array(suggestion_params[:outfit_ids]).reject(&:blank?).map(&:to_i).uniq
+    else
+      @outfit_folder&.memberships&.sort_by { |membership| [ membership.position, membership.id ] }&.map(&:outfit_id) || []
+    end
+
+    if current_user.outfits.where(id: outfit_ids).count != outfit_ids.length
+      render json: { error: "Magazine suggestions can only use your saved outfits." }, status: :unprocessable_content
+      return []
+    end
+
+    outfit_ids
   end
 
   def persist_folder(folder, status: :ok)
