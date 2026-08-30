@@ -68,7 +68,7 @@ function itemMatchesSelectedBrand(item: ClothingItem, selectedBrand: string): bo
 }
 
 export function buildClothingItemSearchHaystack(item: ClothingItem): string {
-  return [item.name, item.category, item.brand, ...item.tags]
+  return [item.name, item.category, item.brand, item.style_notes, ...item.tags]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
@@ -189,6 +189,34 @@ export function matchesOutfitSearchQuery(outfit: Outfit, query: string): boolean
 
   const haystack = buildOutfitSearchHaystack(outfit);
   return normalizedQuery.split(/\s+/).every((term) => termMatchesInHaystack(term, haystack));
+}
+
+export function getOutfitSearchSuggestions(
+  outfits: Outfit[],
+  searchQuery: string,
+  options: { limit?: number } = {},
+): Outfit[] {
+  if (!searchQuery.trim()) return [];
+  return outfits
+    .filter((outfit) => matchesOutfitSearchQuery(outfit, searchQuery))
+    .slice(0, options.limit ?? 8);
+}
+
+export function formatOutfitSearchSuggestionDetail(outfit: Outfit, searchQuery = ""): string | null {
+  const queryTerms = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const matchingItemNames = outfit.items
+    .filter((item) => {
+      const itemHaystack = buildClothingItemSearchHaystack(item);
+      return queryTerms.some((term) => termMatchesInHaystack(term, itemHaystack));
+    })
+    .map((item) => item.name)
+    .slice(0, 2);
+  const parts = [
+    ...matchingItemNames,
+    ...(matchingItemNames.length === 0 ? (outfit.tags ?? []).slice(0, 2) : []),
+    `${outfit.items.length} ${outfit.items.length === 1 ? "piece" : "pieces"}`,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 export function sortClothingItems(items: ClothingItem[], sortOption: ClosetSortOption) {

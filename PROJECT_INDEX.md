@@ -71,6 +71,7 @@ project-closet-organizer/
 - `src/app/lib/usePageData.ts`: shared async page-loading hook
 - `src/app/components/MyOutfitsPage.tsx`: saved outfit gallery/editor with an `All outfits` / `My Magazines` switch, model viewing, draft metadata/model generation, and preview editing/deletion
 - `src/app/components/OutfitGalleryPreview.tsx`: fixed-frame, reduced-motion-aware crossfade between each gallery card's flat lay and modeled preview
+- `src/app/components/SearchSuggestionField.tsx` and `ClosetSearchField.tsx`: shared searchable combobox behavior, suggestion rendering, and keyboard navigation used by closet and outfit search
 - `src/app/components/outfits/useOutfitMagazines.ts`: magazine-library loading, outfit hydration, and deletion state for the `/outfits` collection view
 - `src/app/components/CreateItemPage.tsx`: manual item creation and progressive multi-photo item import, including per-source pre-detection focus/edit/replace/delete state and independent cancellable detection workflows aggregated into one review surface
 - `src/app/components/MagazineEditorPage.tsx`, `MagazineEditorForm.tsx`, and `src/app/components/magazines/`: route-level magazine create/edit loading plus metadata, searchable outfit selection, ordered membership, AI concept autofill, and the shared direct-manipulation page designer/renderer

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Unified outfit-gallery search with the closet's shared suggestion-field interaction, removing the duplicate native/custom clear controls and adding keyboard-navigable outfit suggestions, matching-piece context, and a live result count while preserving fuzzy metadata matching.
 - Turned the magazine editor into a visual page designer: modeled/flat-lay outfit imagery, titles, body copy, and reusable decorations can be selected and positioned directly on each page, with layout and image-mode choices persisted per page. The separate magazine reader is now a clean fullscreen presentation with animated page turns and an Edit action revealed only from the top-edge hover area.
 - Distinguished the outfit layers rail's adjacent add actions with a plus icon for closet pieces, a reusable sticker icon for decorations, and hover/focus tooltips explaining both controls.
 - Removed the redundant supporting sentence beneath the saved-outfit editor heading.

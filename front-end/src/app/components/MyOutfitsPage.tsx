@@ -5,7 +5,6 @@ import {
   LayoutGrid,
   Pencil,
   Plus,
-  Search,
   Sparkles,
   Trash2,
   Upload,
@@ -62,8 +61,13 @@ import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import { OutfitGalleryPreview } from "./OutfitGalleryPreview";
 import { MAX_OUTFIT_NAME, MAX_OUTFIT_NOTES } from "../lib/inputLengthPolicy";
 import { useOutfitMagazines } from "./outfits/useOutfitMagazines";
-import { matchesOutfitSearchQuery } from "../lib/closetFilters";
+import {
+  formatOutfitSearchSuggestionDetail,
+  getOutfitSearchSuggestions,
+  matchesOutfitSearchQuery,
+} from "../lib/closetFilters";
 import { navigateTo } from "../lib/routes";
+import { SearchSuggestionField } from "./SearchSuggestionField";
 
 interface MyOutfitsPageProps {
   isLoading: boolean;
@@ -169,6 +173,10 @@ export function MyOutfitsPage({
   );
   const filteredOutfits = useMemo(
     () => outfits.filter((outfit) => matchesOutfitSearchQuery(outfit, outfitSearchQuery)),
+    [outfitSearchQuery, outfits],
+  );
+  const outfitSearchSuggestions = useMemo(
+    () => getOutfitSearchSuggestions(outfits, outfitSearchQuery),
     [outfitSearchQuery, outfits],
   );
   const editingOutfit = editingOutfitId
@@ -696,33 +704,27 @@ export function MyOutfitsPage({
       ) : (
       <section className="space-y-4">
         {!isLoading && !loadErrorMessage && outfits.length > 0 ? (
-          <div className="relative max-w-xl">
+          <div className="max-w-xl">
             <label htmlFor="outfit-search" className="sr-only">
               Search outfits
             </label>
-            <Search
-              className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
+            <SearchSuggestionField
               id="outfit-search"
-              type="search"
               value={outfitSearchQuery}
-              onChange={(event) => setOutfitSearchQuery(event.target.value)}
+              onChange={setOutfitSearchQuery}
+              suggestions={outfitSearchSuggestions}
+              getSuggestionKey={(outfit) => outfit.id}
+              getSuggestionLabel={(outfit) => outfit.name}
+              getSuggestionDetail={(outfit) => formatOutfitSearchSuggestionDetail(outfit, outfitSearchQuery)}
+              onSelectSuggestion={(outfit) => setOutfitSearchQuery(outfit.name)}
+              onOpenSuggestion={startEditing}
               placeholder="Search outfits by name, tags, notes, or pieces"
-              className="h-12 rounded-none border-border bg-background pl-11 pr-11"
+              className="h-14 pl-10"
             />
-            {outfitSearchQuery ? (
-              <PrimitiveButton
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 h-10 w-10 -translate-y-1/2"
-                onClick={() => setOutfitSearchQuery("")}
-                aria-label="Clear outfit search"
-              >
-                <X className="h-4 w-4" />
-              </PrimitiveButton>
+            {outfitSearchQuery.trim() ? (
+              <PrimitiveText as="p" variant="caption" tone="muted" className="mt-2" aria-live="polite">
+                {filteredOutfits.length} of {outfits.length} {outfits.length === 1 ? "outfit" : "outfits"} match
+              </PrimitiveText>
             ) : null}
           </div>
         ) : null}

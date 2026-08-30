@@ -3,7 +3,9 @@ import test from "node:test";
 
 import type { ClothingItem, Outfit } from "../src/app/lib/closet.ts";
 import {
+  formatOutfitSearchSuggestionDetail,
   getClosetSearchSuggestions,
+  getOutfitSearchSuggestions,
   matchesOutfitSearchQuery,
   matchesSearchQuery,
   termMatchesInHaystack,
@@ -19,6 +21,7 @@ function makeItem(overrides: Partial<ClothingItem> & Pick<ClothingItem, "id" | "
     tags: overrides.tags ?? [],
     brand: overrides.brand ?? null,
     category: overrides.category ?? null,
+    style_notes: overrides.style_notes ?? null,
     created_at: overrides.created_at,
   };
 }
@@ -52,6 +55,30 @@ test("matchesOutfitSearchQuery includes outfit details and contained pieces", ()
 
   assert.equal(matchesOutfitSearchQuery(outfit, "museum denim"), true);
   assert.equal(matchesOutfitSearchQuery(outfit, "museum beach"), false);
+});
+
+test("outfit suggestions use the same matching behavior and explain matching pieces", () => {
+  const goldItem = makeItem({
+    id: 1,
+    name: "Metallic Camisole",
+    tags: ["party"],
+    style_notes: "Champagne gold sequins",
+  });
+  const outfits: Outfit[] = [{
+    id: 9,
+    user_id: 1,
+    name: "Night Out",
+    tags: ["evening"],
+    notes: "",
+    item_ids: [1],
+    items: [goldItem],
+  }];
+
+  assert.deepEqual(getOutfitSearchSuggestions(outfits, "gold"), outfits);
+  assert.equal(
+    formatOutfitSearchSuggestionDetail(outfits[0], "gold"),
+    "Metallic Camisole · 1 piece",
+  );
 });
 
 test("getClosetSearchSuggestions returns empty list for blank query", () => {

@@ -8,6 +8,11 @@ class TestResizeObserver implements ResizeObserver {
 
 globalThis.ResizeObserver = TestResizeObserver;
 
+Object.defineProperty(Element.prototype, "scrollIntoView", {
+  configurable: true,
+  value: () => undefined,
+});
+
 Object.defineProperty(URL, "createObjectURL", {
   configurable: true,
   value: () => "blob:test-image",
