@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 interface DecorationPickerPopoverProps {
   buttonClassName?: string;
   buttonLabel?: string;
+  buttonText?: string;
   onSelect: (decoration: Decoration) => void;
   side?: "bottom" | "left" | "right" | "top";
 }
@@ -18,6 +19,7 @@ interface DecorationPickerPopoverProps {
 export function DecorationPickerPopover({
   buttonClassName,
   buttonLabel = "Add decoration",
+  buttonText,
   onSelect,
   side = "bottom",
 }: DecorationPickerPopoverProps) {
@@ -55,8 +57,9 @@ export function DecorationPickerPopover({
       <Tooltip>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
-            <PrimitiveButton type="button" variant="outline" size="icon" className={buttonClassName} aria-label={buttonLabel}>
+            <PrimitiveButton type="button" variant="outline" size={buttonText ? "default" : "icon"} className={buttonClassName} aria-label={buttonLabel}>
               <Sticker />
+              {buttonText}
             </PrimitiveButton>
           </PopoverTrigger>
         </TooltipTrigger>

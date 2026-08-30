@@ -20,6 +20,7 @@ import {
   resolveEditableImageFetchUrl,
   saveModelReferences,
   updateModeledPreview,
+  updateOutfitFolder,
   updateOutfitFolderDecoration,
   updateDecoration,
   updateOutfitDecoration,
@@ -209,6 +210,9 @@ test("fetchOutfitFolder loads one independently routable magazine", async () => 
       outfit_ids: [],
       outfits: [],
       decorations: [],
+      page_layouts: {
+        cover: { title: { text: "Paris", x: 8, y: 36, width: 84 } },
+      },
     }), { status: 200, headers: { "Content-Type": "application/json" } });
   };
 
@@ -216,6 +220,56 @@ test("fetchOutfitFolder loads one independently routable magazine", async () => 
     const folder = await fetchOutfitFolder(8);
     assert.equal(requestedPath, "/api/outfit_folders/8");
     assert.equal(folder.name, "Paris Weekend");
+    assert.equal(folder.page_layouts.cover.title?.text, "Paris");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("updateOutfitFolder persists visual page layouts with the magazine draft", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedPath = "";
+  let requestInit: RequestInit | undefined;
+
+  globalThis.fetch = async (input, init) => {
+    requestedPath = String(input);
+    requestInit = init;
+    return new Response(JSON.stringify({
+      id: 8,
+      user_id: 1,
+      name: "Paris Weekend",
+      notes: "Three days",
+      outfit_ids: [19],
+      outfits: [],
+      decorations: [],
+      page_layouts: {
+        "outfit:19": { image_mode: "flatlay", image: { x: 24, y: 18, width: 60 } },
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    await updateOutfitFolder(8, {
+      name: "Paris Weekend",
+      notes: "Three days",
+      outfitIds: [19],
+      pageLayouts: {
+        "outfit:19": { image_mode: "flatlay", image: { x: 24, y: 18, width: 60 } },
+      },
+    });
+
+    assert.equal(requestedPath, "/api/outfit_folders/8");
+    assert.equal(requestInit?.method, "PATCH");
+    assert.deepEqual(JSON.parse(String(requestInit?.body)), {
+      outfit_folder: {
+        name: "Paris Weekend",
+        notes: "Three days",
+        page_layouts: {
+          "outfit:19": { image_mode: "flatlay", image: { x: 24, y: 18, width: 60 } },
+        },
+        outfit_ids: [19],
+      },
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }

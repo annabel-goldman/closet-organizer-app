@@ -25,19 +25,22 @@ describe("MagazineReaderPage", () => {
         items: [],
       }],
       decorations: [],
+      page_layouts: {},
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
 
     try {
       render(<MagazineReaderPage magazineId={8} />);
 
-      expect(await screen.findByRole("heading", { name: "Paris Weekend", level: 1 })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Paris Weekend", level: 2 })).toBeInTheDocument();
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(screen.getByText("Private Lookbook")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Edit magazine" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Decorate/ })).not.toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole("button", { name: "Next magazine page" }));
+      fireEvent.click(screen.getByRole("button", { name: "Next page" }));
       await waitFor(() => {
         expect(screen.getByText("Gallery Dinner Look")).toBeInTheDocument();
-        expect(screen.getByText("2 / 2")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Open page 2" })).toHaveAttribute("aria-current", "page");
       });
 
       fireEvent.keyDown(window, { key: "ArrowLeft" });

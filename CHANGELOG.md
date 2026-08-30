@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Turned the magazine editor into a visual page designer: modeled/flat-lay outfit imagery, titles, body copy, and reusable decorations can be selected and positioned directly on each page, with layout and image-mode choices persisted per page. The separate magazine reader is now a clean fullscreen presentation with animated page turns and an Edit action revealed only from the top-edge hover area.
 - Distinguished the outfit layers rail's adjacent add actions with a plus icon for closet pieces, a reusable sticker icon for decorations, and hover/focus tooltips explaining both controls.
 - Removed the redundant supporting sentence beneath the saved-outfit editor heading.
 - Unified outfit decorations with the flat-lay collage editor: decorations now appear in the layers rail, use the same direct drag/corner-resize/rotation handles as clothing pieces, and render from their measured visible PNG bounds instead of showing a padded miniature copy with separate controls.
@@ -9,7 +10,7 @@
 - Added a private `My Decorations` PNG library with progressive bulk upload, rename/delete controls, and the shared crop/rotate/magic-wand editor. Reusable decorations can now be placed, dragged, resized, rotated, and removed independently on saved outfit flat lays and magazine pages; flat-lay decorations also appear in gallery fallbacks and modeled-outfit composition snapshots.
 - Extended the Outfit Cart metadata fields and AI feedback message across the full usable width of the sidebar while preserving space for its header actions.
 - Removed the redundant supporting sentence from the model reference photos dialog.
-- Moved magazine creation and editing out of constrained dialogs into dedicated full-page workspaces. Opening a magazine now launches an independent immersive reader tab with animated book-like page turns, keyboard navigation, decoration controls, and flat-lay fallback pages when a modeled image is unavailable.
+- Moved magazine creation and editing out of constrained dialogs into dedicated full-page workspaces. Opening a magazine now launches an independent immersive reader tab with animated book-like page turns, keyboard navigation, and flat-lay fallback pages when a modeled image is unavailable.
 - Added fuzzy search to the outfits gallery across outfit names, tags, notes, and contained closet pieces, with clear and empty-result states.
 - Moved the `My Outfits` header action beside `Closet` so the app's two primary destinations stay grouped together.
 - Polished the outfits gallery's Flatlay/Model switch with a fixed-size overlapping crossfade, subtle scale/vertical easing, a stable toggle width, and a reduced-motion fallback.

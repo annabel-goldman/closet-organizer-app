@@ -17,6 +17,15 @@ class OutfitFoldersFlowTest < ActionDispatch::IntegrationTest
           name: "Paris Weekend",
           occasion: "Paris · September",
           notes: "Three days of walking and dinner reservations.",
+          page_layouts: {
+            "cover" => {
+              "title" => { "text" => "Paris After Dark", "x" => 8, "y" => 36, "width" => 84 }
+            },
+            "outfit:#{second_outfit.id}" => {
+              "image_mode" => "flatlay",
+              "image" => { "x" => 18, "y" => 20, "width" => 64 }
+            }
+          },
           outfit_ids: [ second_outfit.id, @outfit.id ]
         }
       }, headers: auth_headers(@user), as: :json
@@ -25,6 +34,8 @@ class OutfitFoldersFlowTest < ActionDispatch::IntegrationTest
     assert_response :created
     folder_id = response_json.fetch("id")
     assert_equal [ second_outfit.id, @outfit.id ], response_json.fetch("outfit_ids")
+    assert_equal "Paris After Dark", response_json.dig("page_layouts", "cover", "title", "text")
+    assert_equal "flatlay", response_json.dig("page_layouts", "outfit:#{second_outfit.id}", "image_mode")
     assert_equal [ "Dinner Look", @outfit.name ], response_json.fetch("outfits").map { |outfit| outfit.fetch("name") }
     assert_not response_json.key?("theme")
 
@@ -44,6 +55,7 @@ class OutfitFoldersFlowTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal [ @outfit.id, second_outfit.id ], response_json.fetch("outfit_ids")
+    assert_equal "Paris After Dark", response_json.dig("page_layouts", "cover", "title", "text")
 
     assert_no_difference("Outfit.count") do
       assert_difference("OutfitFolder.count", -1) do
@@ -65,6 +77,41 @@ class OutfitFoldersFlowTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :unprocessable_content
+  end
+
+  test "magazine page layouts reject unsupported image modes" do
+    assert_no_difference("OutfitFolder.count") do
+      post outfit_folders_url, params: {
+        outfit_folder: {
+          name: "Invalid layout",
+          page_layouts: {
+            "outfit:#{@outfit.id}" => { "image_mode" => "three_dimensional" }
+          },
+          outfit_ids: [ @outfit.id ]
+        }
+      }, headers: auth_headers(@user), as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_includes response_json.fetch("errors").join(" "), "invalid image mode"
+  end
+
+  test "removing an outfit from a magazine retires its saved page layout" do
+    folder = @user.outfit_folders.create!(
+      name: "Weekend",
+      page_layouts: {
+        "cover" => { "title" => { "x" => 8, "y" => 38, "width" => 84 } },
+        "outfit:#{@outfit.id}" => { "image_mode" => "modeled" }
+      }
+    )
+    folder.memberships.create!(outfit: @outfit, position: 0)
+
+    patch outfit_folder_url(folder), params: {
+      outfit_folder: { name: folder.name, outfit_ids: [] }
+    }, headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal [ "cover" ], response_json.fetch("page_layouts").keys
   end
 
   test "suggests an editable magazine concept and owned outfit selection without saving" do

@@ -54,10 +54,11 @@ export function MagazineEditorPage({ magazineId }: MagazineEditorPageProps) {
     try {
       if (magazineId) {
         await updateOutfitFolder(magazineId, draft);
+        navigateTo("/outfits?view=magazines");
       } else {
-        await createOutfitFolder(draft);
+        const createdFolder = await createOutfitFolder(draft);
+        navigateTo(`/magazines/${createdFolder.id}/edit`);
       }
-      navigateTo("/outfits?view=magazines");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to save this magazine.");
     } finally {
@@ -98,6 +99,7 @@ export function MagazineEditorPage({ magazineId }: MagazineEditorPageProps) {
         isSaving={isSaving}
         outfits={outfits}
         onCancel={() => navigateTo("/outfits?view=magazines")}
+        onError={setErrorMessage}
         onSave={(draft) => void handleSave(draft)}
       />
     </>

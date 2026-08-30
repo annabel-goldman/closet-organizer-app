@@ -1,6 +1,6 @@
 # Project Structure Index
 
-Last updated: 2026-08-29
+Last updated: 2026-08-30
 
 This file is intentionally concise and focused on repository structure.
 For the product purpose and problem statement, see `wiki.md`.
@@ -26,7 +26,7 @@ project-closet-organizer/
 
 ## Backend (`back-end`)
 
-- `app/models`: `user`, ordered private `model_reference_image` records, `clothing_item`, `outfit`, `outfit_item`, reusable private `decoration` assets with outfit/magazine placements, user-owned outfit folders with ordered memberships, generated-outfit feedback logs, `outfit_upload`, `outfit_detection`, and staged `ai_workflow`/`ai_workflow_stage`/`ai_artifact` records
+- `app/models`: `user`, ordered private `model_reference_image` records, `clothing_item`, `outfit`, `outfit_item`, reusable private `decoration` assets with outfit/magazine placements, user-owned outfit folders with ordered memberships and per-page visual layouts, generated-outfit feedback logs, `outfit_upload`, `outfit_detection`, and staged `ai_workflow`/`ai_workflow_stage`/`ai_artifact` records
 - `app/controllers`: auth/session handling, JSON CRUD controllers, authenticated private model-reference and decoration-library management, outfit collage/layout-aware outfit updates and decoration placements, outfit-folder and magazine-decoration persistence, upload flows, AI readiness/workflow/model-preview endpoints, and SPA fallback
 - `app/jobs`: asynchronous outfit-upload analysis, saved-item image cleaning, AI outfit creation, and staged modeled item/full-outfit image generation jobs, with shared cancellation and failure helpers in `ApplicationJob`
 - `app/presenters`: API payload shaping for users, clothing items, outfits, uploads, and detections, including saved outfit collage layout data, modeled workflow state, and optional AI generation metadata
@@ -73,8 +73,9 @@ project-closet-organizer/
 - `src/app/components/OutfitGalleryPreview.tsx`: fixed-frame, reduced-motion-aware crossfade between each gallery card's flat lay and modeled preview
 - `src/app/components/outfits/useOutfitMagazines.ts`: magazine-library loading, outfit hydration, and deletion state for the `/outfits` collection view
 - `src/app/components/CreateItemPage.tsx`: manual item creation and progressive multi-photo item import, including per-source pre-detection focus/edit/replace/delete state and independent cancellable detection workflows aggregated into one review surface
-- `src/app/components/MagazineEditorPage.tsx` and `MagazineEditorForm.tsx`: route-level full-page magazine create/edit loading plus metadata, searchable modeled/flat-lay outfit selection, ordered membership, and editable AI concept/outfit autofill
-- `src/app/components/MagazineReaderPage.tsx`: independently routable immersive cover-and-look book reader with modeled/flat-lay pages, animated turns, and movable, resizable, rotatable page clip art
+- `src/app/components/MagazineEditorPage.tsx`, `MagazineEditorForm.tsx`, and `src/app/components/magazines/`: route-level magazine create/edit loading plus metadata, searchable outfit selection, ordered membership, AI concept autofill, and the shared direct-manipulation page designer/renderer
+- `src/app/components/MagazineReaderPage.tsx`: independently routable fullscreen cover-and-look reader with saved modeled/flat-lay page layouts, animated turns, and a top-edge return-to-editor action
+- `src/app/lib/magazineLayout.ts`: normalized per-page image-mode, text, and percentage-position defaults shared by magazine authoring and reading
 - `src/app/lib/useOutfitDraftState.ts`: persisted outfit draft state management
 - `tests/`: Node contract tests plus Vitest/jsdom component and hook regression tests
 - `src/styles/`: fonts, theme, and global styling

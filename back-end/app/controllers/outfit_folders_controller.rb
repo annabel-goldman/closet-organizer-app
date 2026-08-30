@@ -61,7 +61,7 @@ class OutfitFoldersController < ApplicationController
   end
 
   def outfit_folder_params
-    params.require(:outfit_folder).permit(:name, :occasion, :notes, outfit_ids: [])
+    params.require(:outfit_folder).permit(:name, :occasion, :notes, outfit_ids: [], page_layouts: {})
   end
 
   def outfit_folder_suggestion_params
@@ -84,7 +84,7 @@ class OutfitFoldersController < ApplicationController
   end
 
   def persist_folder(folder, status: :ok)
-    folder.assign_attributes(outfit_folder_params.slice(:name, :occasion, :notes))
+    folder.assign_attributes(outfit_folder_params.slice(:name, :occasion, :notes, :page_layouts))
     outfit_ids = requested_outfit_ids
     validate_owned_outfits(folder, outfit_ids) if outfit_ids
 
@@ -123,5 +123,6 @@ class OutfitFoldersController < ApplicationController
 
     allowed_page_keys = [ "cover", *outfit_ids.map { |outfit_id| "outfit:#{outfit_id}" } ]
     folder.decorations.where.not(page_key: allowed_page_keys).destroy_all
+    folder.update!(page_layouts: folder.page_layouts.slice(*allowed_page_keys))
   end
 end

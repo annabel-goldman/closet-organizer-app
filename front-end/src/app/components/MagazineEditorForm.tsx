@@ -7,6 +7,7 @@ import {
   type OutfitFolder,
 } from "../lib/closet";
 import { matchesOutfitSearchQuery } from "../lib/closetFilters";
+import type { MagazinePageLayouts } from "../lib/magazineLayout";
 import { resolveModeledWorkflowImageUrl } from "../lib/modeledPreview";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import { OutfitCollageCanvas } from "./OutfitCollageCanvas";
@@ -14,17 +15,20 @@ import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
+import { MagazinePageDesigner } from "./magazines/MagazinePageDesigner";
 
 export interface MagazineDraft {
   name: string;
   notes: string;
   outfitIds: number[];
+  pageLayouts: MagazinePageLayouts;
 }
 
 interface MagazineEditorFormProps {
   folder?: OutfitFolder | null;
   isSaving: boolean;
   onCancel: () => void;
+  onError?: (message: string) => void;
   onSave: (draft: MagazineDraft) => void;
   outfits: Outfit[];
 }
@@ -39,10 +43,12 @@ function initialDraft(folder?: OutfitFolder | null): MagazineDraft {
     name: folder.name,
     notes: folder.notes ?? "",
     outfitIds: folder.outfit_ids,
+    pageLayouts: folder.page_layouts ?? {},
   } : {
     name: "",
     notes: "",
     outfitIds: [],
+    pageLayouts: {},
   };
 }
 
@@ -50,6 +56,7 @@ export function MagazineEditorForm({
   folder,
   isSaving,
   onCancel,
+  onError = () => undefined,
   onSave,
   outfits,
 }: MagazineEditorFormProps) {
@@ -300,6 +307,24 @@ export function MagazineEditorForm({
             ) : null}
           </div>
         </div>
+
+        {folder ? (
+          <MagazinePageDesigner
+            folder={folder}
+            magazineName={draft.name}
+            magazineNotes={draft.notes}
+            onError={onError}
+            onPageLayoutsChange={(pageLayouts) => setDraft((current) => ({ ...current, pageLayouts }))}
+            outfits={selectedOutfits}
+            pageLayouts={draft.pageLayouts}
+          />
+        ) : (
+          <div className="border border-dashed border-border px-5 py-6 text-center">
+            <PrimitiveText as="p" variant="bodySm" tone="muted">
+              Create the magazine to unlock the visual page designer. You will stay in the editor after it is created.
+            </PrimitiveText>
+          </div>
+        )}
 
         <div className="sticky bottom-0 z-20 flex flex-wrap justify-end gap-3 border-t border-border bg-background/95 py-4 backdrop-blur">
           <PrimitiveButton type="button" variant="outline" onClick={onCancel}>Cancel</PrimitiveButton>

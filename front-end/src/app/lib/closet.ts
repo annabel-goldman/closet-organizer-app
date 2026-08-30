@@ -3,6 +3,7 @@ import { API_BASE_URL, BACKEND_BASE_URL } from "./apiConfig.ts";
 import { normalizeAttachmentUrl } from "./imageSources.ts";
 import { normalizeAiWorkflowPayload } from "./api/workflows.ts";
 import type { OutfitCollageLayout } from "./outfitCollage.ts";
+import { normalizeMagazinePageLayouts, type MagazinePageLayouts } from "./magazineLayout.ts";
 import type { AiWorkflow } from "./types/ai.ts";
 import { normalizeCategory } from "./wardrobeTaxonomy.ts";
 
@@ -205,6 +206,7 @@ export interface OutfitFolder {
   name: string;
   occasion?: string | null;
   notes?: string | null;
+  page_layouts: MagazinePageLayouts;
   outfit_ids: number[];
   outfits: Outfit[];
   decorations: OutfitFolderDecoration[];
@@ -783,6 +785,7 @@ interface SaveOutfitFolderInput {
   occasion?: string;
   notes?: string;
   outfitIds: number[];
+  pageLayouts?: MagazinePageLayouts;
 }
 
 function outfitFolderPayload(input: SaveOutfitFolderInput) {
@@ -791,6 +794,7 @@ function outfitFolderPayload(input: SaveOutfitFolderInput) {
       name: input.name,
       occasion: input.occasion,
       notes: input.notes,
+      page_layouts: input.pageLayouts,
       outfit_ids: input.outfitIds,
     },
   };
@@ -1218,6 +1222,7 @@ function normalizeOutfitFolderDecorationPayload(
 function normalizeOutfitFolderPayload(folder: OutfitFolder): OutfitFolder {
   return {
     ...folder,
+    page_layouts: normalizeMagazinePageLayouts(folder.page_layouts),
     outfit_ids: Array.isArray(folder.outfit_ids) ? folder.outfit_ids : [],
     outfits: (folder.outfits ?? []).map(normalizeOutfitPayload),
     decorations: (folder.decorations ?? []).map(normalizeOutfitFolderDecorationPayload),

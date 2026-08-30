@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MagazineEditorForm } from "../../src/app/components/MagazineEditorForm";
-import type { Outfit } from "../../src/app/lib/closet";
+import type { Outfit, OutfitFolder } from "../../src/app/lib/closet";
 
 afterEach(cleanup);
 
@@ -29,6 +29,7 @@ describe("MagazineEditorForm", () => {
       name: "Paris weekend",
       notes: "",
       outfitIds: [],
+      pageLayouts: {},
     });
   });
 
@@ -153,5 +154,77 @@ describe("MagazineEditorForm", () => {
 
     expect(screen.queryByText("Night Gallery")).not.toBeInTheDocument();
     expect(screen.getByText("Denim Weekend")).toBeInTheDocument();
+  });
+
+  it("designs saved magazine pages with editable text and per-page image modes", () => {
+    const onSave = vi.fn();
+    const outfit: Outfit = {
+      id: 19,
+      user_id: 1,
+      name: "Gallery Dinner Look",
+      tags: ["gallery"],
+      notes: "Polished layers",
+      item_ids: [],
+      items: [],
+      modeled_workflow: {
+        id: 4,
+        kind: "modeled_outfit",
+        status: "succeeded",
+        completed_count: 1,
+        failed_count: 0,
+        stages: [{
+          key: "modeled",
+          status: "approved",
+          artifacts: [{
+            id: 5,
+            kind: "modeled_outfit_image",
+            status: "approved",
+            file_url: "/modeled/gallery.png",
+          }],
+        }],
+      },
+    };
+    const folder: OutfitFolder = {
+      id: 8,
+      user_id: 1,
+      name: "Paris Weekend",
+      notes: "Three polished days",
+      outfit_ids: [19],
+      outfits: [outfit],
+      decorations: [],
+      page_layouts: {},
+    };
+
+    render(
+      <MagazineEditorForm
+        folder={folder}
+        isSaving={false}
+        onCancel={() => undefined}
+        onSave={onSave}
+        outfits={[outfit]}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Decorate this magazine page" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Page 2.*Gallery Dinner Look/ }));
+    expect(screen.getByRole("button", { name: "Model" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Flat lay" }));
+
+    const pageTitle = screen.getByRole("heading", { name: "Gallery Dinner Look", level: 2 });
+    fireEvent.pointerDown(pageTitle, { clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(window);
+    fireEvent.change(screen.getByLabelText("Magazine page title"), {
+      target: { value: "Left Bank Dinner" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save magazine" }));
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      pageLayouts: expect.objectContaining({
+        "outfit:19": expect.objectContaining({
+          image_mode: "flatlay",
+          title: expect.objectContaining({ text: "Left Bank Dinner" }),
+        }),
+      }),
+    }));
   });
 });
