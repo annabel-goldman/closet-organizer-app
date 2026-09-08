@@ -1,51 +1,50 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MyDecorationsPage } from "../../src/app/components/MyDecorationsPage";
+import * as closet from "../../src/app/lib/closet";
+
+const decoration: closet.Decoration = {
+  id: 7,
+  user_id: 1,
+  name: "Pink hearts",
+  image_url: "/decorations/pink-hearts.png",
+  created_at: "2026-09-05T00:00:00Z",
+  updated_at: "2026-09-05T00:00:00Z",
+};
 
 afterEach(cleanup);
 
 describe("MyDecorationsPage", () => {
-  it("bulk uploads PNG files and shows each completed decoration", async () => {
-    const originalFetch = globalThis.fetch;
-    let nextId = 1;
-    globalThis.fetch = vi.fn(async (_input, init) => {
-      if (!init?.method) {
-        return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
-      }
-      const formData = init.body as FormData;
-      const file = formData.get("decoration[image]") as File;
-      const id = nextId++;
-      return new Response(JSON.stringify({
-        id,
-        user_id: 1,
-        name: file.name.replace(".png", ""),
-        image_url: `/decorations/${id}.png`,
-      }), { status: 201, headers: { "Content-Type": "application/json" } });
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(closet, "fetchDecorations").mockResolvedValue([decoration]);
+  });
+
+  it("uses the dense shared card treatment and saves title edits inline", async () => {
+    const updateDecoration = vi.spyOn(closet, "updateDecoration").mockResolvedValue({
+      ...decoration,
+      name: "Floating hearts",
     });
 
-    try {
-      const { container } = render(<MyDecorationsPage />);
-      await screen.findByText("Add your first PNG decorations");
-      const input = container.querySelector<HTMLInputElement>('input[type="file"]');
-      expect(input).not.toBeNull();
+    render(<MyDecorationsPage />);
 
-      fireEvent.change(input!, {
-        target: {
-          files: [
-            new File(["one"], "gold-star.png", { type: "image/png" }),
-            new File(["two"], "pink-heart.png", { type: "image/png" }),
-          ],
-        },
-      });
+    const image = await screen.findByAltText("Pink hearts");
+    const media = image.parentElement;
+    const card = screen.getByRole("article");
+    const titleInput = screen.getByRole("textbox", { name: "Name for Pink hearts" });
 
-      await waitFor(() => {
-        expect(screen.getByDisplayValue("gold-star")).toBeInTheDocument();
-        expect(screen.getByDisplayValue("pink-heart")).toBeInTheDocument();
-      });
-      expect(globalThis.fetch).toHaveBeenCalledTimes(3);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    expect(media).toHaveClass("bg-white");
+    expect(media?.className).not.toContain("linear-gradient(45deg");
+    expect(card.parentElement).toHaveClass("xl:grid-cols-6");
+    expect(screen.getByRole("button", { name: "Edit Pink hearts" }).parentElement)
+      .toHaveClass("opacity-0", "group-hover:opacity-100");
+
+    fireEvent.change(titleInput, { target: { value: "Floating hearts" } });
+    fireEvent.blur(titleInput);
+
+    await waitFor(() => {
+      expect(updateDecoration).toHaveBeenCalledWith(7, { name: "Floating hearts" });
+    });
   });
 });

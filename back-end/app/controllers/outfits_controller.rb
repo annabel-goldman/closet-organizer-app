@@ -6,7 +6,6 @@ class OutfitsController < ApplicationController
 
   def index
     outfits = current_user.outfits.includes(
-      :outfit_generation_run,
       :ai_workflows,
       outfit_items: :clothing_item,
       outfit_decorations: { decoration: { image_attachment: :blob } }
@@ -21,41 +20,6 @@ class OutfitsController < ApplicationController
   def create
     outfit = current_user.outfits.new
     persist_outfit(outfit, status: :created)
-  end
-
-  def generate
-    items = current_user
-      .clothing_items
-      .with_attached_photo
-      .with_attached_cleaned_photo
-      .to_a
-      .shuffle
-    if items.empty?
-      render json: { error: "Add closet items before generating an outfit." }, status: :unprocessable_content
-      return
-    end
-
-    workflow = current_user.ai_workflows.create!(
-      kind: "outfit_generation",
-      requested_count: 1,
-      provider: "openrouter",
-      model: ENV.fetch("OPENROUTER_MODEL", "openai/gpt-4.1-mini"),
-      prompt_version: OpenrouterOutfitGenerator::GENERATOR_VERSION,
-      metadata: {
-        source: "outfits-page",
-        occasion: params[:occasion].to_s.strip.presence,
-        item_ids: items.map(&:id)
-      }
-    )
-    workflow.input_file.attach(params[:reference_photo]) if params[:reference_photo].present?
-    workflow.initialize_stages!
-    OutfitGenerationJob.perform_later(workflow.id)
-
-    render json: payloads.ai_workflow(workflow), status: :accepted
-  rescue ActiveRecord::RecordInvalid => error
-    render_validation_errors(error.record)
-  rescue StandardError => error
-    render json: { error: error.message }, status: :unprocessable_content
   end
 
   def update
@@ -80,7 +44,6 @@ class OutfitsController < ApplicationController
   end
 
   def destroy
-    @outfit.outfit_generation_run&.record_deleted!
     @outfit.destroy
     head :no_content
   end
@@ -89,7 +52,6 @@ class OutfitsController < ApplicationController
 
   def set_outfit
     @outfit = current_user.outfits.includes(
-      :outfit_generation_run,
       :ai_workflows,
       outfit_items: :clothing_item,
       outfit_decorations: { decoration: { image_attachment: :blob } }
@@ -100,6 +62,7 @@ class OutfitsController < ApplicationController
     params.require(:outfit).permit(
       :name,
       :notes,
+      :recommendation_option_id,
       tags: [],
       item_ids: [],
       item_layouts: %i[item_id x y width height rotation layer_order]
@@ -136,24 +99,58 @@ class OutfitsController < ApplicationController
   end
 
   def persist_outfit(outfit, status: :ok)
+    previous_item_ids = outfit.persisted? ? outfit.clothing_item_ids : []
+    existing_option = outfit.outfit_recommendation_option
     outfit.assign_attributes(outfit_attributes)
     assign_items(outfit)
     assign_item_layouts(outfit)
 
     if outfit.errors.empty? && outfit.save
-      record_generation_save_event(outfit) if outfit.persisted?
+      record_recommendation_learning!(
+        outfit,
+        existing_option: existing_option,
+        previous_item_ids: previous_item_ids
+      )
       render json: payloads.outfit(outfit), status: status
     else
       render_validation_errors(outfit)
     end
   end
 
-  def record_generation_save_event(outfit)
-    run = outfit.outfit_generation_run
-    return unless run
+  def record_recommendation_learning!(outfit, existing_option:, previous_item_ids:)
+    option = existing_option || recommendation_option_from_params
+    return unless option
 
-    ordered_item_ids = outfit.outfit_items.sort_by { |outfit_item| [ outfit_item.layer_order, outfit_item.id ] }.map(&:clothing_item_id)
-    run.record_save_event!(final_item_ids: ordered_item_ids)
+    events = []
+    if existing_option.nil?
+      option.update!(outfit: outfit)
+      events << { event_type: "save", outfit_recommendation_option: option }
+    else
+      added_ids = outfit.clothing_item_ids - previous_item_ids
+      removed_ids = previous_item_ids - outfit.clothing_item_ids
+      added_ids.each { |id| events << { event_type: "add_after_save", clothing_item_id: id } }
+      removed_ids.each { |id| events << { event_type: "remove_after_save", clothing_item_id: id } }
+    end
+    return if events.empty?
+
+    events.each do |attributes|
+      current_user.outfit_recommendation_feedback_events.create!(
+        attributes.merge(
+          outfit_recommendation_run: option.outfit_recommendation_run,
+          outfit_recommendation_option: attributes[:outfit_recommendation_option] || option
+        )
+      )
+    end
+    OutfitPreferenceProfileBuilder.call(current_user, refresh: true)
+  end
+
+  def recommendation_option_from_params
+    option_id = outfit_params[:recommendation_option_id]
+    return if option_id.blank?
+
+    OutfitRecommendationOption.joins(:outfit_recommendation_run)
+      .where(outfit_recommendation_runs: { user_id: current_user.id })
+      .find(option_id)
   end
 
   def assign_items(outfit)

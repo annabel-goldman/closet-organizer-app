@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Moveable, {
   type OnDrag,
   type OnDragEnd,
@@ -79,6 +79,7 @@ export function OutfitCollageCanvas({
   const stageRef = useRef<HTMLDivElement | null>(null);
   const decorationFrameRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const itemFrameRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const itemMediaBoxRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const transientRotationBySelection = useRef<Record<string, number>>({});
   const activeRotationGestureRef = useRef<ActiveRotationGesture | null>(null);
   const [decorationMeasurementById, setDecorationMeasurementById] = useState<Record<number, ImageMeasurementState>>({});
@@ -126,6 +127,10 @@ export function OutfitCollageCanvas({
     ),
   );
   const displayLayouts = resolvedLayouts;
+  const topVisibleItemLayer = visibleItems.reduce(
+    (highestLayer, item) => Math.max(highestLayer, (displayLayouts[item.id] ?? resolvedLayouts[item.id]).layer_order),
+    -1,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -229,6 +234,28 @@ export function OutfitCollageCanvas({
     target.style.transform = `rotate(${layout.rotation}deg)`;
   }
 
+  const itemAspectRatio = useCallback((itemId: number) => {
+    const item = visibleItems.find((entry) => entry.id === itemId);
+    const measurement = imageMeasurementByItemId[itemId];
+    return (
+      (measurement?.sourceKey === item?.image_url && measurement.status === "ready"
+        ? measurement.bounds?.aspectRatio
+        : undefined)
+      ?? imageAspectRatioByItemId[itemId]
+    );
+  }, [imageAspectRatioByItemId, imageMeasurementByItemId, visibleItems]);
+
+  const syncItemMediaBox = useCallback((itemId: number, layout: OutfitCollageLayout) => {
+    const target = itemMediaBoxRefs.current[itemId];
+    if (!target) return;
+
+    const box = resolveOutfitCollageMediaBox(layout, itemAspectRatio(itemId));
+    target.style.height = `${box.height}%`;
+    target.style.left = `${box.left}%`;
+    target.style.top = `${box.top}%`;
+    target.style.width = `${box.width}%`;
+  }, [itemAspectRatio]);
+
   function syncDecorationFrameToPercentLayout(decoration: OutfitDecoration) {
     const target = decorationFrameRefs.current[decoration.id];
     if (!target) return;
@@ -267,6 +294,7 @@ export function OutfitCollageCanvas({
       }
 
       syncFrameToPercentLayout(item.id, layout);
+      syncItemMediaBox(item.id, layout);
     });
     decorations.forEach((decoration) => {
       const target = decorationFrameRefs.current[decoration.id];
@@ -281,7 +309,7 @@ export function OutfitCollageCanvas({
       target.style.transform = `rotate(${decoration.rotation}deg)`;
     });
     moveableRef.current?.updateRect();
-  }, [decorationAspectRatioById, decorations, decorationMeasurementById, displayLayouts, resolvedLayouts, selectedDecorationId, selectedItemId, selectedResizeReady, visibleItems]);
+  }, [decorationAspectRatioById, decorations, decorationMeasurementById, displayLayouts, resolvedLayouts, selectedDecorationId, selectedItemId, selectedResizeReady, syncItemMediaBox, visibleItems]);
 
   function updateItemLayout(itemId: number, nextPartial: Partial<OutfitCollageLayout>) {
     if (!onLayoutsChange) {
@@ -308,10 +336,24 @@ export function OutfitCollageCanvas({
 
   function handleResize(event: OnResize) {
     if (!selection) return;
+    const nextWidth = Math.max(event.width, 1);
+    const nextHeight = Math.max(event.height, 1);
     event.target.style.left = `${event.drag.left}px`;
     event.target.style.top = `${event.drag.top}px`;
-    event.target.style.width = `${Math.max(event.width, 1)}px`;
-    event.target.style.height = `${Math.max(event.height, 1)}px`;
+    event.target.style.width = `${nextWidth}px`;
+    event.target.style.height = `${nextHeight}px`;
+
+    if (selection.kind === "item") {
+      const stageBounds = stageRef.current?.getBoundingClientRect();
+      const layout = displayLayouts[selection.id] ?? resolvedLayouts[selection.id];
+      if (!stageBounds || !layout) return;
+
+      syncItemMediaBox(selection.id, {
+        ...layout,
+        width: pixelsToPercent(nextWidth, stageBounds.width),
+        height: pixelsToPercent(nextHeight, stageBounds.height),
+      });
+    }
   }
 
   function beginRotation(activeSelection: CollageSelection, clientX: number, clientY: number) {
@@ -342,12 +384,8 @@ export function OutfitCollageCanvas({
       event.setRatio(resolveDecorationAspectRatio(decoration, decorationMeasurementById, decorationAspectRatioById));
     } else {
       const selectedLayout = displayLayouts[selection.id] ?? resolvedLayouts[selection.id];
-      const measurement = imageMeasurementByItemId[selection.id];
       event.setRatio(resolveOutfitCollageResizeAspectRatio({
-        contentBoundsAspectRatio: measurement?.status === "ready"
-          ? measurement.bounds?.aspectRatio
-          : undefined,
-        intrinsicAspectRatio: imageAspectRatioByItemId[selection.id],
+        contentBoundsAspectRatio: itemAspectRatio(selection.id),
         layout: selectedLayout,
       }));
     }
@@ -442,6 +480,7 @@ export function OutfitCollageCanvas({
     });
 
     syncFrameToPercentLayout(itemId, nextLayout);
+    syncItemMediaBox(itemId, nextLayout);
     updateItemLayout(itemId, nextLayout);
   }
 
@@ -518,7 +557,7 @@ export function OutfitCollageCanvas({
     <div
       ref={stageRef}
       data-outfit-collage-stage="true"
-      className={`relative overflow-hidden bg-white ${editable ? "touch-none" : ""} ${className}`.trim()}
+      className={`relative isolate overflow-hidden bg-white ${editable ? "touch-none" : ""} ${className}`.trim()}
       style={{
         aspectRatio: String(COLLAGE_STAGE_ASPECT_RATIO),
         ...(editable ? ({ "--moveable-color": "#111111" } as CSSProperties) : {}),
@@ -581,6 +620,10 @@ export function OutfitCollageCanvas({
             <div className="relative h-full w-full overflow-hidden bg-transparent">
               {item.image_url ? (
                 <div
+                  ref={(node) => {
+                    itemMediaBoxRefs.current[item.id] = node;
+                  }}
+                  data-collage-media-box="true"
                   className="pointer-events-none absolute overflow-hidden"
                   style={mediaBoxStyle(mediaBox)}
                 >
@@ -649,7 +692,7 @@ export function OutfitCollageCanvas({
               height: `${decorationHeightPercent(decoration.width, aspectRatio)}%`,
               transform: `rotate(${decoration.rotation}deg)`,
               transformOrigin: "center center",
-              zIndex: 60 + decoration.layer_order,
+              zIndex: topVisibleItemLayer + decoration.layer_order + 2,
             }}
             onPointerDown={(event) => {
               if (!editable) return;

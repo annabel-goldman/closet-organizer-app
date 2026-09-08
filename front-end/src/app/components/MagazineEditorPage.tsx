@@ -54,7 +54,7 @@ export function MagazineEditorPage({ magazineId }: MagazineEditorPageProps) {
     try {
       if (magazineId) {
         await updateOutfitFolder(magazineId, draft);
-        navigateTo("/outfits?view=magazines");
+        navigateTo("/magazines");
       } else {
         const createdFolder = await createOutfitFolder(draft);
         navigateTo(`/magazines/${createdFolder.id}/edit`);
@@ -79,7 +79,7 @@ export function MagazineEditorPage({ magazineId }: MagazineEditorPageProps) {
       <div className="mx-auto max-w-3xl px-6 py-20 text-center">
         <PrimitiveText as="h1" variant="display" font="serif">Magazine unavailable</PrimitiveText>
         <PrimitiveText as="p" tone="muted" className="mt-3">{errorMessage}</PrimitiveText>
-        <PrimitiveButton type="button" variant="outline" className="mt-6" onClick={() => navigateTo("/outfits?view=magazines")}>
+        <PrimitiveButton type="button" variant="outline" className="mt-6" onClick={() => navigateTo("/magazines")}>
           Back to magazines
         </PrimitiveButton>
       </div>
@@ -98,7 +98,7 @@ export function MagazineEditorPage({ magazineId }: MagazineEditorPageProps) {
         folder={folder}
         isSaving={isSaving}
         outfits={outfits}
-        onCancel={() => navigateTo("/outfits?view=magazines")}
+        onCancel={() => navigateTo("/magazines")}
         onError={setErrorMessage}
         onSave={(draft) => void handleSave(draft)}
       />

@@ -268,7 +268,7 @@ export function ItemMetadataFields({
           Type
         </PrimitiveText>
         <PrimitiveSelect
-          value={values.category || undefined}
+          value={values.category}
           onValueChange={(value) => updateField("category", value)}
         >
           <PrimitiveSelectTrigger

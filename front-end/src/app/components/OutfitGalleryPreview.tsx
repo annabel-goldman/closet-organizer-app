@@ -5,15 +5,18 @@ import type { Outfit } from "../lib/closet";
 import { resolveOutfitGalleryModelPreview } from "../lib/modeledPreview";
 import { OutfitCollageCanvas } from "./OutfitCollageCanvas";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import { CollectionImage } from "./shared/CollectionCard";
+import { cn } from "./ui/utils";
 
 export type OutfitGalleryPreviewView = "flatlay" | "modeled";
 
 interface OutfitGalleryPreviewProps {
+  className?: string;
   outfit: Outfit;
   view: OutfitGalleryPreviewView;
 }
 
-export function OutfitGalleryPreview({ outfit, view }: OutfitGalleryPreviewProps) {
+export function OutfitGalleryPreview({ className, outfit, view }: OutfitGalleryPreviewProps) {
   const prefersReducedMotion = useReducedMotion();
   const modeledPreview = resolveOutfitGalleryModelPreview(outfit.modeled_workflow);
   const motionState = prefersReducedMotion
@@ -22,7 +25,7 @@ export function OutfitGalleryPreview({ outfit, view }: OutfitGalleryPreviewProps
 
   return (
     <div
-      className="relative mx-auto aspect-[4/5] w-full max-w-[15.5rem] overflow-hidden bg-white"
+      className={cn("relative mx-auto aspect-[4/5] w-full max-w-[15.5rem] overflow-hidden bg-white", className)}
       role="region"
       aria-label={`${outfit.name} ${view === "modeled" ? "modeled" : "flat lay"} preview`}
     >
@@ -39,10 +42,10 @@ export function OutfitGalleryPreview({ outfit, view }: OutfitGalleryPreviewProps
         >
           {view === "modeled" ? (
             modeledPreview.kind === "image" ? (
-              <img
+              <CollectionImage
                 src={modeledPreview.imageUrl}
                 alt={`Modeled version of ${outfit.name}`}
-                className="h-full w-full object-contain"
+                fit="contain"
               />
             ) : (
               <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden border border-border/70 bg-stone-100 px-6 text-center">
@@ -60,7 +63,6 @@ export function OutfitGalleryPreview({ outfit, view }: OutfitGalleryPreviewProps
             <OutfitCollageCanvas
               decorations={outfit.decorations}
               items={outfit.items}
-              maxVisibleItems={6}
               className="h-full w-full"
             />
           )}

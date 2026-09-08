@@ -3,6 +3,7 @@ import { ArrowLeft, RotateCcw, RotateCw, Save, Sparkles, Trash2, Upload } from "
 import {
   buildItemPreviewMetadata,
   createCleanPreviewFile,
+  createTransparentPreviewFile,
   ClothingItem,
   ClothingItemFormValues,
   deleteModeledPreview,
@@ -123,7 +124,8 @@ export function ItemDetailPage({
     setModeledWorkflow(null);
     photoState.reset();
     originalUploadedPhotoRef.current = null;
-    setSelectedImageKind("base");
+    const activeKind = item.image_versions?.find((version) => version.selected)?.kind;
+    setSelectedImageKind(activeKind === "original" || !activeKind ? "base" : activeKind);
   }, [item]);
 
   useEffect(() => {
@@ -224,7 +226,9 @@ export function ItemDetailPage({
       const photoOptions = photoState.selectedFile
         ? selectedImageKind === "base"
           ? { photo: photoState.selectedFile }
-          : { cleanedPhoto: photoState.selectedFile }
+          : selectedImageKind === "generated"
+            ? { generatedPhoto: photoState.selectedFile, selectedImageKind: "generated" as const }
+            : { cleanedPhoto: photoState.selectedFile, selectedImageKind: "transparent" as const }
         : {};
       const updatedItem = await saveClothingItem(item.id, item.user_id, formValues, {
         ...photoOptions,
@@ -275,7 +279,7 @@ export function ItemDetailPage({
           metadata: formValues,
           originalSourcePhoto: originalUploadedPhotoRef.current,
         });
-        setSelectedImageKind("cleaned");
+        setSelectedImageKind("generated");
         photoState.updateSelectedFile(cleanedFile);
         setSuccessMessage("AI-cleaned preview ready. Save changes to keep it.");
       } else {
@@ -313,6 +317,18 @@ export function ItemDetailPage({
       metadata: formValues ?? undefined,
       originalSourcePhoto: originalUploadedPhotoRef.current,
     });
+  }
+
+  async function getSavedVersionFile(kind: "base" | "generated" | "transparent") {
+    const versionKind = kind === "base" ? "original" : kind;
+    const version = item?.image_versions?.find((candidate) => candidate.kind === versionKind);
+    const url = version?.image_url
+      ?? (kind === "base" ? item?.original_image_url : kind === "generated" ? item?.generated_image_url : item?.transparent_image_url);
+    if (!url) {
+      return null;
+    }
+
+    return fetchImageFileFromUrl(url, `${item?.name || "closet-item"}-${versionKind}.png`);
   }
 
   async function handleAutofillMetadata() {
@@ -583,6 +599,12 @@ export function ItemDetailPage({
         imageActions: {
           initialKind: selectedImageKind,
           onClean: createItemEditorCleanImage,
+          onMakeTransparent: createTransparentPreviewFile,
+          versions: [
+            ...(item.original_image_url ? [{ kind: "base" as const, label: "Original", getFile: () => getSavedVersionFile("base") }] : []),
+            ...(item.generated_image_url ? [{ kind: "generated" as const, label: "AI Generated", getFile: () => getSavedVersionFile("generated") }] : []),
+            ...(item.transparent_image_url ? [{ kind: "transparent" as const, label: "Transparent", getFile: () => getSavedVersionFile("transparent") }] : []),
+          ],
         },
         onApply: handleEditImageFileChange,
         sourceKey: photoState.imageUrl ?? item.image_url ?? `item-${item.id}-no-image`,

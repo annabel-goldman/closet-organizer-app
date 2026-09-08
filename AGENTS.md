@@ -10,6 +10,7 @@ Use these first:
 - `front-end/src/app/components/primitives/PrimitiveSelect.tsx`
 - `front-end/src/app/components/primitives/PrimitiveDropdownMenu.tsx`
 - `front-end/src/app/components/primitives/PrimitiveDropdownTriggerButton.tsx`
+- `front-end/src/app/components/primitives/PrimitiveSearchField.tsx`
 - `front-end/src/app/components/primitives/PrimitiveText.tsx`
 
 ## Default Rule

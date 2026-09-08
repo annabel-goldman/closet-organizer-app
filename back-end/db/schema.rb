@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_29_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_07_010000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -235,36 +235,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_29_140000) do
     t.index ["user_id"], name: "index_outfit_folders_on_user_id"
   end
 
-  create_table "outfit_generation_events", force: :cascade do |t|
-    t.json "added_item_ids", default: [], null: false
-    t.datetime "created_at", null: false
-    t.string "event_type", null: false
-    t.json "final_item_ids", default: [], null: false
-    t.json "kept_item_ids", default: [], null: false
-    t.integer "outfit_generation_run_id", null: false
-    t.json "removed_item_ids", default: [], null: false
-    t.datetime "updated_at", null: false
-    t.index ["created_at"], name: "index_outfit_generation_events_on_created_at"
-    t.index ["event_type"], name: "index_outfit_generation_events_on_event_type"
-    t.index ["outfit_generation_run_id"], name: "index_outfit_generation_events_on_run_id"
-  end
-
-  create_table "outfit_generation_runs", force: :cascade do |t|
-    t.json "candidate_item_ids", default: [], null: false
-    t.datetime "created_at", null: false
-    t.datetime "generated_at", null: false
-    t.json "generated_item_ids", default: [], null: false
-    t.string "generator_version", null: false
-    t.string "occasion"
-    t.integer "outfit_id"
-    t.json "reference_profile"
-    t.datetime "updated_at", null: false
-    t.integer "user_id", null: false
-    t.index ["generated_at"], name: "index_outfit_generation_runs_on_generated_at"
-    t.index ["outfit_id"], name: "index_outfit_generation_runs_on_outfit_id"
-    t.index ["user_id"], name: "index_outfit_generation_runs_on_user_id"
-  end
-
   create_table "outfit_items", force: :cascade do |t|
     t.integer "clothing_item_id", null: false
     t.float "collage_height"
@@ -279,6 +249,73 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_29_140000) do
     t.index ["clothing_item_id"], name: "index_outfit_items_on_clothing_item_id"
     t.index ["outfit_id", "clothing_item_id"], name: "index_outfit_items_on_outfit_id_and_clothing_item_id", unique: true
     t.index ["outfit_id"], name: "index_outfit_items_on_outfit_id"
+  end
+
+  create_table "outfit_preference_profiles", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.json "profile_data", default: {}, null: false
+    t.datetime "rebuilt_at"
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.string "version", null: false
+    t.index ["user_id"], name: "index_outfit_preference_profiles_on_user_id", unique: true
+  end
+
+  create_table "outfit_recommendation_feedback_events", force: :cascade do |t|
+    t.integer "clothing_item_id"
+    t.datetime "created_at", null: false
+    t.string "event_type", null: false
+    t.json "metadata", default: {}, null: false
+    t.integer "outfit_recommendation_option_id"
+    t.integer "outfit_recommendation_run_id", null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["clothing_item_id"], name: "idx_on_clothing_item_id_16e446dd30"
+    t.index ["event_type"], name: "index_outfit_recommendation_feedback_events_on_event_type"
+    t.index ["outfit_recommendation_option_id"], name: "idx_recommendation_feedback_on_option"
+    t.index ["outfit_recommendation_run_id"], name: "idx_recommendation_feedback_on_run"
+    t.index ["user_id"], name: "index_outfit_recommendation_feedback_events_on_user_id"
+  end
+
+  create_table "outfit_recommendation_options", force: :cascade do |t|
+    t.json "clothing_item_ids", default: [], null: false
+    t.datetime "created_at", null: false
+    t.json "hard_violations", default: [], null: false
+    t.decimal "judge_score", precision: 7, scale: 3
+    t.json "judge_scores", default: {}, null: false
+    t.decimal "local_score", precision: 7, scale: 3
+    t.integer "outfit_id"
+    t.integer "outfit_recommendation_run_id", null: false
+    t.integer "rank"
+    t.json "reasons", default: [], null: false
+    t.string "status", default: "candidate", null: false
+    t.text "summary"
+    t.string "title"
+    t.datetime "updated_at", null: false
+    t.index ["outfit_id"], name: "index_outfit_recommendation_options_on_outfit_id"
+    t.index ["outfit_recommendation_run_id", "rank"], name: "idx_recommendation_options_run_rank", unique: true
+    t.index ["outfit_recommendation_run_id"], name: "idx_recommendation_options_on_run"
+  end
+
+  create_table "outfit_recommendation_runs", force: :cascade do |t|
+    t.json "candidate_item_sets", default: [], null: false
+    t.datetime "completed_at"
+    t.json "constraints", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.text "error_message"
+    t.json "judge_rubric", default: {}, null: false
+    t.json "models", default: {}, null: false
+    t.integer "parent_run_id"
+    t.text "prompt", null: false
+    t.text "result_message"
+    t.string "status", default: "pending", null: false
+    t.json "structured_brief", default: {}, null: false
+    t.datetime "updated_at", null: false
+    t.json "usage", default: {}, null: false
+    t.integer "user_id", null: false
+    t.index ["parent_run_id"], name: "index_outfit_recommendation_runs_on_parent_run_id"
+    t.index ["status"], name: "index_outfit_recommendation_runs_on_status"
+    t.index ["user_id"], name: "index_outfit_recommendation_runs_on_user_id"
   end
 
   create_table "outfit_uploads", force: :cascade do |t|
@@ -320,6 +357,49 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_29_140000) do
     t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
   end
 
+  create_table "wardrobe_image_versions", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "imageable_id", null: false
+    t.string "imageable_type", null: false
+    t.json "metadata", default: {}, null: false
+    t.string "model"
+    t.integer "parent_id"
+    t.string "provider"
+    t.boolean "selected", default: false, null: false
+    t.datetime "updated_at", null: false
+    t.string "variant_kind", null: false
+    t.index ["imageable_type", "imageable_id", "selected"], name: "index_wardrobe_image_versions_on_owner_and_selected"
+    t.index ["imageable_type", "imageable_id", "variant_kind"], name: "index_wardrobe_image_versions_on_owner_and_kind", unique: true
+    t.index ["imageable_type", "imageable_id"], name: "index_wardrobe_image_versions_on_imageable"
+    t.index ["parent_id"], name: "index_wardrobe_image_versions_on_parent_id"
+  end
+
+  create_table "wardrobe_item_analyses", force: :cascade do |t|
+    t.string "analysis_version"
+    t.datetime "analyzed_at"
+    t.integer "clothing_item_id", null: false
+    t.datetime "created_at", null: false
+    t.json "dominant_colors", default: [], null: false
+    t.json "embedding", default: [], null: false
+    t.datetime "enriched_at"
+    t.text "enrichment_error_message"
+    t.string "enrichment_fingerprint"
+    t.string "enrichment_model"
+    t.string "enrichment_status", default: "pending", null: false
+    t.string "enrichment_version"
+    t.text "error_message"
+    t.json "extracted_attributes", default: {}, null: false
+    t.string "metadata_fingerprint"
+    t.string "model"
+    t.string "provider"
+    t.string "source_fingerprint"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["clothing_item_id"], name: "index_wardrobe_item_analyses_on_clothing_item_id", unique: true
+    t.index ["enrichment_status"], name: "index_wardrobe_item_analyses_on_enrichment_status"
+    t.index ["status"], name: "index_wardrobe_item_analyses_on_status"
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_artifacts", "ai_workflow_stages"
@@ -336,11 +416,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_29_140000) do
   add_foreign_key "outfit_folder_memberships", "outfit_folders"
   add_foreign_key "outfit_folder_memberships", "outfits"
   add_foreign_key "outfit_folders", "users"
-  add_foreign_key "outfit_generation_events", "outfit_generation_runs"
-  add_foreign_key "outfit_generation_runs", "outfits", on_delete: :nullify
-  add_foreign_key "outfit_generation_runs", "users"
   add_foreign_key "outfit_items", "clothing_items"
   add_foreign_key "outfit_items", "outfits"
+  add_foreign_key "outfit_preference_profiles", "users"
+  add_foreign_key "outfit_recommendation_feedback_events", "clothing_items"
+  add_foreign_key "outfit_recommendation_feedback_events", "outfit_recommendation_options"
+  add_foreign_key "outfit_recommendation_feedback_events", "outfit_recommendation_runs"
+  add_foreign_key "outfit_recommendation_feedback_events", "users"
+  add_foreign_key "outfit_recommendation_options", "outfit_recommendation_runs"
+  add_foreign_key "outfit_recommendation_options", "outfits"
+  add_foreign_key "outfit_recommendation_runs", "outfit_recommendation_runs", column: "parent_run_id"
+  add_foreign_key "outfit_recommendation_runs", "users"
   add_foreign_key "outfit_uploads", "users"
   add_foreign_key "outfits", "users"
+  add_foreign_key "wardrobe_image_versions", "wardrobe_image_versions", column: "parent_id"
+  add_foreign_key "wardrobe_item_analyses", "clothing_items"
 end

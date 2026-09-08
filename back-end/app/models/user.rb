@@ -13,9 +13,11 @@ class User < ApplicationRecord
   has_many :outfits, dependent: :destroy
   has_many :outfit_folders, dependent: :destroy
   has_many :decorations, dependent: :destroy
-  has_many :outfit_generation_runs, dependent: :destroy
   has_many :outfit_uploads, dependent: :destroy
   has_many :ai_workflows, dependent: :destroy
+  has_many :outfit_recommendation_runs, dependent: :destroy
+  has_many :outfit_recommendation_feedback_events, dependent: :destroy
+  has_one :outfit_preference_profile, dependent: :destroy
   has_many :model_reference_images, -> { ordered }, dependent: :destroy, inverse_of: :user
 
   validates :username, presence: true, uniqueness: true,

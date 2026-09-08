@@ -1,36 +1,40 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useState } from "react";
-import { Search } from "lucide-react";
-
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import { PrimitiveSearchField } from "./primitives/PrimitiveSearchField";
 import { Command, CommandGroup, CommandItem, CommandList } from "./ui/command";
-import { Input } from "./ui/input";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
 
 interface SearchSuggestionFieldProps<Suggestion> {
   className?: string;
+  clearLabel?: string;
   getSuggestionDetail?: (suggestion: Suggestion) => ReactNode;
   getSuggestionKey: (suggestion: Suggestion) => string | number;
   getSuggestionLabel: (suggestion: Suggestion) => string;
   id: string;
   onChange: (value: string) => void;
+  onClear?: () => void;
   onOpenSuggestion: (suggestion: Suggestion) => void;
   onSelectSuggestion: (suggestion: Suggestion) => void;
   placeholder?: string;
   suggestions: Suggestion[];
+  showClear?: boolean;
   value: string;
 }
 
 export function SearchSuggestionField<Suggestion>({
   className,
+  clearLabel,
   getSuggestionDetail,
   getSuggestionKey,
   getSuggestionLabel,
   id,
   onChange,
+  onClear,
   onOpenSuggestion,
   onSelectSuggestion,
   placeholder,
   suggestions,
+  showClear,
   value,
 }: SearchSuggestionFieldProps<Suggestion>) {
   const [open, setOpen] = useState(false);
@@ -76,24 +80,29 @@ export function SearchSuggestionField<Suggestion>({
 
     if (event.key === "Enter") {
       event.preventDefault();
-      const target = suggestions[activeIndex >= 0 ? activeIndex : 0];
+      const target = activeIndex >= 0 ? suggestions[activeIndex] : undefined;
       if (target) {
         onOpenSuggestion(target);
-        closeSuggestions();
       }
+      closeSuggestions();
     }
   }
 
   return (
     <Popover open={showSuggestions} onOpenChange={setOpen}>
       <PopoverAnchor asChild>
-        <div className="relative min-w-0">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
+        <div>
+          <PrimitiveSearchField
             id={id}
             value={value}
             placeholder={placeholder}
             className={className}
+            clearLabel={clearLabel}
+            onClear={() => {
+              onClear?.();
+              closeSuggestions();
+            }}
+            showClear={showClear}
             role="combobox"
             aria-expanded={showSuggestions}
             aria-controls={showSuggestions ? `${id}-suggestions` : undefined}

@@ -1,11 +1,11 @@
 import { useEffect, useId, useMemo, useState } from "react";
-import { ImagePlus, LoaderCircle, Search, Sticker } from "lucide-react";
+import { ImagePlus, LoaderCircle, Sticker } from "lucide-react";
 import { fetchDecorations, type Decoration } from "../../lib/closet";
 import { navigateTo } from "../../lib/routes";
 import { PrimitiveButton } from "../primitives/PrimitiveButton";
+import { PrimitivePickerPopover } from "../primitives/PrimitivePickerPopover";
 import { PrimitiveText } from "../primitives/PrimitiveText";
-import { Input } from "../ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Popover, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 interface DecorationPickerPopoverProps {
@@ -65,49 +65,53 @@ export function DecorationPickerPopover({
         </TooltipTrigger>
         <TooltipContent side="top" sideOffset={6}>{buttonLabel}</TooltipContent>
       </Tooltip>
-      <PopoverContent side={side} align="end" collisionPadding={16} className="w-[19rem] border-border p-0 shadow-xl">
-        <div className="border-b border-border p-3">
-          <PrimitiveText as="p" variant="overline" tone="muted" className="mb-2">Add Decoration</PrimitiveText>
-          <label className="relative block" htmlFor={searchId}>
-            <span className="sr-only">Search decorations</span>
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input id={searchId} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search decorations" className="h-9 pl-8" />
-          </label>
-        </div>
-        <div className="max-h-72 overflow-y-auto p-3">
-          {isLoading ? (
-            <div className="flex h-28 items-center justify-center" role="status"><LoaderCircle className="animate-spin" /><span className="sr-only">Loading decorations</span></div>
-          ) : errorMessage ? (
-            <PrimitiveText as="p" variant="bodySm" className="text-destructive">{errorMessage}</PrimitiveText>
-          ) : decorations.length === 0 ? (
-            <div className="py-5 text-center">
-              <ImagePlus className="mx-auto mb-3 h-6 w-6 text-muted-foreground" />
-              <PrimitiveText as="p" variant="bodySm" tone="muted">Your decoration library is empty.</PrimitiveText>
-              <PrimitiveButton type="button" variant="link" className="mt-1" onClick={() => navigateTo("/decorations")}>Open My Decorations</PrimitiveButton>
-            </div>
-          ) : filteredDecorations.length === 0 ? (
-            <PrimitiveText as="p" variant="bodySm" tone="muted" className="py-6 text-center">No decorations match this search.</PrimitiveText>
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {filteredDecorations.map((decoration) => (
-                <button
-                  key={decoration.id}
-                  type="button"
-                  className="group aspect-square overflow-hidden border border-border bg-stone-50 p-2 hover:border-foreground"
-                  onClick={() => { onSelect(decoration); setIsOpen(false); }}
-                  aria-label={`Add ${decoration.name}`}
-                  title={decoration.name}
-                >
-                  <img src={decoration.image_url} alt="" className="h-full w-full object-contain transition-transform group-hover:scale-105" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="border-t border-border px-3 py-2 text-right">
-          <PrimitiveButton type="button" variant="link" size="sm" onClick={() => navigateTo("/decorations")}>Manage decorations</PrimitiveButton>
-        </div>
-      </PopoverContent>
+      <PrimitivePickerPopover
+        side={side}
+        align={side === "right" ? "start" : "end"}
+        sideOffset={side === "right" ? 12 : 4}
+        collisionPadding={side === "right" ? { top: 16, right: 16, bottom: 76, left: 16 } : 16}
+        title="Add Decoration"
+        searchId={searchId}
+        searchLabel="Search decorations"
+        searchPlaceholder="Search decorations"
+        searchValue={query}
+        onSearchValueChange={setQuery}
+        footer={(
+          <PrimitiveButton type="button" variant="link" size="sm" onClick={() => navigateTo("/decorations")}>
+            Manage decorations
+          </PrimitiveButton>
+        )}
+      >
+        {isLoading ? (
+          <div className="flex h-28 items-center justify-center" role="status"><LoaderCircle className="animate-spin" /><span className="sr-only">Loading decorations</span></div>
+        ) : errorMessage ? (
+          <PrimitiveText as="p" variant="bodySm" className="text-destructive">{errorMessage}</PrimitiveText>
+        ) : decorations.length === 0 ? (
+          <div className="py-5 text-center">
+            <ImagePlus className="mx-auto mb-3 h-6 w-6 text-muted-foreground" />
+            <PrimitiveText as="p" variant="bodySm" tone="muted">Your decoration library is empty.</PrimitiveText>
+            <PrimitiveButton type="button" variant="link" className="mt-1" onClick={() => navigateTo("/decorations")}>Open My Decorations</PrimitiveButton>
+          </div>
+        ) : filteredDecorations.length === 0 ? (
+          <PrimitiveText as="p" variant="bodySm" tone="muted" className="py-6 text-center">No decorations match this search.</PrimitiveText>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            {filteredDecorations.map((decoration) => (
+              <PrimitiveButton
+                key={decoration.id}
+                type="button"
+                variant="outline"
+                className="group aspect-square h-auto w-full overflow-hidden bg-stone-50 p-2 hover:border-foreground hover:bg-stone-50"
+                onClick={() => { onSelect(decoration); setIsOpen(false); }}
+                aria-label={`Add ${decoration.name}`}
+                title={decoration.name}
+              >
+                <img src={decoration.image_url} alt="" className="h-full w-full object-contain" draggable={false} />
+              </PrimitiveButton>
+            ))}
+          </div>
+        )}
+      </PrimitivePickerPopover>
     </Popover>
   );
 }

@@ -85,7 +85,7 @@ export function MagazineReaderPage({ magazineId }: MagazineReaderPageProps) {
           type="button"
           variant="outline"
           className="mt-6 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white"
-          onClick={() => navigateTo("/outfits?view=magazines")}
+          onClick={() => navigateTo("/magazines")}
         >
           Back to magazines
         </PrimitiveButton>

@@ -25,7 +25,7 @@ import { cn } from "./ui/utils";
 
 type EditorTool = "crop" | "wand";
 type AspectPreset = "free" | "square" | "portrait" | "classic";
-export type ExpandedImageEditorImageKind = "base" | "cleaned" | "transparent";
+export type ExpandedImageEditorImageKind = "base" | "generated" | "transparent";
 
 interface WandDragState {
   seedX: number;
@@ -52,6 +52,11 @@ export interface ExpandedImageEditorImageActions {
   initialKind?: ExpandedImageEditorImageKind;
   onClean?: (file: File) => Promise<File>;
   onMakeTransparent?: (file: File) => Promise<File>;
+  versions?: Array<{
+    getFile: () => Promise<File | null>;
+    kind: ExpandedImageEditorImageKind;
+    label: string;
+  }>;
 }
 
 interface ExpandedImageEditorProps {
@@ -272,7 +277,7 @@ export function ExpandedImageEditor({
   const canRunTransparent = Boolean(
     currentFile
     && imageActions?.onMakeTransparent
-    && currentImageKind === "cleaned",
+    && currentImageKind === "generated",
   );
   const editorBusy =
     isLoading
@@ -513,7 +518,7 @@ export function ExpandedImageEditor({
     cleanImageAction.start();
     try {
       const cleanedFile = await imageActions.onClean(currentFile);
-      await pushNextFile(cleanedFile, { imageKind: "cleaned" });
+      await pushNextFile(cleanedFile, { imageKind: "generated" });
       cleanImageAction.succeed();
     } catch (error) {
       cleanImageAction.fail(
@@ -523,7 +528,7 @@ export function ExpandedImageEditor({
   }
 
   async function handleRunTransparent() {
-    if (!currentFile || !imageActions?.onMakeTransparent || currentImageKind !== "cleaned") {
+    if (!currentFile || !imageActions?.onMakeTransparent || currentImageKind !== "generated") {
       return;
     }
 
@@ -536,6 +541,26 @@ export function ExpandedImageEditor({
       transparentPngAction.fail(
         error instanceof Error ? error.message : "Unable to make a transparent PNG for this item image.",
       );
+    }
+  }
+
+  async function handleSelectVersion(version: NonNullable<ExpandedImageEditorImageActions["versions"]>[number]) {
+    if (version.kind === currentImageKind || editorBusy) {
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      const file = await version.getFile();
+      if (!file) {
+        throw new Error(`Unable to load the ${version.label.toLowerCase()} image.`);
+      }
+      await pushNextFile(file, { imageKind: version.kind });
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Unable to load this image version.");
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -700,11 +725,32 @@ export function ExpandedImageEditor({
           </PrimitiveText>
         </div>
 
-        {imageActions?.onClean || imageActions?.onMakeTransparent ? (
+        {imageActions?.versions?.length ? (
           <div className="space-y-3">
             <PrimitiveText variant="overline" className="text-white/60">
-              Image Actions
+              Saved Versions
             </PrimitiveText>
+            <div className="grid grid-cols-3 gap-2">
+              {imageActions.versions.map((version) => (
+                <PrimitiveButton
+                  key={version.kind}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  data-active={currentImageKind === version.kind}
+                  className="border-white/20 bg-white/8 px-2 text-white hover:bg-white/14 data-[active=true]:bg-white data-[active=true]:text-stone-950"
+                  disabled={editorBusy}
+                  onClick={() => void handleSelectVersion(version)}
+                >
+                  {version.label}
+                </PrimitiveButton>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {imageActions?.onClean || imageActions?.onMakeTransparent ? (
+          <div>
             <div className="flex flex-col gap-2">
               {imageActions?.onClean ? (
                 <PrimitiveButton

@@ -32,13 +32,30 @@ class CleanImageGenerationJob < ApplicationJob
     end
 
     temporary_files = ManagedTempfiles.new
+    original_version = item.image_versions.find_by(variant_kind: "original") ||
+      WardrobeImageVersionPublisher.call(
+        record: item,
+        variant_kind: "original",
+        source: item.photo,
+        selected: item.image_versions.none?,
+        metadata: { source: "closet_item_photo" }
+      )
     generated = OpenrouterImageCleaner.call(
-      item.source_photo_for_cleaning,
+      original_version.image,
       prompt_context: (workflow.metadata["prompt_context"] || {}).deep_symbolize_keys,
       reference_photos: item_reference_photos(workflow.user, item),
       metadata_context: (workflow.metadata["metadata_context"] || {}).deep_symbolize_keys
     )
     generated_tempfile = temporary_files.track(generated.fetch(:tempfile))
+    generated_version = WardrobeImageVersionPublisher.call(
+      record: item,
+      variant_kind: "generated",
+      source: generated_tempfile,
+      parent: original_version,
+      provider: generated.fetch(:provider),
+      model: generated.fetch(:model),
+      metadata: { generated_at: Time.current.iso8601 }
+    )
     filename_root = File.basename(generated.fetch(:filename).to_s, ".*").presence || "item-clean"
     processed = CleanImageBackgroundRemover.call(
       generated_tempfile,
@@ -53,11 +70,16 @@ class CleanImageGenerationJob < ApplicationJob
         return
       end
 
-      item.cleaned_photo.attach(
-        io: processed_tempfile,
-        filename: processed.fetch(:filename),
-        content_type: processed.fetch(:content_type)
+      transparent_version = WardrobeImageVersionPublisher.call(
+        record: item,
+        variant_kind: "transparent",
+        source: processed_tempfile,
+        parent: generated_version,
+        provider: generated.fetch(:provider),
+        model: generated.fetch(:model),
+        metadata: { background_removed_at: Time.current.iso8601 }
       )
+      item.cleaned_photo.attach(transparent_version.image.blob)
       item.update!(
         clean_image_status: :succeeded,
         clean_image_error_message: nil,

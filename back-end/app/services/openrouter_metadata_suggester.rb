@@ -39,10 +39,15 @@ class OpenrouterMetadataSuggester
     "heels" => "shoes",
     "hoodie" => "top",
     "jacket" => "outerwear",
+    "jewelry" => "accessory",
+    "jewellery" => "accessory",
     "jean" => "bottom",
     "jeans" => "bottom",
     "lingerie" => "intimates",
+    "necklace" => "accessory",
+    "pendant" => "accessory",
     "pants" => "bottom",
+    "ring" => "accessory",
     "purse" => "accessory",
     "scarf" => "accessory",
     "sandal" => "shoes",
@@ -68,7 +73,13 @@ class OpenrouterMetadataSuggester
     "tee" => "top",
     "t-shirt" => "top",
     "trousers" => "bottom",
-    "underwear" => "intimates"
+    "underwear" => "intimates",
+    "bracelet" => "accessory",
+    "bracelets" => "accessory",
+    "earring" => "accessory",
+    "earrings" => "accessory",
+    "watch" => "accessory",
+    "brooch" => "accessory"
   }.freeze
   COLOR_WORDS = %w[
     aqua
@@ -257,7 +268,7 @@ class OpenrouterMetadataSuggester
       - Tags should be lowercase and should not repeat the exact full name.
       - Prefer tags for color, silhouette, material, pattern, vibe, and category.
       - The visual description should be observational and item-focused, not outfit advice. Do not say how to style, pair, layer, or wear the item.
-      - Include specific visual signals that would help match this item to a reference flatlay, such as denim wash, distressing, sleeve shape, graphic motifs, chain straps, quilting, rhinestones, or metallic hardware.
+      - Include specific visual signals that make the item easy to identify and search, such as denim wash, distressing, sleeve shape, graphic motifs, chain straps, quilting, rhinestones, or metallic hardware.
       - Keep the visual description under #{InputLengthPolicy::MAX_CLOTHING_ITEM_STYLE_NOTES} characters.
       - If the brand is unclear, return an empty string for brand.
       - Treat any provided current metadata context as user-maintained context for this same item, especially when reconciling multiple images.

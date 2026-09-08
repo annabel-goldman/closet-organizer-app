@@ -7,6 +7,7 @@ interface VisualStatePanelProps {
   title: string;
   description: string;
   icon: LucideIcon;
+  headingAs?: "h1" | "h2" | "h3";
   tone?: "default" | "destructive";
   children?: React.ReactNode;
 }
@@ -16,6 +17,7 @@ export function VisualStatePanel({
   title,
   description,
   icon: Icon,
+  headingAs = "h2",
   tone = "default",
   children,
 }: VisualStatePanelProps) {
@@ -29,6 +31,8 @@ export function VisualStatePanel({
       className={`overflow-hidden border bg-card ${
         isDestructive ? "border-destructive/25" : "border-border"
       }`}
+      role={isDestructive ? "alert" : "status"}
+      aria-live={isDestructive ? "assertive" : "polite"}
     >
       <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div
@@ -52,7 +56,7 @@ export function VisualStatePanel({
           >
             {overline}
           </PrimitiveText>
-          <PrimitiveText as="h1" variant="display" font="serif" className="mb-3">
+          <PrimitiveText as={headingAs} variant="display" font="serif" className="mb-3">
             {title}
           </PrimitiveText>
           <PrimitiveText as="p" tone="muted" className="mb-6 max-w-prose">

@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { ClothingItem, Outfit } from "../src/app/lib/closet.ts";
+import type { ClothingItem, Outfit, OutfitFolder } from "../src/app/lib/closet.ts";
 import {
+  formatMagazineSearchSuggestionDetail,
   formatOutfitSearchSuggestionDetail,
+  filterClothingItems,
   getClosetSearchSuggestions,
+  getMagazineSearchSuggestions,
   getOutfitSearchSuggestions,
+  matchesMagazineSearchQuery,
   matchesOutfitSearchQuery,
   matchesSearchQuery,
   termMatchesInHaystack,
@@ -33,6 +37,16 @@ test("termMatchesInHaystack supports substring matches", () => {
 test("termMatchesInHaystack supports fuzzy typo matches", () => {
   assert.equal(termMatchesInHaystack("swetshirt", "gray sweatshirt cotton"), true);
   assert.equal(termMatchesInHaystack("nikee", "nike running shoes"), true);
+});
+
+test("termMatchesInHaystack ignores reverse matches against short filler words", () => {
+  assert.equal(termMatchesInHaystack("black", "red dress a flowing evening silhouette"), false);
+  assert.equal(termMatchesInHaystack("coat", "red dress a flowing evening silhouette"), false);
+});
+
+test("termMatchesInHaystack normalizes punctuation and accents", () => {
+  assert.equal(termMatchesInHaystack("cafe", "Café-ready jacket"), true);
+  assert.equal(termMatchesInHaystack("t shirt", "striped T-shirt"), true);
 });
 
 test("matchesSearchQuery requires every term to match", () => {
@@ -81,6 +95,34 @@ test("outfit suggestions use the same matching behavior and explain matching pie
   );
 });
 
+test("magazine search includes its metadata and contained outfits", () => {
+  const outfit: Outfit = {
+    id: 9,
+    user_id: 1,
+    name: "Gallery Opening",
+    tags: ["evening"],
+    notes: "For museum nights",
+    item_ids: [1],
+    items: [makeItem({ id: 1, name: "Silk Midi Dress", tags: ["black"] })],
+  };
+  const magazine: OutfitFolder = {
+    id: 4,
+    user_id: 1,
+    name: "Autumn in New York",
+    occasion: "City weekends",
+    notes: "Layered seasonal looks",
+    page_layouts: {},
+    outfit_ids: [outfit.id],
+    outfits: [outfit],
+    decorations: [],
+  };
+
+  assert.equal(matchesMagazineSearchQuery(magazine, "autumn city"), true);
+  assert.equal(matchesMagazineSearchQuery(magazine, "museum silk"), true);
+  assert.deepEqual(getMagazineSearchSuggestions([magazine], "silk"), [magazine]);
+  assert.equal(formatMagazineSearchSuggestionDetail(magazine), "1 outfit · City weekends");
+});
+
 test("getClosetSearchSuggestions returns empty list for blank query", () => {
   const items = [makeItem({ id: 1, name: "Denim Jacket", tags: ["denim"] })];
 
@@ -108,6 +150,37 @@ test("getClosetSearchSuggestions respects active filters", () => {
 
   assert.equal(suggestions.length, 1);
   assert.equal(suggestions[0]?.id, 1);
+});
+
+test("closet search ranks direct name matches ahead of tag and description matches", () => {
+  const items = [
+    makeItem({ id: 1, name: "Evening Dress", style_notes: "Black satin with a fitted waist" }),
+    makeItem({ id: 2, name: "Black Coat", style_notes: "Long wool outerwear" }),
+    makeItem({ id: 3, name: "Dark Jacket", tags: ["black"] }),
+  ];
+
+  const results = filterClothingItems(items, "black", [], [], [], "name-asc");
+
+  assert.deepEqual(results.map((item) => item.id), [2, 3, 1]);
+});
+
+test("filterClothingItems filters by canonical wardrobe type", () => {
+  const items = [
+    makeItem({ id: 1, name: "Blue Tee", category: "top", tags: ["blue"] }),
+    makeItem({ id: 2, name: "Gold Earrings", category: "accessory", tags: ["gold"] }),
+    makeItem({ id: 3, name: "Black Skirt", category: "bottom", tags: ["black"] }),
+  ];
+
+  const filteredItems = filterClothingItems(
+    items,
+    "",
+    [],
+    [],
+    ["accessory"],
+    "name-asc",
+  );
+
+  assert.deepEqual(filteredItems.map((item) => item.id), [2]);
 });
 
 test("getClosetSearchSuggestions limits results", () => {

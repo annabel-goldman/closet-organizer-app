@@ -14,6 +14,7 @@ describe("DetectionThumbnailStrip", () => {
         isDetecting={false}
         onSelectDetection={() => undefined}
         onSelectSource={onSelectSource}
+        onToggleDetectionSelection={() => undefined}
         selectedDetectionIds={[]}
         selectedSourceIndex={0}
         sourceImages={[

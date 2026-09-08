@@ -8,7 +8,7 @@ class OutfitFoldersController < ApplicationController
     folders = current_user.outfit_folders
       .includes(
         decorations: [ { image_attachment: :blob }, { decoration: { image_attachment: :blob } } ],
-        outfits: [ :outfit_generation_run, :ai_workflows, { outfit_items: :clothing_item }, { outfit_decorations: { decoration: { image_attachment: :blob } } } ]
+        outfits: [ :ai_workflows, { outfit_items: :clothing_item }, { outfit_decorations: { decoration: { image_attachment: :blob } } } ]
       )
       .order(created_at: :desc)
     render json: folders.map { |folder| payloads.outfit_folder(folder) }

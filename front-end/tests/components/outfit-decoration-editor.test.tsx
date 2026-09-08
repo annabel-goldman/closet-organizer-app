@@ -77,7 +77,10 @@ describe("outfit decoration editing", () => {
 
     await waitFor(() => expect(mocks.moveableProps?.resizable).toBe(true));
     const frame = container.querySelector<HTMLElement>("[data-collage-decoration-frame='true']");
+    const stage = container.querySelector<HTMLElement>("[data-outfit-collage-stage='true']");
     expect(frame?.style.height).toBe("32%");
+    expect(Number(frame?.style.zIndex)).toBeLessThan(50);
+    expect(stage?.className).toContain("isolate");
 
     const setRatio = vi.fn();
     (mocks.moveableProps?.onResizeStart as (event: unknown) => void)({

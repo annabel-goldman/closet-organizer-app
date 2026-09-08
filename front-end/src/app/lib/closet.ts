@@ -47,6 +47,9 @@ export interface ClothingItem {
   image_url?: string | null;
   original_image_url?: string | null;
   cleaned_image_url?: string | null;
+  generated_image_url?: string | null;
+  transparent_image_url?: string | null;
+  image_versions?: WardrobeImageVersion[];
   clean_image_status?: "idle" | "processing" | "succeeded" | "failed";
   clean_image_error_message?: string | null;
   clean_image_provider?: string | null;
@@ -56,6 +59,19 @@ export interface ClothingItem {
   layer_order?: number;
   collage_layout?: OutfitCollageLayout | null;
   user?: UserSummary;
+}
+
+export type WardrobeImageVersionKind = "original" | "generated" | "transparent";
+
+export interface WardrobeImageVersion {
+  id: number;
+  kind: WardrobeImageVersionKind;
+  image_url: string;
+  selected: boolean;
+  provider?: string | null;
+  model?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface User extends UserSummary {
@@ -108,6 +124,10 @@ export interface OutfitDetection {
   refined_box?: OutfitDetectionBoundingBox | null;
   final_box?: OutfitDetectionBoundingBox | null;
   cleaned_image_url?: string | null;
+  image_url?: string | null;
+  generated_image_url?: string | null;
+  transparent_image_url?: string | null;
+  image_versions?: WardrobeImageVersion[];
   clean_image_status?: "idle" | "processing" | "succeeded" | "failed";
   clean_image_error_message?: string | null;
   clean_image_provider?: string | null;
@@ -149,12 +169,76 @@ export interface Outfit {
   item_ids: number[];
   items: ClothingItem[];
   decorations?: OutfitDecoration[];
-  generation_id?: number | null;
-  generated_by_ai?: boolean;
-  generated_item_ids?: number[];
   modeled_workflow?: AiWorkflow | null;
+  recommendation_option_id?: number | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface WardrobeAnalysisStatus {
+  total: number;
+  ready: number;
+  pending: number;
+  processing: number;
+  failed: number;
+  stale: number;
+  missing_image: number;
+  enriched: number;
+  enrichment_pending: number;
+  enrichment_processing: number;
+  enrichment_failed: number;
+  complete: boolean;
+  workflow?: AiWorkflow | null;
+}
+
+export interface OutfitSearchBrief {
+  summary: string;
+  structure: "dress" | "separates" | "swimwear";
+  required_categories: string[];
+  optional_categories: string[];
+  preferred_colors: string[];
+  excluded_colors: string[];
+  style_terms: string[];
+  material_terms: string[];
+  seasons: string[];
+  formality: number;
+  anchor?: { category: string; description: string };
+  garment_roles?: Array<{ name: string; category: string; required: boolean; layer: number; description: string }>;
+  layering_strategy?: string;
+  silhouette_strategy?: string;
+  palette_strategy?: string;
+  pattern_strategy?: string;
+  texture_strategy?: string;
+  weather?: string;
+  occasion?: string;
+  hard_constraints?: string[];
+  soft_constraints?: string[];
+}
+
+export interface OutfitRecommendation {
+  id: number;
+  title: string;
+  summary: string;
+  item_ids: number[];
+  items: ClothingItem[];
+  score: number;
+  scores?: Record<string, number>;
+  reasons: string[];
+}
+
+export interface OutfitRecommendationResponse {
+  id: number;
+  status: "pending" | "processing" | "succeeded" | "failed";
+  prompt: string;
+  brief: OutfitSearchBrief;
+  constraints: { locked_item_ids?: number[]; excluded_item_ids?: number[] };
+  result_message?: string | null;
+  error_message?: string | null;
+  workflow?: AiWorkflow | null;
+  models: Record<string, string>;
+  usage?: Record<string, unknown>;
+  parent_run_id?: number | null;
+  recommendations: OutfitRecommendation[];
 }
 
 export interface Decoration {
@@ -228,11 +312,13 @@ export interface ClothingItemFormValues {
 
 export interface ClothingItemPhotoOptions {
   cleanedPhoto?: File | null;
+  generatedPhoto?: File | null;
   photo?: File | null;
   crop?: OutfitDetectionBoundingBox | null;
   sourceOutfitDetectionId?: number | null;
   removeCleanedPhoto?: boolean;
   removePhoto?: boolean;
+  selectedImageKind?: WardrobeImageVersionKind;
 }
 
 export interface OutfitUploadPhotoOptions {
@@ -624,6 +710,80 @@ export async function fetchOutfits(signal?: AbortSignal) {
   return (await requestJson<Outfit[]>(`${API_BASE_URL}/outfits`, { signal })).map(normalizeOutfitPayload);
 }
 
+export async function fetchWardrobeAnalysisStatus(signal?: AbortSignal) {
+  return requestJson<WardrobeAnalysisStatus>(`${API_BASE_URL}/wardrobe_item_analysis`, { signal });
+}
+
+export async function startWardrobeAnalysis() {
+  return requestJson<WardrobeAnalysisStatus>(`${API_BASE_URL}/wardrobe_item_analysis`, {
+    method: "POST",
+  });
+}
+
+export async function generateOutfitRecommendations(input: {
+  prompt: string;
+  lockedItemIds?: number[];
+  excludedItemIds?: number[];
+  parentRunId?: number;
+}) {
+  const response = await requestJson<OutfitRecommendationResponse>(`${API_BASE_URL}/outfit_recommendations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      outfit_recommendation: {
+        prompt: input.prompt,
+        locked_item_ids: input.lockedItemIds ?? [],
+        excluded_item_ids: input.excludedItemIds ?? [],
+        parent_run_id: input.parentRunId,
+      },
+    }),
+  });
+
+  return {
+    ...response,
+    recommendations: response.recommendations.map((recommendation) => ({
+      ...recommendation,
+      items: recommendation.items.map(normalizeClothingItemPayload),
+    })),
+  };
+}
+
+export async function fetchOutfitRecommendation(id: number, signal?: AbortSignal) {
+  const response = await requestJson<OutfitRecommendationResponse>(`${API_BASE_URL}/outfit_recommendations/${id}`, { signal });
+  return {
+    ...response,
+    recommendations: response.recommendations.map((recommendation) => ({
+      ...recommendation,
+      items: recommendation.items.map(normalizeClothingItemPayload),
+    })),
+  };
+}
+
+export async function recordOutfitRecommendationFeedback(input: {
+  runId: number;
+  eventType: "keep" | "exclude" | "swap" | "best" | "none";
+  optionId?: number;
+  clothingItemId?: number;
+}) {
+  return requestJson<{ id: number; event_type: string }>(`${API_BASE_URL}/outfit_recommendations/${input.runId}/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      feedback: {
+        event_type: input.eventType,
+        option_id: input.optionId,
+        clothing_item_id: input.clothingItemId,
+      },
+    }),
+  });
+}
+
+export async function retryOutfitRecommendationJudge(runId: number) {
+  return requestJson<OutfitRecommendationResponse>(`${API_BASE_URL}/outfit_recommendations/${runId}/retry_judge`, {
+    method: "POST",
+  });
+}
+
 export async function fetchDecorations(signal?: AbortSignal) {
   return (await requestJson<Decoration[]>(`${API_BASE_URL}/decorations`, { signal }))
     .map(normalizeDecorationPayload);
@@ -708,6 +868,7 @@ interface CreateOutfitInput {
   itemLayouts?: OutfitCollageLayoutInput[];
   notes?: string;
   tags?: string[];
+  recommendationOptionId?: number;
 }
 
 interface OutfitCollageLayoutInput extends OutfitCollageLayout {
@@ -721,6 +882,7 @@ function buildOutfitPayload(input: {
   notes?: string;
   tags?: string[];
   userId?: number;
+  recommendationOptionId?: number;
 }) {
   return {
     outfit: {
@@ -730,6 +892,7 @@ function buildOutfitPayload(input: {
       item_layouts: input.itemLayouts,
       notes: input.notes,
       tags: input.tags,
+      recommendation_option_id: input.recommendationOptionId,
     },
   };
 }
@@ -897,38 +1060,6 @@ export async function destroyOutfitFolderDecoration(outfitFolderId: number, deco
   });
 }
 
-interface GenerateOutfitInput {
-  occasion?: string;
-  referencePhoto?: File | null;
-}
-
-export async function generateOutfit(input: string | GenerateOutfitInput = {}) {
-  const occasion = typeof input === "string" ? input : input.occasion;
-  const referencePhoto = typeof input === "string" ? null : input.referencePhoto;
-
-  if (referencePhoto) {
-    const formData = new FormData();
-    const trimmedOccasion = occasion?.trim();
-    if (trimmedOccasion) {
-      formData.append("occasion", trimmedOccasion);
-    }
-    formData.append("reference_photo", referencePhoto);
-
-    return requestJson<AiWorkflow>(`${API_BASE_URL}/outfits/generate`, {
-      method: "POST",
-      body: formData,
-    }).then(normalizeAiWorkflowPayload);
-  }
-
-  return requestJson<AiWorkflow>(`${API_BASE_URL}/outfits/generate`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ occasion: occasion?.trim() || undefined }),
-  }).then(normalizeAiWorkflowPayload);
-}
-
 export async function generateOutfitMetadataSuggestions(input: {
   outfitId?: number;
   itemIds: number[];
@@ -1029,6 +1160,60 @@ export async function generateOutfitDetectionCleanImage(
   });
 }
 
+export async function generateOutfitDetectionImage(
+  id: number,
+  metadata?: ClothingItemFormValues,
+) {
+  return normalizeOutfitDetectionPayload(
+    await requestJson<OutfitDetection>(`${API_BASE_URL}/outfit_detections/${id}/generate_image`, {
+      method: "POST",
+      body: buildAiContextFormData(metadata),
+    }),
+  );
+}
+
+export async function removeOutfitDetectionImageBackground(id: number) {
+  return normalizeOutfitDetectionPayload(
+    await requestJson<OutfitDetection>(`${API_BASE_URL}/outfit_detections/${id}/remove_image_background`, {
+      method: "POST",
+    }),
+  );
+}
+
+export async function selectOutfitDetectionImageVersion(
+  id: number,
+  variantKind: WardrobeImageVersionKind,
+) {
+  return normalizeOutfitDetectionPayload(
+    await requestJson<OutfitDetection>(`${API_BASE_URL}/outfit_detections/${id}/select_image_version`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ variant_kind: variantKind }),
+    }),
+  );
+}
+
+export async function removeClothingItemImageBackground(id: number) {
+  return normalizeClothingItemPayload(
+    await requestJson<ClothingItem>(`${API_BASE_URL}/clothing_items/${id}/remove_image_background`, {
+      method: "POST",
+    }),
+  );
+}
+
+export async function selectClothingItemImageVersion(
+  id: number,
+  variantKind: WardrobeImageVersionKind,
+) {
+  return normalizeClothingItemPayload(
+    await requestJson<ClothingItem>(`${API_BASE_URL}/clothing_items/${id}/select_image_version`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ variant_kind: variantKind }),
+    }),
+  );
+}
+
 export async function generateClothingItemMetadataSuggestions(
   id: number,
   metadata?: ClothingItemFormValues,
@@ -1106,6 +1291,16 @@ export async function createCleanPreviewFile(photo: File, options: AiImageOption
   return fileFromDataUrl(preview.data_url, preview.filename, preview.content_type);
 }
 
+export async function createTransparentPreviewFile(photo: File) {
+  const formData = new FormData();
+  formData.append("image_variant[source_photo]", photo);
+  const preview = await requestJson<TemporaryCleanImageResult>(
+    `${API_BASE_URL}/image_variants/transparent_preview`,
+    { method: "POST", body: formData },
+  );
+  return fileFromDataUrl(preview.data_url, preview.filename, preview.content_type);
+}
+
 async function fileFromDataUrl(dataUrl: string, filename: string, contentType?: string) {
   const response = await fetch(dataUrl);
   const blob = await response.blob();
@@ -1161,6 +1356,9 @@ function normalizeClothingItemPayload(item: ClothingItem): ClothingItem {
     brand: item.brand?.trim() ? item.brand.trim() : null,
     style_notes: item.style_notes?.trim() ? item.style_notes.trim() : null,
     cleaned_image_url: normalizeAttachmentUrl(item.cleaned_image_url),
+    generated_image_url: normalizeAttachmentUrl(item.generated_image_url),
+    transparent_image_url: normalizeAttachmentUrl(item.transparent_image_url),
+    image_versions: normalizeWardrobeImageVersions(item.image_versions),
     image_url: normalizeAttachmentUrl(item.image_url),
     original_image_url: normalizeAttachmentUrl(item.original_image_url),
     tags: normalizeTagList((item as ClothingItem & { tags?: unknown }).tags),
@@ -1172,7 +1370,18 @@ function normalizeOutfitDetectionPayload(detection: OutfitDetection): OutfitDete
   return {
     ...detection,
     cleaned_image_url: normalizeAttachmentUrl(detection.cleaned_image_url),
+    image_url: normalizeAttachmentUrl(detection.image_url),
+    generated_image_url: normalizeAttachmentUrl(detection.generated_image_url),
+    transparent_image_url: normalizeAttachmentUrl(detection.transparent_image_url),
+    image_versions: normalizeWardrobeImageVersions(detection.image_versions),
   };
+}
+
+function normalizeWardrobeImageVersions(versions?: WardrobeImageVersion[]) {
+  return (versions ?? []).map((version) => ({
+    ...version,
+    image_url: normalizeAttachmentUrl(version.image_url) ?? "",
+  }));
 }
 
 function normalizeOutfitUploadPayload(upload: OutfitUpload): OutfitUpload {
@@ -1186,8 +1395,6 @@ function normalizeOutfitUploadPayload(upload: OutfitUpload): OutfitUpload {
 function normalizeOutfitPayload(outfit: Outfit): Outfit {
   return {
     ...outfit,
-    generated_by_ai: Boolean(outfit.generated_by_ai),
-    generated_item_ids: Array.isArray(outfit.generated_item_ids) ? outfit.generated_item_ids : [],
     modeled_workflow: outfit.modeled_workflow
       ? normalizeAiWorkflowPayload(outfit.modeled_workflow)
       : null,
@@ -1332,6 +1539,15 @@ function buildClothingItemFormData(
 
   if (photoOptions.cleanedPhoto) {
     formData.append("clothing_item[cleaned_photo]", photoOptions.cleanedPhoto);
+  }
+
+
+  if (photoOptions.generatedPhoto) {
+    formData.append("clothing_item[generated_photo]", photoOptions.generatedPhoto);
+  }
+
+  if (photoOptions.selectedImageKind) {
+    formData.append("clothing_item[selected_image_kind]", photoOptions.selectedImageKind);
   }
 
   if (photoOptions.sourceOutfitDetectionId) {

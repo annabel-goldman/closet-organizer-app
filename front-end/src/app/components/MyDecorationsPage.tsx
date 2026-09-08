@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react";
-import { ImagePlus, LoaderCircle, Trash2 } from "lucide-react";
+import { CircleAlert, ImagePlus, LoaderCircle, SearchX, Trash2 } from "lucide-react";
 import {
   createDecoration,
   destroyDecoration,
@@ -10,7 +10,24 @@ import {
 import { DecorationImageEditor } from "./decorations/DecorationImageEditor";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveConfirmationDialog } from "./primitives/PrimitiveConfirmationDialog";
+import { PrimitiveSearchField } from "./primitives/PrimitiveSearchField";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import {
+  CollectionCard,
+  CollectionCardHoverActions,
+  CollectionCardMedia,
+  CollectionCardTitleOverlay,
+  CollectionImage,
+} from "./shared/CollectionCard";
+import {
+  CollectionGrid,
+  CollectionGridSkeleton,
+  CollectionPageHeader,
+  CollectionPageShell,
+  CollectionToolbar,
+} from "./shared/CollectionLayout";
+import { CollectionNotice } from "./shared/CollectionNotice";
+import { VisualStatePanel } from "./shared/VisualStatePanel";
 import { Input } from "./ui/input";
 import { mapWithConcurrency } from "../lib/asyncPool";
 
@@ -34,6 +51,7 @@ export function MyDecorationsPage({
   const [isLoading, setIsLoading] = useState(true);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -98,66 +116,132 @@ export function MyDecorationsPage({
   }
 
   const isUploading = Boolean(uploadProgress && uploadProgress.finished < uploadProgress.total);
+  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
+  const filteredDecorations = normalizedSearchQuery
+    ? decorations.filter((decoration) => decoration.name.toLocaleLowerCase().includes(normalizedSearchQuery))
+    : decorations;
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-10">
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-5 border-b border-border pb-7">
-        <div>
-          <PrimitiveText as="h1" variant="display" font="serif">My Decorations</PrimitiveText>
-          <PrimitiveText as="p" tone="muted" className="mt-2">
-            {decorations.length} reusable {decorations.length === 1 ? "decoration" : "decorations"}
-          </PrimitiveText>
-        </div>
-        <input ref={inputRef} type="file" accept="image/png,.png" multiple className="sr-only" onChange={(event) => void handleFilesSelected(event)} />
-        <PrimitiveButton type="button" onClick={() => inputRef.current?.click()} disabled={isUploading}>
-          {isUploading ? <LoaderCircle className="animate-spin" /> : <ImagePlus />}
-          {isUploading ? `Uploading ${uploadProgress?.finished ?? 0} of ${uploadProgress?.total ?? 0}` : "Add PNGs"}
-        </PrimitiveButton>
-      </div>
+    <CollectionPageShell>
+      <CollectionPageHeader
+        title="My Decorations"
+        description={isLoading
+          ? "Loading your decorations…"
+          : `${decorations.length} reusable ${decorations.length === 1 ? "decoration" : "decorations"}`}
+        actions={(
+          <>
+            <input ref={inputRef} type="file" accept="image/png,.png" multiple className="sr-only" onChange={(event) => void handleFilesSelected(event)} />
+            <PrimitiveButton type="button" onClick={() => inputRef.current?.click()} disabled={isUploading}>
+              {isUploading ? <LoaderCircle className="animate-spin" /> : <ImagePlus />}
+              {isUploading ? `Uploading ${uploadProgress?.finished ?? 0} of ${uploadProgress?.total ?? 0}` : "Add PNGs"}
+            </PrimitiveButton>
+          </>
+        )}
+      />
 
-      {errorMessage ? <div className="mb-6 border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive" role="alert">{errorMessage}</div> : null}
+      {errorMessage && decorations.length > 0 ? (
+        <CollectionNotice tone="destructive" className="mb-6">{errorMessage}</CollectionNotice>
+      ) : null}
+
+      {!isLoading && decorations.length > 0 ? (
+        <CollectionToolbar>
+          <div className="max-w-xl">
+            <label htmlFor="decoration-search" className="sr-only">Search decorations</label>
+            <PrimitiveSearchField
+              id="decoration-search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search decorations by name"
+            />
+            {searchQuery.trim() ? (
+              <PrimitiveText as="p" variant="caption" tone="muted" className="mt-2" aria-live="polite">
+                {filteredDecorations.length} of {decorations.length} decorations match
+              </PrimitiveText>
+            ) : null}
+          </div>
+        </CollectionToolbar>
+      ) : null}
 
       {isLoading ? (
-        <div className="flex min-h-64 items-center justify-center" role="status"><LoaderCircle className="animate-spin" /><span className="sr-only">Loading decorations</span></div>
+        <CollectionGridSkeleton count={6} label="Loading decorations" mediaClassName="aspect-square" variant="dense" />
+      ) : errorMessage && decorations.length === 0 ? (
+        <VisualStatePanel
+          icon={CircleAlert}
+          overline="Unable to load"
+          title="Decorations could not be loaded"
+          description={errorMessage}
+          tone="destructive"
+        >
+          <PrimitiveButton type="button" variant="outline" onClick={() => inputRef.current?.click()}>
+            <ImagePlus />
+            Choose PNGs
+          </PrimitiveButton>
+        </VisualStatePanel>
       ) : decorations.length === 0 ? (
-        <button type="button" onClick={() => inputRef.current?.click()} className="flex min-h-72 w-full flex-col items-center justify-center border border-dashed border-border bg-stone-50 px-6 text-center">
-          <ImagePlus className="mb-4 h-8 w-8" />
-          <PrimitiveText as="span" variant="title" font="serif">Add your first PNG decorations</PrimitiveText>
-          <PrimitiveText as="span" tone="muted" className="mt-2">Select several files at once; each one appears as soon as it finishes uploading.</PrimitiveText>
-        </button>
+        <VisualStatePanel
+          icon={ImagePlus}
+          overline="Your decorations"
+          title="Add your first PNG decorations"
+          description="Select several files at once; each one appears as soon as it finishes uploading."
+        >
+          <PrimitiveButton type="button" onClick={() => inputRef.current?.click()}>
+            <ImagePlus />
+            Add PNGs
+          </PrimitiveButton>
+        </VisualStatePanel>
+      ) : filteredDecorations.length === 0 ? (
+        <VisualStatePanel
+          icon={SearchX}
+          overline="No results"
+          title="No matching decorations"
+          description="Try another decoration name or clear the search to see the full library."
+        >
+          <PrimitiveButton type="button" variant="outline" onClick={() => setSearchQuery("")}>Clear search</PrimitiveButton>
+        </VisualStatePanel>
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {decorations.map((decoration) => (
-            <article key={decoration.id} className="border border-border bg-card">
-              <div className="flex aspect-square items-center justify-center overflow-hidden bg-[linear-gradient(45deg,#f3f3f3_25%,transparent_25%),linear-gradient(-45deg,#f3f3f3_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#f3f3f3_75%),linear-gradient(-45deg,transparent_75%,#f3f3f3_75%)] bg-[length:18px_18px] bg-[position:0_0,0_9px,9px_-9px,-9px_0px] p-4">
-                <img src={decoration.image_url} alt="" className="max-h-full max-w-full object-contain" />
-              </div>
-              <div className="border-t border-border p-3">
-                <Input
-                  defaultValue={decoration.name}
-                  aria-label={`Name for ${decoration.name}`}
-                  className="mb-3 h-8"
-                  onBlur={(event) => void renameDecoration(decoration, event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") event.currentTarget.blur();
-                  }}
-                />
-                <div className="flex justify-end gap-2">
-                  <DecorationImageEditor decoration={decoration} onUpdated={replaceDecoration} />
+        <CollectionGrid variant="dense">
+          {filteredDecorations.map((decoration) => (
+            <CollectionCard key={decoration.id} className="group">
+              <CollectionCardMedia className="flex aspect-square items-center justify-center bg-white p-4">
+                <CollectionImage src={decoration.image_url} alt={decoration.name} fit="contain" />
+                <CollectionCardTitleOverlay contentClassName="pointer-events-auto p-3 sm:p-4">
+                  <Input
+                    key={decoration.name}
+                    type="text"
+                    defaultValue={decoration.name}
+                    aria-label={`Name for ${decoration.name}`}
+                    className="pointer-events-auto h-auto w-full rounded-none border-0 border-b border-transparent bg-transparent p-0 text-lg leading-snug text-white drop-shadow-sm outline-none transition-colors placeholder:text-white/70 hover:border-white/40 focus-visible:border-white/80 focus-visible:ring-0 md:text-lg"
+                    style={{ fontFamily: "Cormorant Garamond, serif" }}
+                    onBlur={(event) => void renameDecoration(decoration, event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                      if (event.key === "Escape") {
+                        event.currentTarget.value = decoration.name;
+                        event.currentTarget.blur();
+                      }
+                    }}
+                  />
+                </CollectionCardTitleOverlay>
+                <CollectionCardHoverActions>
+                  <DecorationImageEditor
+                    decoration={decoration}
+                    onUpdated={replaceDecoration}
+                    triggerClassName="border-background/60 bg-background/90 shadow-sm backdrop-blur-sm"
+                  />
                   <PrimitiveConfirmationDialog
                     title="Delete decoration?"
                     description="This removes the decoration from your library and from every flat lay or magazine where it is used."
                     confirmLabel="Delete decoration"
                     onConfirm={() => void removeDecoration(decoration)}
                   >
-                    <PrimitiveButton type="button" variant="outline" size="icon" className="text-destructive hover:text-destructive" aria-label={`Delete ${decoration.name}`}><Trash2 /></PrimitiveButton>
+                    <PrimitiveButton type="button" variant="outline" size="icon" className="border-background/60 bg-background/90 text-destructive shadow-sm backdrop-blur-sm hover:border-destructive hover:text-destructive" aria-label={`Delete ${decoration.name}`}><Trash2 /></PrimitiveButton>
                   </PrimitiveConfirmationDialog>
-                </div>
-              </div>
-            </article>
+                </CollectionCardHoverActions>
+              </CollectionCardMedia>
+            </CollectionCard>
           ))}
-        </div>
+        </CollectionGrid>
       )}
-    </div>
+    </CollectionPageShell>
   );
 }

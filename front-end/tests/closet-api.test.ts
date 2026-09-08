@@ -11,61 +11,88 @@ import {
   deleteModeledPreview,
   fetchOutfitFolder,
   fetchOutfitFolders,
+  fetchWardrobeAnalysisStatus,
+  generateOutfitRecommendations,
   generateClothingItemCleanImage,
+  generateOutfitDetectionImage,
   generateMagazineMetadataSuggestions,
-  generateOutfit,
   generateOutfitMetadataSuggestions,
   mergeMetadataSuggestion,
   requestModeledOutfit,
+  removeOutfitDetectionImageBackground,
   resolveEditableImageFetchUrl,
   saveModelReferences,
+  startWardrobeAnalysis,
   updateModeledPreview,
   updateOutfitFolder,
   updateOutfitFolderDecoration,
   updateDecoration,
   updateOutfitDecoration,
 } from "../src/app/lib/closet.ts";
-import { validateClothingItemForm } from "../src/app/lib/itemFormValidation.ts";
-import { normalizeCategory } from "../src/app/lib/wardrobeTaxonomy.ts";
 
-test("generateOutfit queues a background workflow with an optional occasion", async () => {
+test("outfit creator APIs prepare the wardrobe and preserve keep and exclude choices", async () => {
   const originalFetch = globalThis.fetch;
-  let requestedPath = "";
-  let requestInit: RequestInit | undefined;
-
+  const requests: Array<{ path: string; init?: RequestInit }> = [];
   globalThis.fetch = async (input, init) => {
-    requestedPath = String(input);
-    requestInit = init;
-
-    return new Response(
-      JSON.stringify({
-        id: 44,
-        kind: "outfit_generation",
-        status: "pending",
-        completed_count: 0,
-        failed_count: 0,
-        metadata: { occasion: "dinner" },
-        stages: [],
-      }),
-      {
-        status: 202,
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+    const path = String(input);
+    requests.push({ path, init });
+    if (path.endsWith("/outfit_recommendations")) {
+      return new Response(JSON.stringify({
+        brief: { summary: "Fall layers", preferred_colors: ["brown"] },
+        provider: "openrouter",
+        models: { brief: "test/brief", embedding: "test/embedding" },
+        recommendations: [{
+          id: "look-one",
+          title: "Orchard Walk",
+          summary: "Fall layers",
+          item_ids: [4],
+          items: [{ id: 4, user_id: 1, name: "Brown Jacket", size: "na", date: null, tags: [] }],
+          score: 0.9,
+          reasons: ["Matches brown"],
+        }],
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(JSON.stringify({
+      total: 12,
+      ready: init?.method === "POST" ? 0 : 12,
+      pending: 0,
+      processing: 0,
+      failed: 0,
+      stale: 0,
+      missing_image: 0,
+      complete: init?.method !== "POST",
+      workflow: null,
+    }), { status: init?.method === "POST" ? 202 : 200, headers: { "Content-Type": "application/json" } });
   };
 
   try {
-    const workflow = await generateOutfit("dinner");
+    await fetchWardrobeAnalysisStatus();
+    await startWardrobeAnalysis();
+    const result = await generateOutfitRecommendations({
+      prompt: "Brown fall layers",
+      lockedItemIds: [4],
+      excludedItemIds: [8],
+    });
 
-    assert.equal(requestedPath, "/api/outfits/generate");
-    assert.equal(requestInit?.method, "POST");
-    assert.equal(requestInit?.body, JSON.stringify({ occasion: "dinner" }));
-    assert.equal(workflow.kind, "outfit_generation");
-    assert.equal(workflow.status, "pending");
+    assert.deepEqual(requests.map((request) => request.path), [
+      "/api/wardrobe_item_analysis",
+      "/api/wardrobe_item_analysis",
+      "/api/outfit_recommendations",
+    ]);
+    assert.deepEqual(JSON.parse(String(requests[2].init?.body)), {
+      outfit_recommendation: {
+        prompt: "Brown fall layers",
+        locked_item_ids: [4],
+        excluded_item_ids: [8],
+      },
+    });
+    assert.equal(result.recommendations[0].items[0].name, "Brown Jacket");
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
+import { validateClothingItemForm } from "../src/app/lib/itemFormValidation.ts";
+import { normalizeCategory } from "../src/app/lib/wardrobeTaxonomy.ts";
 
 test("outfit folder APIs preserve magazine order and upload page-specific clip art", async () => {
   const originalFetch = globalThis.fetch;
@@ -317,69 +344,6 @@ test("magazine metadata suggestions use collection and member routes without sav
   }
 });
 
-test("generateOutfit posts a reference flatlay photo as multipart form data", async () => {
-  const originalFetch = globalThis.fetch;
-  let requestInit: RequestInit | undefined;
-  const referencePhoto = new File(["flatlay"], "flatlay.png", { type: "image/png" });
-
-  globalThis.fetch = async (_input, init) => {
-    requestInit = init;
-
-    return new Response(
-      JSON.stringify({
-        id: 45,
-        kind: "outfit_generation",
-        status: "pending",
-        completed_count: 0,
-        failed_count: 0,
-        stages: [],
-      }),
-      {
-        status: 202,
-        headers: { "Content-Type": "application/json" },
-      },
-    );
-  };
-
-  try {
-    await generateOutfit({ occasion: "match this", referencePhoto });
-
-    assert.equal(requestInit?.method, "POST");
-    assert.ok(requestInit?.body instanceof FormData);
-    const body = requestInit.body;
-    assert.equal(body.get("occasion"), "match this");
-    assert.equal(body.get("reference_photo"), referencePhoto);
-    assert.equal(new Headers(requestInit.headers).has("Content-Type"), false);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("generateOutfit surfaces queue-time validation details", async () => {
-  const originalFetch = globalThis.fetch;
-
-  globalThis.fetch = async () => new Response(
-    JSON.stringify({
-      error: "Add closet items before generating an outfit.",
-    }),
-    {
-      status: 422,
-      headers: { "Content-Type": "application/json" },
-    },
-  );
-
-  try {
-    await assert.rejects(
-      () => generateOutfit("ice bar"),
-      {
-        message: "Add closet items before generating an outfit.",
-      },
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
 test("generateClothingItemCleanImage queues a cancellable item-clean workflow", async () => {
   const originalFetch = globalThis.fetch;
   let requestedPath = "";
@@ -410,6 +374,54 @@ test("generateClothingItemCleanImage queues a cancellable item-clean workflow", 
     assert.ok(requestInit?.body instanceof FormData);
     assert.equal(workflow.kind, "item_clean");
     assert.equal(workflow.status, "pending");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("outfit detection image APIs keep generation and background removal as separate stages", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ init?: RequestInit; path: string }> = [];
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ init, path: String(input) });
+    const transparent = String(input).endsWith("/remove_image_background");
+    return new Response(JSON.stringify({
+      category: "shirt",
+      confidence: 0.9,
+      details: {},
+      generated_image_url: "/generated.png",
+      id: 12,
+      image_url: transparent ? "/transparent.png" : "/generated.png",
+      image_versions: transparent
+        ? [
+            { id: 1, kind: "original", image_url: "/original.png", selected: false },
+            { id: 2, kind: "generated", image_url: "/generated.png", selected: false },
+            { id: 3, kind: "transparent", image_url: "/transparent.png", selected: true },
+          ]
+        : [
+            { id: 1, kind: "original", image_url: "/original.png", selected: false },
+            { id: 2, kind: "generated", image_url: "/generated.png", selected: true },
+          ],
+      outfit_upload_id: 4,
+      position: 0,
+      transparent_image_url: transparent ? "/transparent.png" : null,
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const generated = await generateOutfitDetectionImage(12);
+    const transparent = await removeOutfitDetectionImageBackground(12);
+
+    assert.equal(requests[0].path, "/api/outfit_detections/12/generate_image");
+    assert.equal(requests[0].init?.method, "POST");
+    assert.equal(requests[1].path, "/api/outfit_detections/12/remove_image_background");
+    assert.equal(requests[1].init?.method, "POST");
+    assert.equal(generated.image_versions?.find((version) => version.selected)?.kind, "generated");
+    assert.equal(transparent.image_versions?.find((version) => version.selected)?.kind, "transparent");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -844,6 +856,8 @@ test("normalizeCategory treats accessories as a canonical item type", () => {
   assert.equal(normalizeCategory("handbag"), "accessory");
   assert.equal(normalizeCategory("bag"), "accessory");
   assert.equal(normalizeCategory("tote"), "accessory");
+  assert.equal(normalizeCategory("necklace"), "accessory");
+  assert.equal(normalizeCategory("pendant"), "accessory");
 });
 
 test("resolveEditableImageFetchUrl keeps local Active Storage fetches same-origin and proxied", () => {

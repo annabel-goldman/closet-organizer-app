@@ -12,7 +12,6 @@ class OutfitUploadAnalysisJob < ApplicationJob
 
         workflow.mark_processing!
         workflow.stage("detect").processing!
-        workflow.stage("crop").processing!
       end
     end
     outfit_upload.analyze!
@@ -23,11 +22,9 @@ class OutfitUploadAnalysisJob < ApplicationJob
     end
     if outfit_upload.outfit_detections.exists?
       workflow&.stage("detect")&.review!
-      workflow&.stage("crop")&.review!
       workflow&.mark_review!
     else
       workflow&.stage("detect")&.approve!
-      workflow&.stage("crop")&.approve!
       workflow&.mark_succeeded!
     end
   rescue StandardError => error
@@ -38,7 +35,6 @@ class OutfitUploadAnalysisJob < ApplicationJob
     end
 
     workflow&.stage("detect")&.fail!(error) if workflow
-    workflow&.stage("crop")&.fail!(error) if workflow
     workflow&.mark_failed!(error) if workflow
     Rails.logger.error(
       "OutfitUploadAnalysisJob failed for upload #{outfit_upload_id}: " \

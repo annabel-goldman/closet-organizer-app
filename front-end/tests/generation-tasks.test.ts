@@ -26,8 +26,11 @@ function task(kind: string, status: GenerationTask["workflow"]["status"]): Gener
 test("generation task copy reflects each durable workflow kind", () => {
   assert.equal(generationTaskMessage(task("modeled_item", "processing")), "Generating a modeled preview for");
   assert.equal(generationTaskMessage(task("item_clean", "processing")), "Cleaning the image for");
-  assert.equal(generationTaskMessage(task("outfit_generation", "succeeded")), "Generated");
+  assert.equal(generationTaskMessage(task("modeled_outfit", "succeeded")), "Generated a modeled preview for");
   assert.equal(generationTaskMessage(task("outfit_upload", "review")), "Detected items in");
+  const judging = task("outfit_recommendation", "processing");
+  judging.workflow.stages = [{ key: "judge", status: "processing" }];
+  assert.equal(generationTaskMessage(judging), "Checking compatibility for");
 });
 
 test("generation tasks remain cancellable only while pending or processing", () => {
@@ -44,8 +47,8 @@ test("generation tasks identify review and succeeded as successful completion", 
   assert.equal(isGenerationTaskSuccessful(task("modeled_outfit", "failed")), false);
 });
 
-test("completed outfit generation uses the generated outfit name", () => {
-  const completed = task("outfit_generation", "succeeded");
+test("completed workflows can use a result name from workflow metadata", () => {
+  const completed = task("modeled_outfit", "succeeded");
   completed.workflow.metadata = { result_name: "Dinner at Eight" };
 
   assert.equal(generationTaskLabel(completed), "Dinner at Eight");

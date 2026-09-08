@@ -32,6 +32,10 @@ interface OutfitsRouteState {
   kind: "outfits";
 }
 
+interface MagazinesRouteState {
+  kind: "magazines";
+}
+
 interface DecorationsRouteState {
   kind: "decorations";
 }
@@ -70,6 +74,7 @@ export type AppRoute =
   | UserRouteState
   | NewItemRouteState
   | OutfitsRouteState
+  | MagazinesRouteState
   | DecorationsRouteState
   | MagazineEditorRouteState
   | MagazineReaderRouteState
@@ -87,7 +92,11 @@ export function isClosetRoute(route: AppRoute) {
 }
 
 export function isOutfitRoute(route: AppRoute) {
-  return route.kind === "outfits"
+  return route.kind === "outfits";
+}
+
+export function isMagazineRoute(route: AppRoute) {
+  return route.kind === "magazines"
     || route.kind === "magazine-editor"
     || route.kind === "magazine-reader";
 }
@@ -153,7 +162,11 @@ export function getRouteFromLocation(
   }
 
   if (normalizedPath === "/outfits") {
-    return { kind: "outfits" };
+    return query.get("view") === "magazines" ? { kind: "magazines" } : { kind: "outfits" };
+  }
+
+  if (normalizedPath === "/magazines") {
+    return { kind: "magazines" };
   }
 
   if (normalizedPath === "/decorations") {

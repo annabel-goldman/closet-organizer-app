@@ -67,9 +67,13 @@ export function useGenerationTaskManager({
           await workflowUpdateRef.current?.(workflow, "poll", controller.signal);
           setTasks((current) => {
             const task = current[workflowId];
-            return task
-              ? { ...current, [workflowId]: { ...task, workflow } }
-              : current;
+            if (!task) return current;
+            if (task.isDismissed && !ACTIVE_STATUSES.has(workflow.status)) {
+              const next = { ...current };
+              delete next[workflowId];
+              return next;
+            }
+            return { ...current, [workflowId]: { ...task, workflow } };
           });
         } catch {
           // A temporary refresh error should not end a durable background task.
@@ -99,10 +103,12 @@ export function useGenerationTaskManager({
         return next;
       }
 
+      const existing = current[workflow.id];
       return {
         ...current,
         [workflow.id]: {
-          label: current[workflow.id]?.label ?? label,
+          ...existing,
+          label: existing?.label ?? label,
           workflow,
         },
       };
@@ -125,6 +131,7 @@ export function useGenerationTaskManager({
       return {
         ...current,
         [workflow.id]: {
+          ...existing,
           label: existing?.label ?? label,
           workflow,
         },
@@ -168,6 +175,16 @@ export function useGenerationTaskManager({
 
   const dismiss = useCallback((workflowId: number) => {
     setTasks((current) => {
+      const task = current[workflowId];
+      if (!task) return current;
+
+      if (ACTIVE_STATUSES.has(task.workflow.status)) {
+        return {
+          ...current,
+          [workflowId]: { ...task, isDismissed: true },
+        };
+      }
+
       const next = { ...current };
       delete next[workflowId];
       return next;

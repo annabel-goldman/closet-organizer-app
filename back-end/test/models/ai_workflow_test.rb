@@ -6,8 +6,8 @@ class AiWorkflowTest < ActiveSupport::TestCase
 
     workflow.initialize_stages!
 
-    assert_equal %w[detect crop], workflow.stages.order(:id).pluck(:key)
-    assert_equal %w[pending pending], workflow.stages.order(:id).pluck(:status)
+    assert_equal %w[detect], workflow.stages.order(:id).pluck(:key)
+    assert_equal %w[pending], workflow.stages.order(:id).pluck(:status)
   end
 
   test "tracks review and failure state without losing the workflow" do
@@ -35,5 +35,13 @@ class AiWorkflowTest < ActiveSupport::TestCase
 
     assert_not workflow.valid?
     assert_includes workflow.errors[:kind], "is not included in the list"
+  end
+
+  test "initializes durable outfit recommendation stages" do
+    workflow = users(:one).ai_workflows.create!(kind: "outfit_recommendation")
+
+    workflow.initialize_stages!
+
+    assert_equal %w[plan retrieve judge finalize], workflow.stages.order(:id).pluck(:key)
   end
 end

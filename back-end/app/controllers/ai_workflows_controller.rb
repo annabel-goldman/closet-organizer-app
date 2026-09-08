@@ -125,6 +125,8 @@ class AiWorkflowsController < ApplicationController
       )
     when "outfit_upload"
       @workflow.subject&.update(status: :cancelled, error_message: nil)
+    when "outfit_recommendation"
+      @workflow.subject&.update(status: :failed, error_message: "Outfit creation was cancelled.", completed_at: Time.current)
     end
   end
 

@@ -2,19 +2,21 @@ class AiWorkflow < ApplicationRecord
   KINDS = %w[
     outfit_upload
     item_clean
-    outfit_generation
     modeled_item
     modeled_outfit
     lookbook
+    wardrobe_index
+    outfit_recommendation
   ].freeze
 
   STAGES_BY_KIND = {
-    "outfit_upload" => %w[detect crop],
+    "outfit_upload" => %w[detect],
     "item_clean" => %w[clean verify],
-    "outfit_generation" => %w[curate save],
     "modeled_item" => %w[prepare modeled verify],
     "modeled_outfit" => %w[prepare modeled verify],
-    "lookbook" => %w[curate modeled verify]
+    "lookbook" => %w[curate modeled verify],
+    "wardrobe_index" => %w[embed enrich],
+    "outfit_recommendation" => %w[plan retrieve judge finalize]
   }.freeze
 
   belongs_to :user

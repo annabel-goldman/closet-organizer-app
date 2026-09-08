@@ -116,7 +116,7 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_match(/crop\.png\z/, created_item.photo.blob.filename.to_s)
   end
 
-  test "can create a clothing item from a verified outfit detection crop" do
+  test "can create a clothing item from an outfit detection without cropping the source photo" do
     upload = OutfitUpload.new(user: @user, status: :succeeded, provider: "openrouter")
     upload.source_photo.attach(item_photo_upload_png)
     upload.save!
@@ -159,13 +159,14 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     created_item = ClothingItem.order(:created_at).last
     assert_predicate created_item.photo, :attached?
     assert_equal "image/png", created_item.photo.blob.content_type
-    assert_match(/crop\.png\z/, created_item.photo.blob.filename.to_s)
+    assert_equal "item-photo.png", created_item.photo.blob.filename.to_s
+    assert_equal upload.source_photo.blob.byte_size, created_item.photo.blob.byte_size
     assert_equal "shirt", created_item.category
     assert_equal upload.id, created_item.source_outfit_upload_id
     assert_equal detection.id, created_item.source_outfit_detection_id
   end
 
-  test "prefers a cleaned outfit detection image when creating a clothing item" do
+  test "preserves the original source photo and transfers a cleaned outfit detection image as a version" do
     upload = OutfitUpload.new(user: @user, status: :succeeded, provider: "openrouter")
     upload.source_photo.attach(item_photo_upload_png)
     upload.save!
@@ -208,7 +209,10 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
 
     created_item = ClothingItem.order(:created_at).last
     assert_predicate created_item.photo, :attached?
-    assert_match(/item-photo\.png\z/, created_item.photo.blob.filename.to_s)
+    assert_equal "item-photo.png", created_item.photo.blob.filename.to_s
+    assert_equal upload.source_photo.blob.byte_size, created_item.photo.blob.byte_size
+    assert_equal %w[original transparent], created_item.image_versions.in_display_order.pluck(:variant_kind)
+    assert_predicate created_item.image_versions.find_by!(variant_kind: "transparent"), :selected?
     assert_equal upload.id, created_item.source_outfit_upload_id
     assert_equal detection.id, created_item.source_outfit_detection_id
   end
@@ -236,6 +240,41 @@ class ClothingItemsFlowTest < ActionDispatch::IntegrationTest
     assert_equal [ "silk", "ivory", "dressy", "maison" ], @clothing_item.tags
     assert_equal "Wear tucked with high-rise denim.", response_json["style_notes"]
     assert_equal [ "silk", "ivory", "dressy", "maison" ], response_json["tags"]
+  end
+
+  test "can select a saved image version without losing that choice on metadata updates" do
+    @clothing_item.photo.attach(item_photo_upload_png)
+    original = WardrobeImageVersionPublisher.call(
+      record: @clothing_item,
+      variant_kind: "original",
+      source: @clothing_item.photo
+    )
+    generated = WardrobeImageVersionPublisher.call(
+      record: @clothing_item,
+      variant_kind: "generated",
+      source: @clothing_item.photo,
+      parent: original
+    )
+
+    patch select_image_version_clothing_item_url(@clothing_item), params: {
+      variant_kind: "original"
+    }, headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_predicate original.reload, :selected?
+    assert_not generated.reload.selected?
+
+    patch clothing_item_url(@clothing_item), params: {
+      clothing_item: {
+        name: "Updated while original selected",
+        size: @clothing_item.size,
+        tags: @clothing_item.tags
+      }
+    }, headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_predicate original.reload, :selected?
+    assert_not generated.reload.selected?
   end
 
   test "rejects overlong visual descriptions" do

@@ -1,5 +1,18 @@
 class OutfitPhotoDetector < OpenrouterVisionService
   DEFAULT_MODEL = "openai/gpt-4.1-mini".freeze
+  CATEGORY_ALIASES = {
+    "bracelet" => "accessory",
+    "bracelets" => "accessory",
+    "brooch" => "accessory",
+    "earring" => "accessory",
+    "earrings" => "accessory",
+    "jewelry" => "accessory",
+    "jewellery" => "accessory",
+    "necklace" => "accessory",
+    "pendant" => "accessory",
+    "ring" => "accessory",
+    "watch" => "accessory"
+  }.freeze
 
   def self.call(outfit_upload)
     new(outfit_upload).call
@@ -116,7 +129,7 @@ class OutfitPhotoDetector < OpenrouterVisionService
     Array(items).filter_map do |item|
       next if item["visible"] == false
 
-      category = item["category"].to_s.strip.downcase
+      category = normalize_category(item["category"])
       next if category.blank?
 
       {
@@ -134,6 +147,11 @@ class OutfitPhotoDetector < OpenrouterVisionService
         }.compact_blank
       }
     end
+  end
+
+  def normalize_category(value)
+    normalized = value.to_s.strip.downcase.squish
+    CATEGORY_ALIASES.fetch(normalized, normalized)
   end
 
   def normalize_confidence(value)

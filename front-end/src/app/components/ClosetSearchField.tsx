@@ -9,10 +9,12 @@ interface ClosetSearchFieldProps {
   className?: string;
   id: string;
   onChange: (value: string) => void;
+  onClear: () => void;
   onOpenItem: (item: ClothingItem) => void;
   onSelectSuggestion: (item: ClothingItem) => void;
   placeholder?: string;
   suggestions: ClothingItem[];
+  showClear: boolean;
   value: string;
 }
 
@@ -20,10 +22,12 @@ export function ClosetSearchField({
   className,
   id,
   onChange,
+  onClear,
   onOpenItem,
   onSelectSuggestion,
   placeholder,
   suggestions,
+  showClear,
   value,
 }: ClosetSearchFieldProps) {
   return (
@@ -34,10 +38,13 @@ export function ClosetSearchField({
       getSuggestionLabel={formatClosetSearchSuggestionLabel}
       id={id}
       onChange={onChange}
+      onClear={onClear}
       onOpenSuggestion={onOpenItem}
       onSelectSuggestion={onSelectSuggestion}
       placeholder={placeholder}
       suggestions={suggestions}
+      showClear={showClear}
+      clearLabel="Clear closet filters"
       value={value}
     />
   );

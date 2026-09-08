@@ -1,10 +1,9 @@
 import { RefObject, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, LoaderCircle, RotateCcw, RotateCw, Sparkles, Upload } from "lucide-react";
+import { ArrowLeft, Check, LoaderCircle, RotateCcw, RotateCw, Scissors, Sparkles, Upload } from "lucide-react";
 import {
   buildItemPreviewMetadata,
   ClothingItemFormValues,
   OutfitDetection,
-  preferredDetectionBox,
   parseTagInput,
   titleize,
   User,
@@ -21,7 +20,6 @@ import type {
   ExpandedImageEditorApplyContext,
   ExpandedImageEditorImageActions,
 } from "../ExpandedImageEditor";
-import { DetectionPreviewImage } from "./DetectionPreview";
 import { DetectionThumbnailStrip } from "./DetectionThumbnailStrip";
 
 interface CreateItemImageModeProps {
@@ -58,6 +56,13 @@ interface CreateItemImageModeProps {
     context: ExpandedImageEditorApplyContext,
   ) => Promise<void> | void;
   onCleanDetectionEditorImage?: (detection: OutfitDetection, file: File) => Promise<File>;
+  onMakeDetectionEditorImageTransparent?: (detection: OutfitDetection, file: File) => Promise<File>;
+  onGetDetectionVersionEditorFile?: (
+    detection: OutfitDetection,
+    kind: "base" | "generated" | "transparent",
+  ) => Promise<File | null>;
+  onGenerateSelectedImages: () => void;
+  onRemoveSelectedImageBackgrounds: () => void;
   onDetectItems: () => void;
   onDraftChange: (detectionId: number, nextValues: ClothingItemFormValues) => void;
   onFileChange: (files: File[]) => void;
@@ -107,6 +112,10 @@ export function CreateItemImageMode({
   getDetectionEditedImageKind,
   onApplyDetectionImageEdits,
   onCleanDetectionEditorImage,
+  onMakeDetectionEditorImageTransparent,
+  onGetDetectionVersionEditorFile,
+  onGenerateSelectedImages,
+  onRemoveSelectedImageBackgrounds,
   onDetectItems,
   onDraftChange,
   onFileChange,
@@ -183,13 +192,18 @@ export function CreateItemImageMode({
   const previewEditedImageKind = previewDetection
     ? getDetectionEditedImageKind?.(previewDetection) ?? null
     : null;
+  const previewPersistedImageKind = previewDetection?.image_versions?.find((version) => version.selected)?.kind;
+  const previewEditorImageKind = previewEditedImageKind
+    ?? (previewPersistedImageKind === "original" ? "base" : previewPersistedImageKind)
+    ?? (previewDetection?.transparent_image_url ? "transparent" : previewDetection?.generated_image_url ? "generated" : "base");
   const detailsDetection =
     detailsDetectionId == null
       ? previewDetection
       : detections.find((detection) => detection.id === detailsDetectionId) ?? previewDetection ?? null;
   const isSourceFocused = previewTarget === "source";
-  const previewDetectionBox = previewDetection ? preferredDetectionBox(previewDetection) : null;
-  const detailsPreviewBox = detailsDetection ? preferredDetectionBox(detailsDetection) : null;
+  const detailsDetectionSourceImageUrl = detailsDetection
+    ? getDetectionSourceImageUrl(detailsDetection)
+    : null;
   const detailsDraftReady = detailsDetection ? hasDetectionDraft(detailsDetection.id) : false;
   const focusedDraft = detailsDetection ? getDetectionDraft(detailsDetection) : null;
   const focusedSuggestedName = focusedDraft?.name.trim()
@@ -214,32 +228,6 @@ export function CreateItemImageMode({
   const previewDetectionSourceImageUrl = previewDetection
     ? getDetectionSourceImageUrl(previewDetection)
     : null;
-  const previewMedia = useMemo(() => {
-    if (!previewDetection || !previewDetectionSourceImageUrl || !previewDetectionBox || previewDetection.cleaned_image_url) {
-      return undefined;
-    }
-
-    return (
-      <DetectionPreviewImage
-        alt={`${focusedSuggestedName} preview`}
-        cropBox={previewDetectionBox}
-        sourceImageUrl={previewDetectionSourceImageUrl}
-      />
-    );
-  }, [focusedSuggestedName, previewDetection, previewDetectionBox, previewDetectionSourceImageUrl]);
-  const expandedPreview = useMemo(() => {
-    if (!previewDetection || !previewDetectionSourceImageUrl || !previewDetectionBox || previewDetection.cleaned_image_url) {
-      return undefined;
-    }
-
-    return (
-      <DetectionPreviewImage
-        alt={`${focusedSuggestedName} preview`}
-        cropBox={previewDetectionBox}
-        sourceImageUrl={previewDetectionSourceImageUrl}
-      />
-    );
-  }, [focusedSuggestedName, previewDetection, previewDetectionBox, previewDetectionSourceImageUrl]);
   const sourcePreviewTitle = selectedFileName ?? "Upload photos";
   const sourcePreviewPrimaryDetail = isDetecting
     ? `${detectionCount} item${detectionCount === 1 ? "" : "s"} found · ${completedFileCount}/${selectedFileCount} photos analyzed`
@@ -260,6 +248,9 @@ export function CreateItemImageMode({
     && !isSourceFocused
     && (!detailsDetection || !detailsDraftReady || isLoadingDetectedMetadata);
   const hasUnsavedDetectedItems = selectedCount < detectionCount;
+  const selectableDetections = detections;
+  const allSelectableDetectionsSelected = selectableDetections.length > 0
+    && selectableDetections.every((detection) => selectedDetectionIds.includes(detection.id));
   const detectPromptCopy = selectedFileCount === 1
     ? "Analyze this photo. Detected items will appear as soon as it finishes."
     : `Analyze these ${selectedFileCount} photos. Detected items will appear as each photo finishes.`;
@@ -276,8 +267,7 @@ export function CreateItemImageMode({
       </PrimitiveButton>
 
       <UploadWorkspace
-        expandedPreview={expandedPreview}
-        imageUrl={previewEditedImageUrl ?? previewDetection?.cleaned_image_url ?? (isSourceFocused ? sourceImageUrl : null)}
+        imageUrl={previewEditedImageUrl ?? previewDetection?.image_url ?? previewDetection?.cleaned_image_url ?? (isSourceFocused ? sourceImageUrl : previewDetectionSourceImageUrl)}
         isPreviewProcessing={focusedIsCleaning}
         onPreviewClick={() => inputRef.current?.click()}
         onPreviewClear={selectedFileName ? onRemoveSourceImage : undefined}
@@ -287,13 +277,34 @@ export function CreateItemImageMode({
             ? {
                 getEditableFile: () => onGetDetectionImageEditorFile(previewDetection),
                 imageActions: {
-                  initialKind: previewEditedImageKind ?? (previewDetection.cleaned_image_url ? "cleaned" : "base"),
+                  initialKind: previewEditorImageKind,
                   onClean: onCleanDetectionEditorImage
                     ? (file) => onCleanDetectionEditorImage(previewDetection, file)
                     : undefined,
+                  onMakeTransparent: onMakeDetectionEditorImageTransparent
+                    ? (file) => onMakeDetectionEditorImageTransparent(previewDetection, file)
+                    : undefined,
+                  versions: onGetDetectionVersionEditorFile ? [
+                    {
+                      kind: "base" as const,
+                      label: "Original",
+                      getFile: () => onGetDetectionVersionEditorFile(previewDetection, "base"),
+                    },
+                    ...(previewDetection.generated_image_url ? [{
+                      kind: "generated" as const,
+                      label: "AI Generated",
+                      getFile: () => onGetDetectionVersionEditorFile(previewDetection, "generated"),
+                    }] : []),
+                    ...(previewDetection.transparent_image_url ? [{
+                      kind: "transparent" as const,
+                      label: "Transparent",
+                      getFile: () => onGetDetectionVersionEditorFile(previewDetection, "transparent"),
+                    }] : []),
+                  ] : undefined,
                 },
                 onApply: (file, context) => onApplyDetectionImageEdits(previewDetection, file, context),
                 sourceKey: previewEditedImageUrl
+                  ?? previewDetection.image_url
                   ?? previewDetection.cleaned_image_url
                   ?? getDetectionSourceImageUrl(previewDetection)
                   ?? `detection-${previewDetection.id}`,
@@ -319,7 +330,6 @@ export function CreateItemImageMode({
             />
           ) : undefined
         }
-        previewMedia={previewDetection && !previewEditedImageUrl ? previewMedia : undefined}
         previewLabel={previewDetection ? "Detected Item" : "Original Image"}
         previewPrimaryDetail={
           previewDetection
@@ -360,7 +370,7 @@ export function CreateItemImageMode({
           detections={detections}
           focusedTarget={previewTarget}
           getDetectionPreviewImageUrl={(detection) => {
-            return editedDetectionImageUrls[detection.id] ?? detection.cleaned_image_url ?? null;
+            return editedDetectionImageUrls[detection.id] ?? detection.image_url ?? detection.cleaned_image_url ?? null;
           }}
           getDetectionSourceImageUrl={getDetectionSourceImageUrl}
           isDetecting={isDetecting}
@@ -373,10 +383,56 @@ export function CreateItemImageMode({
             setPreviewTarget("source");
             setDetailsDetectionId(null);
           }}
+          onToggleDetectionSelection={onToggleSelection}
           selectedDetectionIds={selectedDetectionIds}
           selectedSourceIndex={selectedSourceIndex}
           sourceImages={sourceImages}
         />
+
+        {hasStartedDetectionFlow && detectionCount > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-4 border border-border bg-card px-4 py-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <PrimitiveText as="p" variant="bodySm">
+                {selectedCount} of {selectableDetections.length} item{selectableDetections.length === 1 ? "" : "s"} selected
+              </PrimitiveText>
+              <PrimitiveButton
+                type="button"
+                variant="ghost"
+                disabled={selectableDetections.length === 0 || cleaningDetectionIds.length > 0 || isCreating}
+                onClick={() => {
+                  selectableDetections.forEach((detection) => {
+                    const isSelected = selectedDetectionIds.includes(detection.id);
+                    if (allSelectableDetectionsSelected ? isSelected : !isSelected) {
+                      onToggleSelection(detection);
+                    }
+                  });
+                }}
+              >
+                {allSelectableDetectionsSelected ? "Deselect all" : "Select all"}
+              </PrimitiveButton>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <PrimitiveButton
+                type="button"
+                variant="outline"
+                disabled={selectedCount === 0 || cleaningDetectionIds.length > 0 || isCreating}
+                onClick={onGenerateSelectedImages}
+              >
+                {cleaningDetectionIds.length > 0 ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                Generate selected with AI
+              </PrimitiveButton>
+              <PrimitiveButton
+                type="button"
+                variant="outline"
+                disabled={selectedCount === 0 || cleaningDetectionIds.length > 0 || isCreating || !selectedDetectionIds.every((id) => detections.find((detection) => detection.id === id)?.generated_image_url)}
+                onClick={onRemoveSelectedImageBackgrounds}
+              >
+                <Scissors className="h-4 w-4" />
+                Remove backgrounds
+              </PrimitiveButton>
+            </div>
+          </div>
+        ) : null}
 
         {isDetecting ? (
           <div
@@ -497,7 +553,7 @@ export function CreateItemImageMode({
                 </PrimitiveButton>
                 <AiMetadataAutofillButton
                   className="mt-0 h-9 w-9 shrink-0"
-                  disabled={!detailsPreviewBox && !detailsDetection.cleaned_image_url}
+                  disabled={!detailsDetectionSourceImageUrl && !detailsDetection.cleaned_image_url}
                   isLoading={focusedIsAutofilling}
                   label="AI autofill type, name, brand, and tags"
                   onClick={() => onRequestDetectionAutofill(detailsDetection)}
@@ -519,7 +575,7 @@ export function CreateItemImageMode({
 
             <div className="grid gap-5 sm:grid-cols-2">
               <ItemMetadataFields
-                autofillDisabled={!detailsPreviewBox && !detailsDetection.cleaned_image_url}
+                autofillDisabled={!detailsDetectionSourceImageUrl && !detailsDetection.cleaned_image_url}
                 brandSuggestions={brandSuggestions}
                 fieldIdPrefix={`detection-${detailsDetection.id}-`}
                 isAutofilling={focusedIsAutofilling}
@@ -534,7 +590,7 @@ export function CreateItemImageMode({
               <PrimitiveButton
                 type="button"
                 onClick={() => onToggleSelection(detailsDetection)}
-                disabled={!detailsPreviewBox}
+                disabled={!detailsDetectionSourceImageUrl && !detailsDetection.cleaned_image_url}
                 variant="outline"
                 className={`disabled:opacity-50 ${
                   focusedIsSelected
@@ -550,8 +606,7 @@ export function CreateItemImageMode({
         )}
 
         {hasStartedDetectionFlow && detectionCount > 0 && !isSourceFocused ? (
-          <div className="mt-auto pt-2 flex items-center justify-between gap-4">
-            <div />
+          <div className="mt-auto flex justify-end pt-2">
             {hasUnsavedDetectedItems ? (
               <PrimitiveConfirmationDialog
                 confirmLabel={isCreating ? "Saving..." : "Save to closet"}
@@ -562,7 +617,7 @@ export function CreateItemImageMode({
               >
                 <PrimitiveButton
                   type="button"
-                  disabled={isCreating || selectedCount === 0}
+                  disabled={isCreating || isPreparingDetectedMetadata || selectedCount === 0}
                   className="h-auto bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
                 >
                   <Check className="w-4 h-4" />
@@ -573,7 +628,7 @@ export function CreateItemImageMode({
               <PrimitiveButton
                 type="button"
                 onClick={onSaveSelectedItems}
-                disabled={isCreating || selectedCount === 0}
+                disabled={isCreating || isPreparingDetectedMetadata || selectedCount === 0}
                 className="h-auto bg-foreground px-5 py-3 text-background hover:bg-foreground/90"
               >
                 <Check className="w-4 h-4" />

@@ -66,8 +66,12 @@ class CleanImageBackgroundRemover
 
     tempfile = temporary_files.track(Tempfile.new([ filename_root, ".png" ]))
     tempfile.binmode
-    image_source.rewind if image_source.respond_to?(:rewind)
-    IO.copy_stream(image_source, tempfile)
+    if image_source.respond_to?(:blob) && image_source.blob.present?
+      tempfile.write(image_source.download)
+    else
+      image_source.rewind if image_source.respond_to?(:rewind)
+      IO.copy_stream(image_source, tempfile)
+    end
     tempfile.rewind
     tempfile
   end

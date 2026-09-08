@@ -9,9 +9,10 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dia
 interface DecorationImageEditorProps {
   decoration: Decoration;
   onUpdated: (decoration: Decoration) => void;
+  triggerClassName?: string;
 }
 
-export function DecorationImageEditor({ decoration, onUpdated }: DecorationImageEditorProps) {
+export function DecorationImageEditor({ decoration, onUpdated, triggerClassName }: DecorationImageEditorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -35,7 +36,7 @@ export function DecorationImageEditor({ decoration, onUpdated }: DecorationImage
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !isApplying && setIsOpen(open)}>
-      <PrimitiveButton type="button" variant="outline" size="icon" onClick={() => setIsOpen(true)} aria-label={`Edit ${decoration.name}`}>
+      <PrimitiveButton type="button" variant="outline" size="icon" className={triggerClassName} onClick={() => setIsOpen(true)} aria-label={`Edit ${decoration.name}`}>
         <SquarePen />
       </PrimitiveButton>
       <DialogContent className="h-[calc(100vh-4rem)] w-[calc(100vw-4rem)] max-w-none overflow-hidden border-none bg-black/95 p-3 shadow-2xl sm:h-[calc(100vh-5rem)] sm:w-[calc(100vw-5rem)] sm:max-w-none sm:p-5 lg:p-6">

@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
-import { OutfitDetection, preferredDetectionBox, titleize } from "../../lib/closet";
+import { OutfitDetection, titleize } from "../../lib/closet";
+import { PrimitiveButton } from "../primitives/PrimitiveButton";
 import { DetectionPreviewImage } from "./DetectionPreview";
 
 const stripFrameClass = "flex h-14 min-h-14 max-h-14 items-center overflow-hidden border border-border bg-card px-4 lg:-mt-20";
@@ -15,6 +16,7 @@ interface DetectionThumbnailStripProps {
   isDetecting: boolean;
   onSelectDetection: (detectionId: number) => void;
   onSelectSource: (index: number) => void;
+  onToggleDetectionSelection: (detection: OutfitDetection) => void;
   selectedDetectionIds: number[];
   selectedSourceIndex: number;
   sourceImages: Array<{ id: string; imageUrl: string | null; label: string }>;
@@ -28,6 +30,7 @@ export function DetectionThumbnailStrip({
   isDetecting,
   onSelectDetection,
   onSelectSource,
+  onToggleDetectionSelection,
   selectedDetectionIds,
   selectedSourceIndex,
   sourceImages,
@@ -78,7 +81,6 @@ export function DetectionThumbnailStrip({
               </p>
             ) : (
               detections.map((detection) => {
-                const previewBox = preferredDetectionBox(detection);
                 const label = detection.suggested_name?.trim() || titleize(detection.category);
                 const isSelected = selectedDetectionIds.includes(detection.id);
                 const hoverLabel = isSelected ? "Will add to closet" : label;
@@ -87,36 +89,39 @@ export function DetectionThumbnailStrip({
                   ?? null;
 
                 return (
-                  <button
-                    key={detection.id}
-                    type="button"
-                    onClick={() => onSelectDetection(detection.id)}
-                    className={itemClass(focusedTarget === detection.id)}
-                    aria-label={isSelected ? `Show ${label}. Will add to closet` : `Show ${label}`}
-                    title={hoverLabel}
-                  >
-                    <DetectionPreviewImage
-                      alt={`${label} thumbnail`}
-                      cleanedImageUrl={previewImageUrl}
-                      cropBox={previewBox}
-                      sourceImageUrl={getDetectionSourceImageUrl?.(detection) ?? null}
-                      variant="thumbnail"
-                    />
-                    {isSelected ? (
-                      <>
+                  <span key={detection.id} className="relative size-9 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onSelectDetection(detection.id)}
+                      className={itemClass(focusedTarget === detection.id)}
+                      aria-label={isSelected ? `Show ${label}. Will add to closet` : `Show ${label}`}
+                      title={hoverLabel}
+                    >
+                      <DetectionPreviewImage
+                        alt={`${label} thumbnail`}
+                        cleanedImageUrl={previewImageUrl}
+                        sourceImageUrl={getDetectionSourceImageUrl?.(detection) ?? null}
+                      />
+                      {isSelected ? (
                         <span
                           aria-hidden="true"
                           className="pointer-events-none absolute inset-0 bg-foreground/18"
                         />
-                        <span
-                          aria-hidden="true"
-                          className="pointer-events-none absolute top-0.5 right-0.5 inline-flex size-4 items-center justify-center rounded-full bg-foreground text-background shadow-sm"
-                        >
-                          <Check className="size-2.5" strokeWidth={3} />
-                        </span>
-                      </>
+                      ) : null}
+                    </button>
+                    {isSelected ? (
+                      <PrimitiveButton
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onToggleDetectionSelection(detection)}
+                        aria-label={`Remove ${label} from items to save`}
+                        className="absolute right-0.5 top-0.5 z-10 size-4 rounded-full bg-foreground p-0 text-background shadow-sm hover:bg-foreground/80 hover:text-background"
+                      >
+                        <Check className="size-2.5" strokeWidth={3} />
+                      </PrimitiveButton>
                     ) : null}
-                  </button>
+                  </span>
                 );
               })
             )}

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ShoppingBag } from "lucide-react";
+import { CircleAlert, ShoppingBag } from "lucide-react";
 import { AddItemMenu } from "./components/AddItemMenu";
 import { ClothingCard } from "./components/ClothingCard";
 import { OutfitCartSheet } from "./components/OutfitCartSheet";
@@ -35,6 +35,14 @@ import { NotFoundPage } from "./components/shared/NotFoundPage";
 import { SiteFooter } from "./components/shared/SiteFooter";
 import { SiteHeader } from "./components/shared/SiteHeader";
 import {
+  CollectionGrid,
+  CollectionGridSkeleton,
+  CollectionPageHeader,
+  CollectionPageShell,
+  CollectionToolbar,
+} from "./components/shared/CollectionLayout";
+import { VisualStatePanel } from "./components/shared/VisualStatePanel";
+import {
   GenerationTaskToasts,
 } from "./components/shared/GenerationTaskToasts";
 import { ClosetSearchField } from "./components/ClosetSearchField";
@@ -43,7 +51,6 @@ import {
   createOutfit,
   AiWorkflow,
   fetchClothingItem,
-  fetchOutfit,
   fetchOutfits,
   fetchCurrentUser,
   formatTagInput,
@@ -265,13 +272,6 @@ export default function App() {
         }
       }
 
-      if (workflow.status === "succeeded" && workflow.kind === "outfit_generation") {
-        const outfitId = Number(workflow.metadata?.outfit_id);
-        if (outfitId) {
-          upsertCachedOutfit(await fetchOutfit(outfitId, signal));
-          setHasLoadedOutfits(true);
-        }
-      }
     },
   });
 
@@ -367,7 +367,7 @@ export default function App() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (!user || route.kind !== "outfits" || hasLoadedOutfits) {
+    if (!user || (route.kind !== "outfits" && route.kind !== "magazines") || hasLoadedOutfits) {
       return;
     }
 
@@ -487,19 +487,20 @@ export default function App() {
   const {
     clearAll,
     filteredItems: filteredClothingItems,
-    groupedTagOptions,
+    filterOptions,
     hasActiveFilters,
     searchQuery,
     selectedBrands,
     selectedColors,
-    selectedOtherTags,
+    selectedTypes,
     setSearchQuery,
     setSortOption,
     sortOption,
     suggestions: closetSearchSuggestions,
     toggleBrand,
     toggleColor,
-    toggleOtherTag,
+    toggleType,
+    typeOptions,
   } = closetControls;
   const showFloatingOutfitCartButton = Boolean(
     user && isClosetRoute(route) && !isOutfitCartOpen && !isTopOutfitCartButtonVisible,
@@ -569,6 +570,12 @@ export default function App() {
 
     if (workflow.kind === "outfit_upload") {
       navigateTo("/items/new/image");
+      return;
+    }
+
+    if (workflow.kind === "outfit_recommendation") {
+      const runId = Number(workflow.metadata?.run_id);
+      navigateTo(runId ? `/outfits?recommendation=${runId}` : "/outfits");
       return;
     }
 
@@ -827,12 +834,14 @@ export default function App() {
         }}
       />
     );
-  } else if (route.kind === "outfits") {
+  } else if (route.kind === "outfits" || route.kind === "magazines") {
     pageContent = user ? (
       <MyOutfitsPage
+        pageView={route.kind}
         isLoading={isLoadingOutfits || (!hasLoadedOutfits && !outfitsErrorMessage)}
         loadErrorMessage={outfitsErrorMessage}
         onOutfitDeleted={removeCachedOutfit}
+        onOutfitCreated={upsertCachedOutfit}
         onGenerationTaskStarted={trackGenerationTask}
         onOutfitModeledWorkflowUpdated={updateCachedOutfitModeledWorkflow}
         onOutfitUpdated={replaceCachedOutfit}
@@ -868,48 +877,16 @@ export default function App() {
     pageContent = <MagazineReaderPage magazineId={route.magazineId} />;
   } else {
     pageContent = (
-      <div className="max-w-7xl mx-auto px-6 py-12">
-        <div className="mb-8 flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
-          <div>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
-            >
-              <PrimitiveText
-                as="h1"
-                variant="display"
-                font="serif"
-                className="mb-2 tracking-tight"
-                style={{
-                  fontSize: "clamp(2.5rem, 5vw, 4rem)",
-                  lineHeight: "1",
-                }}
-              >
-                {closetTitle}
-              </PrimitiveText>
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-            >
-              <PrimitiveText as="p" tone="muted" className="tracking-wide">
-                {isLoading
-                  ? "Loading items from your backend..."
-                  : `${clothingItems.length} ${clothingItems.length === 1 ? "item" : "items"}${
-                      preferredStyle ? ` · ${preferredStyle} style` : ""
-                    }`}
-              </PrimitiveText>
-            </motion.div>
-          </div>
-
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6 }}
-            className="flex items-center gap-3"
-          >
+      <CollectionPageShell>
+        <CollectionPageHeader
+          title={closetTitle}
+          description={isLoading
+            ? "Loading your closet…"
+            : `${clothingItems.length} ${clothingItems.length === 1 ? "item" : "items"}${
+                preferredStyle ? ` · ${preferredStyle} style` : ""
+              }`}
+          actions={(
+            <>
             <AddItemMenu
               disabled={!user}
               onSelectImage={() => {
@@ -951,36 +928,23 @@ export default function App() {
                 </PrimitiveText>
               </PrimitiveButton>
             </span>
-          </motion.div>
-        </div>
+            </>
+          )}
+        />
 
         {errorMessage ? (
-          <div className="border border-destructive/20 bg-destructive/5 p-6">
-            <PrimitiveText as="p" variant="title" font="serif" className="mb-2">
-              The closet data could not be loaded.
-            </PrimitiveText>
-            <PrimitiveText as="p" tone="muted">
-              {errorMessage}. Make sure both dev servers are running through `./start.sh`.
-            </PrimitiveText>
-          </div>
+          <VisualStatePanel
+            icon={CircleAlert}
+            overline="Unable to load"
+            title="The closet data could not be loaded"
+            description={`${errorMessage}. Make sure both dev servers are running through ./start.sh.`}
+            tone="destructive"
+          />
         ) : isLoading ? (
-          <div className="grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="space-y-3 animate-pulse">
-                <div className="aspect-[3/4] bg-muted" />
-                <div className="h-6 w-2/3 bg-muted" />
-                <div className="h-4 w-1/2 bg-muted" />
-              </div>
-            ))}
-          </div>
+          <CollectionGridSkeleton count={4} label="Loading closet items" mediaClassName="aspect-[5/6] sm:aspect-[3/4]" variant="wardrobe" />
         ) : (
           <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
-              className="mb-8 space-y-5"
-            >
+            <CollectionToolbar className="space-y-5">
               <div className="space-y-3 min-[660px]:grid min-[660px]:gap-3 min-[660px]:space-y-0 min-[660px]:grid-cols-[minmax(0,3.2fr)_repeat(3,minmax(0,0.8fr))_minmax(0,1fr)] min-[660px]:items-start">
                 <div className="min-w-0 self-start">
                   <label htmlFor="closet-search" className="sr-only">
@@ -990,30 +954,31 @@ export default function App() {
                     id="closet-search"
                     value={searchQuery}
                     onChange={setSearchQuery}
+                    onClear={clearAll}
+                    showClear={hasActiveFilters}
                     suggestions={closetSearchSuggestions}
                     onSelectSuggestion={(item) =>
                       setSearchQuery(formatClosetSearchSuggestionLabel(item))
                     }
                     onOpenItem={(item) => navigateTo(`/items/${item.id}`)}
-                    placeholder="Search by name or describe an item with tags"
-                    className="h-14 pl-10"
+                    placeholder="Search by name or describe an item"
                   />
                 </div>
 
                 <div className="flex gap-3 overflow-x-auto pb-1 min-[660px]:contents">
                   <div className="min-w-[8.5rem] shrink-0 min-[660px]:min-w-0 min-[660px]:shrink">
                     <ClosetFilterMenu
-                      label="Tags"
-                      options={groupedTagOptions.other}
-                      selectedValues={selectedOtherTags}
-                      onToggleValue={toggleOtherTag}
+                      label="Types"
+                      options={typeOptions}
+                      selectedValues={selectedTypes}
+                      onToggleValue={toggleType}
                     />
                   </div>
 
                   <div className="min-w-[8.5rem] shrink-0 min-[660px]:min-w-0 min-[660px]:shrink">
                     <ClosetFilterMenu
                       label="Colors"
-                      options={groupedTagOptions.colors}
+                      options={filterOptions.colors}
                       selectedValues={selectedColors}
                       onToggleValue={toggleColor}
                     />
@@ -1022,7 +987,7 @@ export default function App() {
                   <div className="min-w-[8.5rem] shrink-0 min-[660px]:min-w-0 min-[660px]:shrink">
                     <ClosetFilterMenu
                       label="Brands"
-                      options={groupedTagOptions.brands}
+                      options={filterOptions.brands}
                       selectedValues={selectedBrands}
                       onToggleValue={toggleBrand}
                     />
@@ -1049,25 +1014,10 @@ export default function App() {
                 </div>
               </div>
 
-              {hasActiveFilters ? (
-                <div className="flex items-center justify-between gap-4 border border-border bg-card px-4 py-3">
-                  <PrimitiveText as="p" tone="muted">
-                    Refine your closet with free-text search, tag filters, and sorting.
-                  </PrimitiveText>
-                  <PrimitiveButton
-                    type="button"
-                    variant="outline"
-                    onClick={clearAll}
-                  >
-                    Clear filters
-                  </PrimitiveButton>
-                </div>
-              ) : null}
-
-            </motion.div>
+            </CollectionToolbar>
 
             {user && filteredClothingItems.length > 0 ? (
-              <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-12 lg:grid-cols-4">
+              <CollectionGrid variant="wardrobe">
                 {filteredClothingItems.map((item) => (
                   <ClothingCard
                     key={item.id}
@@ -1078,7 +1028,7 @@ export default function App() {
                     onRemoveFromOutfit={removeItemFromOutfitDraft}
                   />
                 ))}
-              </div>
+              </CollectionGrid>
             ) : user ? (
               <ClosetEmptyState
                 hasActiveFilters={hasActiveFilters}
@@ -1098,7 +1048,7 @@ export default function App() {
             )}
           </>
         )}
-      </div>
+      </CollectionPageShell>
     );
   }
 

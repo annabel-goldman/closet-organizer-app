@@ -2,21 +2,20 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { motion } from "motion/react";
 import {
   BookOpen,
+  CircleAlert,
   LayoutGrid,
   Pencil,
   Plus,
+  SearchX,
   Sparkles,
   Trash2,
-  Upload,
   UserRound,
-  X,
 } from "lucide-react";
 import {
   ClothingItem,
   deleteModeledPreview,
   destroyOutfit,
   formatTagInput,
-  generateOutfit,
   generateOutfitMetadataSuggestions,
   OutfitDraft,
   Outfit,
@@ -49,7 +48,6 @@ import { Textarea } from "./ui/textarea";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -62,21 +60,43 @@ import { OutfitGalleryPreview } from "./OutfitGalleryPreview";
 import { MAX_OUTFIT_NAME, MAX_OUTFIT_NOTES } from "../lib/inputLengthPolicy";
 import { useOutfitMagazines } from "./outfits/useOutfitMagazines";
 import {
+  formatMagazineSearchSuggestionDetail,
   formatOutfitSearchSuggestionDetail,
+  getMagazineSearchSuggestions,
   getOutfitSearchSuggestions,
-  matchesOutfitSearchQuery,
+  searchMagazines,
+  searchOutfits,
 } from "../lib/closetFilters";
 import { navigateTo } from "../lib/routes";
 import { SearchSuggestionField } from "./SearchSuggestionField";
+import {
+  CollectionCard,
+  CollectionCardBody,
+  CollectionCardHoverActions,
+  CollectionCardMedia,
+  CollectionCardTitleOverlay,
+} from "./shared/CollectionCard";
+import {
+  CollectionGrid,
+  CollectionGridSkeleton,
+  CollectionPageHeader,
+  CollectionPageShell,
+  CollectionToolbar,
+} from "./shared/CollectionLayout";
+import { VisualStatePanel } from "./shared/VisualStatePanel";
+import { useBackNavigationGuard } from "../lib/useBackNavigationGuard";
+import { AiOutfitCreatorDialog } from "./AiOutfitCreatorDialog";
 
 interface MyOutfitsPageProps {
   isLoading: boolean;
   loadErrorMessage: string;
   onOutfitDeleted: (outfitId: number) => void;
+  onOutfitCreated: (outfit: Outfit) => void;
   onGenerationTaskStarted: (workflow: AiWorkflow, label: string) => void;
   onOutfitModeledWorkflowUpdated: (outfitId: number, workflow: AiWorkflow) => void;
   onOutfitUpdated: (outfit: Outfit) => void;
   outfits: Outfit[];
+  pageView: OutfitsPageView;
   user: User;
   canUseModeledPreview: boolean;
 }
@@ -98,14 +118,29 @@ function outfitToFormState(outfit: Outfit): OutfitDraft {
   };
 }
 
+function outfitEditorSnapshot(
+  draft: OutfitDraft,
+  layouts: Record<number, OutfitCollageLayout>,
+) {
+  return JSON.stringify({
+    draft,
+    layouts: draft.itemIds.map((itemId) => ({
+      itemId,
+      layout: layouts[itemId] ?? null,
+    })),
+  });
+}
+
 export function MyOutfitsPage({
   isLoading,
   loadErrorMessage,
   onOutfitDeleted,
+  onOutfitCreated,
   onGenerationTaskStarted,
   onOutfitModeledWorkflowUpdated,
   onOutfitUpdated,
   outfits,
+  pageView,
   user,
   canUseModeledPreview,
 }: MyOutfitsPageProps) {
@@ -122,21 +157,23 @@ export function MyOutfitsPage({
   const [editorDecorations, setEditorDecorations] = useState<OutfitDecoration[]>([]);
   const [selectedDecorationId, setSelectedDecorationId] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false);
-  const [generationOccasion, setGenerationOccasion] = useState("");
-  const [generationReferencePhoto, setGenerationReferencePhoto] = useState<File | null>(null);
-  const [isGeneratingOutfit, setIsGeneratingOutfit] = useState(false);
   const [modeledWorkflow, setModeledWorkflow] = useState<AiWorkflow | null>(null);
   const [isRequestingModeledPreview, setIsRequestingModeledPreview] = useState(false);
   const [isDeletingModeledPreview, setIsDeletingModeledPreview] = useState(false);
   const [isAutofillingOutfitDetails, setIsAutofillingOutfitDetails] = useState(false);
   const [galleryView, setGalleryView] = useState<OutfitGalleryView>("flatlay");
-  const [pageView, setPageView] = useState<OutfitsPageView>(() => (
-    new URLSearchParams(window.location.search).get("view") === "magazines" ? "magazines" : "outfits"
-  ));
+  const [magazineSearchQuery, setMagazineSearchQuery] = useState("");
   const [outfitSearchQuery, setOutfitSearchQuery] = useState("");
   const [regenerationConfirmationOutfitId, setRegenerationConfirmationOutfitId] = useState<number | null>(null);
+  const [showUnsavedNavigationWarning, setShowUnsavedNavigationWarning] = useState(false);
+  const [showAiOutfitCreator, setShowAiOutfitCreator] = useState(false);
+  const requestedRecommendationRunId = Number(new URLSearchParams(window.location.search).get("recommendation")) || undefined;
+
+  useEffect(() => {
+    if (requestedRecommendationRunId) setShowAiOutfitCreator(true);
+  }, [requestedRecommendationRunId]);
   const outfitDetailsRequestIdRef = useRef(0);
+  const initialEditorSnapshotRef = useRef<string | null>(null);
   const showFlash = useCallback((kind: FlashState["kind"], message: string) => {
     setFlash({ kind, message });
   }, []);
@@ -172,16 +209,30 @@ export function MyOutfitsPage({
     [formState.itemIds, sortedItems],
   );
   const filteredOutfits = useMemo(
-    () => outfits.filter((outfit) => matchesOutfitSearchQuery(outfit, outfitSearchQuery)),
+    () => searchOutfits(outfits, outfitSearchQuery),
     [outfitSearchQuery, outfits],
   );
   const outfitSearchSuggestions = useMemo(
     () => getOutfitSearchSuggestions(outfits, outfitSearchQuery),
     [outfitSearchQuery, outfits],
   );
+  const filteredMagazines = useMemo(
+    () => searchMagazines(hydratedFolders, magazineSearchQuery),
+    [hydratedFolders, magazineSearchQuery],
+  );
+  const magazineSearchSuggestions = useMemo(
+    () => getMagazineSearchSuggestions(hydratedFolders, magazineSearchQuery),
+    [hydratedFolders, magazineSearchQuery],
+  );
   const editingOutfit = editingOutfitId
     ? outfits.find((outfit) => outfit.id === editingOutfitId) ?? null
     : null;
+  const currentEditorSnapshot = outfitEditorSnapshot(formState, editorLayouts);
+  const hasUnsavedOutfitChanges = Boolean(
+    editingOutfitId
+    && initialEditorSnapshotRef.current
+    && initialEditorSnapshotRef.current !== currentEditorSnapshot,
+  );
   const selectedItemsCanBeModeled = selectedItems.length > 0 && selectedItems.every((item) => Boolean(item.image_url));
   const modeledImageUrl = resolveModeledWorkflowImageUrl(modeledWorkflow);
   function setFormField<Key extends keyof OutfitDraft>(key: Key, value: OutfitDraft[Key]) {
@@ -213,6 +264,18 @@ export function MyOutfitsPage({
 
     return () => window.clearTimeout(timeout);
   }, [flash]);
+
+  useEffect(() => {
+    if (!showUnsavedNavigationWarning) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setShowUnsavedNavigationWarning(false);
+    }, 4200);
+
+    return () => window.clearTimeout(timeout);
+  }, [showUnsavedNavigationWarning]);
 
   useEffect(() => {
     if (editingOutfitId) {
@@ -282,35 +345,12 @@ export function MyOutfitsPage({
     }
   }
 
-  async function handleGenerateOutfit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    setIsGeneratingOutfit(true);
-    setFlash(null);
-
-    try {
-      const occasionLabel = generationOccasion.trim() || "a new outfit";
-      const workflow = await generateOutfit({
-        occasion: generationOccasion,
-        referencePhoto: generationReferencePhoto,
-      });
-
-      onGenerationTaskStarted(workflow, occasionLabel);
-      setGenerationOccasion("");
-      setGenerationReferencePhoto(null);
-      setIsGenerateDialogOpen(false);
-      showFlash("success", "Outfit generation started. You can leave this page while it runs.");
-    } catch (error) {
-      showFlash("error", error instanceof Error ? error.message : "Unable to generate an outfit.");
-    } finally {
-      setIsGeneratingOutfit(false);
-    }
-  }
-
   function startEditing(outfit: Outfit) {
-    setEditingOutfitId(outfit.id);
-    setFormState(outfitToFormState(outfit));
+    const nextFormState = outfitToFormState(outfit);
     const nextLayouts = resolveOutfitCollageLayouts(outfit.items);
+    initialEditorSnapshotRef.current = outfitEditorSnapshot(nextFormState, nextLayouts);
+    setEditingOutfitId(outfit.id);
+    setFormState(nextFormState);
     setEditorLayouts(nextLayouts);
     setSelectedCollageItemId(outfit.items[0]?.id ?? null);
     setEditorDecorations(outfit.decorations ?? []);
@@ -334,6 +374,29 @@ export function MyOutfitsPage({
     setEditorDecorations([]);
     setSelectedDecorationId(null);
     setModeledWorkflow(null);
+    setShowUnsavedNavigationWarning(false);
+    initialEditorSnapshotRef.current = null;
+  }
+
+  const showNavigationWarning = useCallback(() => {
+    setShowUnsavedNavigationWarning(true);
+  }, []);
+
+  useBackNavigationGuard({
+    active: Boolean(editingOutfitId),
+    blocked: hasUnsavedOutfitChanges,
+    guardId: `outfit-editor-${editingOutfitId ?? "closed"}`,
+    onBackWithoutChanges: resetForm,
+    onBlockedBack: showNavigationWarning,
+  });
+
+  function requestEditorClose() {
+    if (hasUnsavedOutfitChanges) {
+      showNavigationWarning();
+      return;
+    }
+
+    resetForm();
   }
 
   function syncEditorDecorations(nextDecorations: OutfitDecoration[]) {
@@ -499,16 +562,6 @@ export function MyOutfitsPage({
     }
   }
 
-  function closeGenerateDialog() {
-    if (isGeneratingOutfit) {
-      return;
-    }
-
-    setIsGenerateDialogOpen(false);
-    setGenerationOccasion("");
-    setGenerationReferencePhoto(null);
-  }
-
   function addItemToEditingOutfit(itemId: number) {
     setFormState((current) => {
       if (current.itemIds.includes(itemId)) {
@@ -545,306 +598,279 @@ export function MyOutfitsPage({
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-12 space-y-10">
-      <section className="space-y-4 border-y border-border py-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <PrimitiveButton
-              type="button"
-              variant={pageView === "outfits" ? "default" : "outline"}
-              size="sm"
-              aria-pressed={pageView === "outfits"}
-              onClick={() => setPageView("outfits")}
-            >
-              All outfits
+    <CollectionPageShell>
+      <CollectionPageHeader
+        title={pageView === "outfits" ? "My Outfits" : "My Magazines"}
+        description={pageView === "outfits"
+          ? `${outfits.length} ${outfits.length === 1 ? "outfit" : "outfits"} saved`
+          : `${hydratedFolders.length} ${hydratedFolders.length === 1 ? "magazine" : "magazines"} · Group saved outfits into a story and decorate each page.`}
+        actions={pageView === "outfits" ? (
+          <div className="flex flex-wrap gap-2">
+            <PrimitiveButton type="button" onClick={() => setShowAiOutfitCreator(true)}>
+              <Sparkles className="h-4 w-4" />
+              Create with AI
             </PrimitiveButton>
             <PrimitiveButton
               type="button"
-              variant={pageView === "magazines" ? "default" : "outline"}
-              size="sm"
-              disabled={isLoadingFolders}
-              aria-pressed={pageView === "magazines"}
-              onClick={() => setPageView("magazines")}
+              variant={galleryView === "modeled" ? "default" : "outline"}
+              className="min-w-32"
+              aria-pressed={galleryView === "modeled"}
+              onClick={() => setGalleryView((current) => current === "modeled" ? "flatlay" : "modeled")}
+              title={galleryView === "modeled" ? "Show outfit flat lays" : "Show modeled outfits"}
             >
-              <BookOpen className="h-4 w-4" />
-              My Magazines
-            </PrimitiveButton>
-          </div>
-
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            {pageView === "outfits" ? (
-              <>
-                <PrimitiveButton
-                  type="button"
-                  variant={galleryView === "modeled" ? "default" : "outline"}
-                  size="sm"
-                  className="min-w-32"
-                  aria-pressed={galleryView === "modeled"}
-                  onClick={() => setGalleryView((current) => current === "modeled" ? "flatlay" : "modeled")}
-                  title={galleryView === "modeled" ? "Show outfit flat lays" : "Show modeled outfits"}
-                >
-                  {galleryView === "modeled"
-                    ? <LayoutGrid className="h-4 w-4" />
-                    : <UserRound className="h-4 w-4" />}
-                  {galleryView === "modeled" ? "Flatlay view" : "Model view"}
-                </PrimitiveButton>
-                <PrimitiveButton
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsGenerateDialogOpen(true)}
-                  disabled={isLoading || isGeneratingOutfit || user.clothing_items.length === 0}
-                >
-                  <Sparkles className="h-4 w-4" />
-                  {isGeneratingOutfit ? "Generating..." : "AI Outfit"}
-                </PrimitiveButton>
-              </>
-            ) : null}
-            <PrimitiveText as="p" variant="bodySm" tone="muted" className="px-1">
-              {pageView === "outfits"
-                ? `${outfits.length} ${outfits.length === 1 ? "outfit" : "outfits"} saved`
-                : `${hydratedFolders.length} ${hydratedFolders.length === 1 ? "magazine" : "magazines"}`}
-            </PrimitiveText>
-          </div>
-        </div>
-      </section>
-
-      {pageView === "magazines" ? (
-        <section className="space-y-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <PrimitiveText as="h2" variant="display" font="serif">
-                My Magazines
-              </PrimitiveText>
-              <PrimitiveText as="p" tone="muted" className="mt-1">
-                Group saved outfits into a story, arrange their order, and decorate each page.
-              </PrimitiveText>
-            </div>
-            <PrimitiveButton
-              type="button"
-              variant="outline"
-              onClick={() => navigateTo("/magazines/new")}
-              disabled={isLoadingFolders}
-            >
-              <Plus className="h-4 w-4" />
-              New magazine
-            </PrimitiveButton>
-          </div>
-
-          {isLoadingFolders ? (
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} className="aspect-[4/3] animate-pulse border border-border bg-muted/40" />
-              ))}
-            </div>
-          ) : hydratedFolders.length === 0 ? (
-            <div className="border border-dashed border-border px-6 py-14 text-center">
-              <BookOpen className="mx-auto mb-4 h-10 w-10 text-muted-foreground" aria-hidden="true" />
-              <PrimitiveText as="h3" variant="display" font="serif" className="mb-2">
-                Create your first magazine
-              </PrimitiveText>
-              <PrimitiveButton type="button" className="mt-6" onClick={() => navigateTo("/magazines/new")}>
-                <Plus className="h-4 w-4" />
-                New magazine
-              </PrimitiveButton>
-            </div>
-          ) : (
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {hydratedFolders.map((folder, index) => (
-                <motion.article
-                  key={folder.id}
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: index * 0.04 }}
-                  className="overflow-hidden border border-border bg-card"
-                >
-                  <div className="flex aspect-[4/3] w-full flex-col items-center justify-center bg-stone-100 px-8 text-center">
-                    <BookOpen className="mb-5 h-12 w-12 stroke-[1.2] text-muted-foreground" aria-hidden="true" />
-                    <PrimitiveText as="span" variant="overline" tone="muted">
-                      Magazine
-                    </PrimitiveText>
-                    <PrimitiveText as="span" variant="display" font="serif" className="mt-2 break-words">
-                      {folder.name}
-                    </PrimitiveText>
-                  </div>
-
-                  <div className="space-y-4 p-5">
-                    <PrimitiveText as="p" variant="bodySm" tone="muted">
-                      {folder.outfits.length} {folder.outfits.length === 1 ? "outfit" : "outfits"}
-                      {folder.notes ? ` · ${folder.notes}` : ""}
-                    </PrimitiveText>
-                    <div className="flex flex-wrap gap-2">
-                      <PrimitiveButton asChild>
-                        <a href={`/magazines/${folder.id}`} target="_blank" rel="noopener noreferrer">
-                          <BookOpen className="h-4 w-4" />
-                          Open magazine
-                        </a>
-                      </PrimitiveButton>
-                      <PrimitiveButton type="button" variant="outline" onClick={() => navigateTo(`/magazines/${folder.id}/edit`)}>
-                        <Pencil className="h-4 w-4" />
-                        Edit magazine
-                      </PrimitiveButton>
-                      <PrimitiveButton
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="hover:border-destructive"
-                        onClick={() => requestFolderDelete(folder.id)}
-                        aria-label={`Delete ${folder.name} magazine`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </PrimitiveButton>
-                    </div>
-                  </div>
-                </motion.article>
-              ))}
-            </div>
-          )}
-        </section>
-      ) : (
-      <section className="space-y-4">
-        {!isLoading && !loadErrorMessage && outfits.length > 0 ? (
-          <div className="max-w-xl">
-            <label htmlFor="outfit-search" className="sr-only">
-              Search outfits
-            </label>
-            <SearchSuggestionField
-              id="outfit-search"
-              value={outfitSearchQuery}
-              onChange={setOutfitSearchQuery}
-              suggestions={outfitSearchSuggestions}
-              getSuggestionKey={(outfit) => outfit.id}
-              getSuggestionLabel={(outfit) => outfit.name}
-              getSuggestionDetail={(outfit) => formatOutfitSearchSuggestionDetail(outfit, outfitSearchQuery)}
-              onSelectSuggestion={(outfit) => setOutfitSearchQuery(outfit.name)}
-              onOpenSuggestion={startEditing}
-              placeholder="Search outfits by name, tags, notes, or pieces"
-              className="h-14 pl-10"
-            />
-            {outfitSearchQuery.trim() ? (
-              <PrimitiveText as="p" variant="caption" tone="muted" className="mt-2" aria-live="polite">
-                {filteredOutfits.length} of {outfits.length} {outfits.length === 1 ? "outfit" : "outfits"} match
-              </PrimitiveText>
-            ) : null}
-          </div>
-        ) : null}
-
-        {isLoading ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            {Array.from({ length: 2 }).map((_, index) => (
-              <div key={index} className="animate-pulse border border-border p-6 space-y-4">
-                <div className="h-8 bg-muted w-1/2" />
-                <div className="h-4 bg-muted w-full" />
-                <div className="h-24 bg-muted" />
-              </div>
-            ))}
-          </div>
-        ) : loadErrorMessage ? (
-          <div className="border border-destructive/20 bg-destructive/5 p-8">
-            <PrimitiveText as="p" variant="title" font="serif" className="mb-2">
-              Outfits could not be loaded.
-            </PrimitiveText>
-            <PrimitiveText as="p" tone="muted">
-              {loadErrorMessage}
-            </PrimitiveText>
-          </div>
-        ) : outfits.length === 0 ? (
-          <div className="border border-dashed border-border p-8 text-center">
-            <PrimitiveText as="p" variant="display" font="serif" className="mb-2">
-              No outfits yet
-            </PrimitiveText>
-            <PrimitiveText as="p" tone="muted">
-              Create your first look from the closet cart and it will appear here.
-            </PrimitiveText>
-          </div>
-        ) : filteredOutfits.length === 0 ? (
-          <div className="border border-dashed border-border p-8 text-center" role="status">
-            <PrimitiveText as="p" variant="display" font="serif" className="mb-2">
-              No matching outfits
-            </PrimitiveText>
-            <PrimitiveText as="p" tone="muted">
-              Try another name, tag, note, or closet piece.
-            </PrimitiveText>
-            <PrimitiveButton
-              type="button"
-              variant="outline"
-              className="mt-5"
-              onClick={() => setOutfitSearchQuery("")}
-            >
-              Clear search
+              {galleryView === "modeled"
+                ? <LayoutGrid className="h-4 w-4" />
+                : <UserRound className="h-4 w-4" />}
+              {galleryView === "modeled" ? "Flatlay view" : "Model view"}
             </PrimitiveButton>
           </div>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredOutfits.map((outfit, index) => {
-              const galleryModelPreview = resolveOutfitGalleryModelPreview(outfit.modeled_workflow);
+          <PrimitiveButton
+            type="button"
+            onClick={() => navigateTo("/magazines/new")}
+            disabled={isLoadingFolders}
+          >
+            <Plus className="h-4 w-4" />
+            New magazine
+          </PrimitiveButton>
+        )}
+      />
 
-              return (
-                <motion.article
-                  key={outfit.id}
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: index * 0.04 }}
-                  className="mx-auto w-full max-w-[22rem] overflow-hidden border border-border bg-card"
-                >
-                  <div className="px-5 pt-5">
-                    <OutfitGalleryPreview outfit={outfit} view={galleryView} />
-                  </div>
+      {pageView === "magazines" ? (
+        <section>
+          {!isLoadingFolders && hydratedFolders.length > 0 ? (
+            <CollectionToolbar>
+              <div className="max-w-xl">
+                <label htmlFor="magazine-search" className="sr-only">
+                  Search magazines
+                </label>
+                <SearchSuggestionField
+                  id="magazine-search"
+                  value={magazineSearchQuery}
+                  onChange={setMagazineSearchQuery}
+                  onClear={() => setMagazineSearchQuery("")}
+                  showClear={Boolean(magazineSearchQuery.trim())}
+                  suggestions={magazineSearchSuggestions}
+                  getSuggestionKey={(folder) => folder.id}
+                  getSuggestionLabel={(folder) => folder.name}
+                  getSuggestionDetail={formatMagazineSearchSuggestionDetail}
+                  onSelectSuggestion={(folder) => setMagazineSearchQuery(folder.name)}
+                  onOpenSuggestion={(folder) => navigateTo(`/magazines/${folder.id}`)}
+                  placeholder="Search magazines by name, occasion, notes, or outfits"
+                />
+                {magazineSearchQuery.trim() ? (
+                  <PrimitiveText as="p" variant="caption" tone="muted" className="mt-2" aria-live="polite">
+                    {filteredMagazines.length} of {hydratedFolders.length} {hydratedFolders.length === 1 ? "magazine" : "magazines"} match
+                  </PrimitiveText>
+                ) : null}
+              </div>
+            </CollectionToolbar>
+          ) : null}
 
-                  <div className="space-y-4 border-t border-border p-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <PrimitiveText as="h3" variant="display" font="serif" className="break-words">
-                          {outfit.name}
-                        </PrimitiveText>
-                      </div>
+          {isLoadingFolders ? (
+            <CollectionGridSkeleton count={4} label="Loading magazines" mediaClassName="aspect-[4/5]" variant="wardrobe" />
+          ) : hydratedFolders.length === 0 ? (
+            <VisualStatePanel
+              icon={BookOpen}
+              overline="Your magazines"
+              title="Create your first magazine"
+              description="Group saved outfits into a story, arrange their order, and decorate each page."
+            >
+              <PrimitiveButton type="button" onClick={() => navigateTo("/magazines/new")}>
+                <Plus className="h-4 w-4" />
+                New magazine
+              </PrimitiveButton>
+            </VisualStatePanel>
+          ) : filteredMagazines.length === 0 ? (
+            <VisualStatePanel
+              icon={SearchX}
+              overline="No results"
+              title="No matching magazines"
+              description="Try another magazine name, occasion, note, or outfit."
+            >
+              <PrimitiveButton type="button" variant="outline" onClick={() => setMagazineSearchQuery("")}>
+                Clear search
+              </PrimitiveButton>
+            </VisualStatePanel>
+          ) : (
+            <CollectionGrid variant="wardrobe">
+              {filteredMagazines.map((folder, index) => {
+                const coverOutfit = folder.outfits[0];
+                const coverView = coverOutfit && resolveModeledWorkflowImageUrl(coverOutfit.modeled_workflow)
+                  ? "modeled"
+                  : "flatlay";
 
-                      <div className="flex items-center gap-2">
+                return (
+                  <CollectionCard
+                    key={folder.id}
+                    style={{ animationDelay: `${index * 40}ms` }}
+                    className="group animate-in fade-in slide-in-from-bottom-2 duration-300"
+                  >
+                    <CollectionCardMedia className="aspect-[4/5] bg-white">
+                      {coverOutfit ? (
+                        <OutfitGalleryPreview className="max-w-none" outfit={coverOutfit} view={coverView} />
+                      ) : (
+                        <div className="flex h-full w-full flex-col items-center justify-center bg-stone-100 px-6 text-center">
+                          <BookOpen className="mb-4 h-12 w-12 stroke-[1.2] text-muted-foreground" aria-hidden="true" />
+                          <PrimitiveText as="span" variant="overline" tone="muted">Empty magazine</PrimitiveText>
+                        </div>
+                      )}
+                      <CollectionCardTitleOverlay title={folder.name} />
+                      <a
+                        href={`/magazines/${folder.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="absolute inset-0 z-10 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
+                        aria-label={`Open ${folder.name} magazine`}
+                      />
+                      <CollectionCardHoverActions>
                         <PrimitiveButton
-                          onClick={() => startEditing(outfit)}
+                          type="button"
                           variant="outline"
                           size="icon"
-                          aria-label="Edit outfit"
+                          className="border-background/60 bg-background/90 shadow-sm backdrop-blur-sm"
+                          onClick={() => navigateTo(`/magazines/${folder.id}/edit`)}
+                          aria-label={`Edit ${folder.name} magazine`}
                         >
                           <Pencil className="h-4 w-4" />
                         </PrimitiveButton>
                         <PrimitiveButton
-                          onClick={() => void handleDelete(outfit.id)}
+                          type="button"
                           variant="outline"
                           size="icon"
-                          className="hover:border-destructive"
-                          aria-label="Delete outfit"
+                          className="border-background/60 bg-background/90 shadow-sm backdrop-blur-sm hover:border-destructive"
+                          onClick={() => requestFolderDelete(folder.id)}
+                          aria-label={`Delete ${folder.name} magazine`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </PrimitiveButton>
-                      </div>
-                    </div>
+                      </CollectionCardHoverActions>
+                    </CollectionCardMedia>
+                  </CollectionCard>
+                );
+              })}
+            </CollectionGrid>
+          )}
+        </section>
+      ) : (
+        <section>
+          {!isLoading && !loadErrorMessage && outfits.length > 0 ? (
+            <CollectionToolbar>
+              <div className="max-w-xl">
+                <label htmlFor="outfit-search" className="sr-only">
+                  Search outfits
+                </label>
+                <SearchSuggestionField
+                  id="outfit-search"
+                  value={outfitSearchQuery}
+                  onChange={setOutfitSearchQuery}
+                  onClear={() => setOutfitSearchQuery("")}
+                  showClear={Boolean(outfitSearchQuery.trim())}
+                  suggestions={outfitSearchSuggestions}
+                  getSuggestionKey={(outfit) => outfit.id}
+                  getSuggestionLabel={(outfit) => outfit.name}
+                  getSuggestionDetail={(outfit) => formatOutfitSearchSuggestionDetail(outfit, outfitSearchQuery)}
+                  onSelectSuggestion={(outfit) => setOutfitSearchQuery(outfit.name)}
+                  onOpenSuggestion={startEditing}
+                  placeholder="Search outfits by name, tags, notes, or pieces"
+                />
+                {outfitSearchQuery.trim() ? (
+                  <PrimitiveText as="p" variant="caption" tone="muted" className="mt-2" aria-live="polite">
+                    {filteredOutfits.length} of {outfits.length} {outfits.length === 1 ? "outfit" : "outfits"} match
+                  </PrimitiveText>
+                ) : null}
+              </div>
+            </CollectionToolbar>
+          ) : null}
 
-                    {canUseModeledPreview && galleryView === "modeled" ? (
-                      galleryModelPreview.kind === "image" ? (
-                        <PrimitiveConfirmationDialog
-                          open={regenerationConfirmationOutfitId === outfit.id}
-                          onOpenChange={(open) => setRegenerationConfirmationOutfitId(open ? outfit.id : null)}
-                          title="Replace modeled image?"
-                          description={`Regenerating will replace the existing modeled image for “${outfit.name}”.`}
-                          cancelLabel="Keep existing image"
-                          confirmLabel="Regenerate model"
-                          onConfirm={() => {
-                            setRegenerationConfirmationOutfitId(null);
-                            handleStartModeling(outfit);
-                          }}
+        {isLoading ? (
+          <CollectionGridSkeleton count={4} label="Loading outfits" mediaClassName="aspect-[4/5]" variant="wardrobe" />
+        ) : loadErrorMessage ? (
+          <VisualStatePanel
+            icon={CircleAlert}
+            overline="Unable to load"
+            title="Outfits could not be loaded"
+            description={loadErrorMessage}
+            tone="destructive"
+          />
+        ) : outfits.length === 0 ? (
+          <VisualStatePanel
+            icon={LayoutGrid}
+            overline="Your outfits"
+            title="No outfits yet"
+            description="Create your first look from the closet cart and it will appear here."
+          />
+        ) : filteredOutfits.length === 0 ? (
+          <VisualStatePanel
+            icon={SearchX}
+            overline="No results"
+            title="No matching outfits"
+            description="Try another name, tag, note, or closet piece."
+          >
+            <PrimitiveButton
+              type="button"
+              variant="outline"
+              onClick={() => setOutfitSearchQuery("")}
+            >
+              Clear search
+            </PrimitiveButton>
+          </VisualStatePanel>
+        ) : (
+          <CollectionGrid variant="wardrobe">
+            {filteredOutfits.map((outfit, index) => {
+              const galleryModelPreview = resolveOutfitGalleryModelPreview(outfit.modeled_workflow);
+
+              return (
+                <CollectionCard
+                  key={outfit.id}
+                  style={{ animationDelay: `${index * 40}ms` }}
+                  className="group animate-in fade-in slide-in-from-bottom-2 duration-300"
+                >
+                  <CollectionCardMedia className="aspect-[4/5] bg-white">
+                    <OutfitGalleryPreview className="max-w-none" outfit={outfit} view={galleryView} />
+                    <CollectionCardTitleOverlay title={outfit.name} />
+                    <button
+                      type="button"
+                      className="absolute inset-0 z-10 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
+                      onClick={() => startEditing(outfit)}
+                      aria-label={`Open ${outfit.name}`}
+                    />
+                    <CollectionCardHoverActions>
+                      <PrimitiveButton
+                        onClick={() => startEditing(outfit)}
+                        variant="outline"
+                        size="icon"
+                        aria-label={`Edit ${outfit.name}`}
+                        className="border-background/60 bg-background/90 shadow-sm backdrop-blur-sm"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </PrimitiveButton>
+                      <PrimitiveButton
+                        onClick={() => void handleDelete(outfit.id)}
+                        variant="outline"
+                        size="icon"
+                        className="border-background/60 bg-background/90 shadow-sm backdrop-blur-sm hover:border-destructive"
+                        aria-label={`Delete ${outfit.name}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </PrimitiveButton>
+                    </CollectionCardHoverActions>
+                  </CollectionCardMedia>
+
+                  {canUseModeledPreview && galleryView === "modeled" ? (
+                    <CollectionCardBody density="compact">
+                      {galleryModelPreview.kind === "image" ? (
+                        <PrimitiveButton
+                          type="button"
+                          variant="outline"
+                          className="w-full"
+                          disabled={isRequestingModeledPreview || !outfit.items.length || !outfit.items.every((item) => item.image_url)}
+                          onClick={() => setRegenerationConfirmationOutfitId(outfit.id)}
+                          title={!outfit.items.every((item) => item.image_url) ? "Every outfit item needs a photo" : undefined}
                         >
-                          <PrimitiveButton
-                            type="button"
-                            variant="outline"
-                            className="w-full"
-                            disabled={isRequestingModeledPreview || !outfit.items.length || !outfit.items.every((item) => item.image_url)}
-                            title={!outfit.items.every((item) => item.image_url) ? "Every outfit item needs a photo" : undefined}
-                          >
-                            <UserRound className="h-4 w-4" />
-                            Regenerate model
-                          </PrimitiveButton>
-                        </PrimitiveConfirmationDialog>
+                          <UserRound className="h-4 w-4" />
+                          Regenerate model
+                        </PrimitiveButton>
                       ) : (
                         <PrimitiveButton
                           type="button"
@@ -857,18 +883,18 @@ export function MyOutfitsPage({
                           <UserRound className="h-4 w-4" />
                           Model this look
                         </PrimitiveButton>
-                      )
-                    ) : null}
-                  </div>
-                </motion.article>
+                      )}
+                    </CollectionCardBody>
+                  ) : null}
+                </CollectionCard>
               );
             })}
-          </div>
+          </CollectionGrid>
         )}
-      </section>
+        </section>
       )}
 
-      {flash && !editingOutfitId && !isGenerateDialogOpen ? (
+      {flash && !editingOutfitId ? (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -885,7 +911,43 @@ export function MyOutfitsPage({
         </motion.div>
       ) : null}
 
-      <Dialog open={Boolean(editingOutfitId)} onOpenChange={(open) => !open && resetForm()}>
+      {showUnsavedNavigationWarning ? (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed bottom-6 right-6 z-[100] flex w-[min(26rem,calc(100vw-3rem))] items-start gap-3 border border-amber-500/35 bg-background/95 px-4 py-3 text-foreground shadow-lg backdrop-blur"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" aria-hidden="true" />
+          <PrimitiveText as="p" variant="bodySm">
+            You have unsaved outfit changes. Save your changes or choose Cancel before leaving.
+          </PrimitiveText>
+        </motion.div>
+      ) : null}
+
+      <AiOutfitCreatorDialog
+        open={showAiOutfitCreator}
+        initialRecommendationRunId={requestedRecommendationRunId}
+        onOpenChange={(nextOpen) => {
+          setShowAiOutfitCreator(nextOpen);
+          if (!nextOpen && requestedRecommendationRunId) {
+            const nextUrl = new URL(window.location.href);
+            nextUrl.searchParams.delete("recommendation");
+            window.history.replaceState({}, "", `${nextUrl.pathname}${nextUrl.search}`);
+          }
+        }}
+        userId={user.id}
+        onGenerationTaskStarted={onGenerationTaskStarted}
+        onOutfitCreated={(outfit) => {
+          onOutfitCreated(outfit);
+          startEditing(outfit);
+          showFlash("success", "Outfit saved. You can refine it now.");
+        }}
+      />
+
+      <Dialog open={Boolean(editingOutfitId)} onOpenChange={(open) => !open && requestEditorClose()}>
         <DialogContent
           className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] rounded-none border-border p-0 sm:w-[calc(100vw-3rem)] sm:max-w-[calc(100vw-3rem)] xl:max-w-[120rem] 2xl:max-w-[128rem]"
           headerActions={(
@@ -1066,11 +1128,14 @@ export function MyOutfitsPage({
                       type="button"
                       variant="outline"
                       disabled={isRequestingModeledPreview || !selectedItemsCanBeModeled}
-                      onClick={() => editingOutfit && void handleRequestModeledPreview(
-                        editingOutfit.id,
-                        formState,
-                        editorLayouts,
-                      )}
+                      onClick={() => {
+                        if (!editingOutfit) return;
+                        if (modeledImageUrl) {
+                          setRegenerationConfirmationOutfitId(editingOutfit.id);
+                          return;
+                        }
+                        void handleRequestModeledPreview(editingOutfit.id, formState, editorLayouts);
+                      }}
                       title={!selectedItemsCanBeModeled ? "Every outfit item needs a photo" : undefined}
                     >
                       <UserRound className="h-4 w-4" />
@@ -1091,6 +1156,30 @@ export function MyOutfitsPage({
       </Dialog>
 
       <PrimitiveConfirmationDialog
+        open={regenerationConfirmationOutfitId !== null}
+        onOpenChange={(open) => !open && setRegenerationConfirmationOutfitId(null)}
+        title="Replace modeled image?"
+        description={`Regenerating will replace the existing modeled image for “${
+          outfits.find((outfit) => outfit.id === regenerationConfirmationOutfitId)?.name ?? "this outfit"
+        }”.`}
+        cancelLabel="Keep existing image"
+        confirmLabel="Regenerate model"
+        onConfirm={() => {
+          const outfitId = regenerationConfirmationOutfitId;
+          setRegenerationConfirmationOutfitId(null);
+          if (!outfitId) return;
+
+          if (editingOutfitId === outfitId && editingOutfit) {
+            void handleRequestModeledPreview(outfitId, formState, editorLayouts);
+            return;
+          }
+
+          const outfit = outfits.find((entry) => entry.id === outfitId);
+          if (outfit) handleStartModeling(outfit);
+        }}
+      />
+
+      <PrimitiveConfirmationDialog
         open={folderToDeleteId !== null}
         onOpenChange={(open) => !open && requestFolderDelete(null)}
         title="Delete magazine?"
@@ -1100,100 +1189,6 @@ export function MyOutfitsPage({
         onConfirm={() => void handleDeleteFolder()}
       />
 
-      <Dialog
-        open={isGenerateDialogOpen}
-        onOpenChange={(open) => {
-          if (open) {
-            setIsGenerateDialogOpen(true);
-            return;
-          }
-
-          closeGenerateDialog();
-        }}
-      >
-        <DialogContent className="rounded-none border-border sm:max-w-lg">
-          <DialogHeader className="text-left sm:text-left">
-            <DialogTitle asChild>
-              <PrimitiveText as="h2" variant="display" font="serif">
-                Generate Outfit
-              </PrimitiveText>
-            </DialogTitle>
-            <DialogDescription asChild>
-              <PrimitiveText as="p" tone="muted">
-                Use closet types, tags, and visual descriptions to create a saved look.
-              </PrimitiveText>
-            </DialogDescription>
-          </DialogHeader>
-
-          {flash?.kind === "error" && !editingOutfitId ? (
-            <div className="border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
-              {flash.message}
-            </div>
-          ) : null}
-
-          <form onSubmit={handleGenerateOutfit} className="space-y-5">
-            <label className="block space-y-2">
-              <PrimitiveText as="span" variant="bodySm" tone="muted">
-                Occasion or vibe
-              </PrimitiveText>
-              <Textarea
-                value={generationOccasion}
-                onChange={(event) => setGenerationOccasion(event.target.value)}
-                placeholder="Optional, e.g. coffee date, gallery opening, rainy commute"
-                className="min-h-24"
-                maxLength={240}
-              />
-            </label>
-
-            <div className="space-y-2">
-              <PrimitiveText as="span" variant="bodySm" tone="muted">
-                Reference flatlay
-              </PrimitiveText>
-              <label className="flex cursor-pointer items-center justify-between gap-3 border border-dashed border-border bg-background px-4 py-3 text-sm transition-colors hover:bg-accent/40">
-                <span className="flex min-w-0 items-center gap-2">
-                  <Upload className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="truncate">
-                    {generationReferencePhoto ? generationReferencePhoto.name : "Upload flatlay photo"}
-                  </span>
-                </span>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                  disabled={isGeneratingOutfit}
-                  onChange={(event) => {
-                    setGenerationReferencePhoto(event.target.files?.[0] ?? null);
-                    event.currentTarget.value = "";
-                  }}
-                />
-              </label>
-              {generationReferencePhoto ? (
-                <PrimitiveButton
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2 text-muted-foreground"
-                  onClick={() => setGenerationReferencePhoto(null)}
-                  disabled={isGeneratingOutfit}
-                >
-                  <X className="h-3.5 w-3.5" />
-                  Remove reference
-                </PrimitiveButton>
-              ) : null}
-            </div>
-
-            <DialogFooter>
-              <PrimitiveButton type="button" variant="outline" onClick={closeGenerateDialog} disabled={isGeneratingOutfit}>
-                Cancel
-              </PrimitiveButton>
-              <PrimitiveButton type="submit" disabled={isGeneratingOutfit || user.clothing_items.length === 0}>
-                <Sparkles className="h-4 w-4" />
-                {isGeneratingOutfit ? "Generating..." : "Generate"}
-              </PrimitiveButton>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
+    </CollectionPageShell>
   );
 }

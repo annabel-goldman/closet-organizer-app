@@ -80,7 +80,7 @@ export function GenerationTaskToasts({
       aria-label="Generation activity"
     >
       <AnimatePresence initial={false}>
-        {tasks.map((task) => {
+        {tasks.filter((task) => !task.isDismissed).map((task) => {
           const running = isGenerationTaskRunning(task);
           const failed = task.workflow.status === "failed" || Boolean(task.cancelError);
           const successful = isGenerationTaskSuccessful(task);
@@ -96,7 +96,7 @@ export function GenerationTaskToasts({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 12, scale: 0.98 }}
               transition={{ duration: 0.22, ease: "easeOut" }}
-              className={`pointer-events-auto border p-4 shadow-xl backdrop-blur ${
+              className={`pointer-events-auto relative border p-4 pr-12 shadow-xl backdrop-blur ${
                 failed
                   ? "border-red-200 bg-red-50/95"
                   : successful
@@ -107,6 +107,16 @@ export function GenerationTaskToasts({
               aria-live={failed ? "assertive" : "polite"}
               aria-atomic="true"
             >
+              <PrimitiveButton
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => onDismiss(task.workflow.id)}
+                aria-label={`Dismiss generation update for ${label}`}
+                className="absolute right-2 top-2 h-8 w-8"
+              >
+                <X aria-hidden="true" />
+              </PrimitiveButton>
               <div className="flex items-start gap-3">
                 {running ? (
                   <LoaderCircle className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
@@ -162,16 +172,6 @@ export function GenerationTaskToasts({
                         View
                       </PrimitiveButton>
                     ) : null}
-                    <PrimitiveButton
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => onDismiss(task.workflow.id)}
-                      aria-label={`Dismiss generation update for ${label}`}
-                      className="h-8 w-8"
-                    >
-                      <X aria-hidden="true" />
-                    </PrimitiveButton>
                   </div>
                 )}
               </div>

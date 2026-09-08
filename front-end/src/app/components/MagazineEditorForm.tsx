@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, Search } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check } from "lucide-react";
 
 import {
   generateMagazineMetadataSuggestions,
@@ -12,7 +12,9 @@ import { resolveModeledWorkflowImageUrl } from "../lib/modeledPreview";
 import { AiMetadataAutofillButton } from "./AiMetadataAutofillButton";
 import { OutfitCollageCanvas } from "./OutfitCollageCanvas";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
+import { PrimitiveSearchField } from "./primitives/PrimitiveSearchField";
 import { PrimitiveText } from "./primitives/PrimitiveText";
+import { CollectionCardButton } from "./shared/CollectionCard";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { MagazinePageDesigner } from "./magazines/MagazinePageDesigner";
@@ -216,17 +218,12 @@ export function MagazineEditorForm({
                 </div>
               </div>
 
-              <div className="relative">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <Input
+              <div>
+                <PrimitiveSearchField
                   value={outfitSearchQuery}
                   onChange={(event) => setOutfitSearchQuery(event.target.value)}
                   placeholder="Search outfits"
                   aria-label="Search outfits"
-                  className="h-11 pl-9"
                 />
               </div>
 
@@ -234,15 +231,14 @@ export function MagazineEditorForm({
                 {filteredOutfits.map((outfit) => {
                   const checked = draft.outfitIds.includes(outfit.id);
                   return (
-                    <PrimitiveButton
+                    <CollectionCardButton
                       key={outfit.id}
                       type="button"
-                      variant="outline"
                       role="checkbox"
                       aria-checked={checked}
                       aria-label={`Select ${outfit.name}`}
                       onClick={() => toggleOutfit(outfit.id, !checked)}
-                      className={`relative h-auto w-full flex-col items-stretch justify-start gap-0 overflow-hidden whitespace-normal p-0 text-left ${
+                      className={`relative ${
                         checked ? "border-foreground" : "border-border"
                       }`}
                     >
@@ -260,7 +256,7 @@ export function MagazineEditorForm({
                         <PrimitiveText as="span" variant="bodySm" className="block truncate">{outfit.name}</PrimitiveText>
                         <PrimitiveText as="span" variant="caption" tone="muted">{outfit.items.length} pieces</PrimitiveText>
                       </span>
-                    </PrimitiveButton>
+                    </CollectionCardButton>
                   );
                 })}
                 {filteredOutfits.length === 0 ? (

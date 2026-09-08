@@ -56,9 +56,13 @@ class ApiPayloads
 
     payload["size"] = clothing_item.size
     payload["tags"] = TagListNormalizer.call(clothing_item.tags)
+    versions = wardrobe_image_versions(clothing_item)
+    payload["image_versions"] = versions
     payload["image_url"] = attachment_url(clothing_item.display_photo_attachment)
-    payload["original_image_url"] = attachment_url(clothing_item.photo)
-    payload["cleaned_image_url"] = attachment_url(clothing_item.cleaned_photo)
+    payload["original_image_url"] = version_url(versions, "original") || attachment_url(clothing_item.photo)
+    payload["generated_image_url"] = version_url(versions, "generated")
+    payload["transparent_image_url"] = version_url(versions, "transparent") || attachment_url(clothing_item.cleaned_photo)
+    payload["cleaned_image_url"] = payload["transparent_image_url"]
     payload["user"] = user(clothing_item.user, include_items: false) if include_user
     payload
   end
@@ -127,6 +131,35 @@ class ApiPayloads
     }
   end
 
+  def outfit_recommendation_run(run)
+    workflow = run.latest_workflow
+    {
+      id: run.id,
+      status: run.status,
+      prompt: run.prompt,
+      brief: run.structured_brief,
+      constraints: run.constraints,
+      result_message: run.result_message,
+      error_message: run.error_message,
+      models: run.models,
+      usage: run.usage,
+      parent_run_id: run.parent_run_id,
+      workflow: workflow ? ai_workflow(workflow) : nil,
+      recommendations: run.options.passing.order(judge_score: :desc).limit(3).map do |option|
+        {
+          id: option.id,
+          title: option.title,
+          summary: option.summary,
+          item_ids: option.clothing_item_ids,
+          score: option.judge_score&.to_f,
+          scores: option.judge_scores,
+          reasons: option.reasons,
+          items: option.clothing_items.map { |item| clothing_item(item, include_user: false) }
+        }
+      end
+    }
+  end
+
   def outfit_detection(outfit_detection)
     payload = outfit_detection.serializable_hash(
       only: %i[
@@ -151,7 +184,12 @@ class ApiPayloads
     payload["coarse_box"] = outfit_detection.coarse_box
     payload["refined_box"] = outfit_detection.refined_box
     payload["final_box"] = outfit_detection.final_box
-    payload["cleaned_image_url"] = attachment_url(outfit_detection.cleaned_photo)
+    versions = wardrobe_image_versions(outfit_detection)
+    payload["image_versions"] = versions
+    payload["image_url"] = attachment_url(outfit_detection.active_image_version&.image)
+    payload["generated_image_url"] = version_url(versions, "generated")
+    payload["transparent_image_url"] = version_url(versions, "transparent") || attachment_url(outfit_detection.cleaned_photo)
+    payload["cleaned_image_url"] = payload["image_url"] || payload["transparent_image_url"]
     payload
   end
 
@@ -169,12 +207,9 @@ class ApiPayloads
     )
 
     ordered_outfit_items = outfit.outfit_items.sort_by { |outfit_item| [ outfit_item.layer_order, outfit_item.id ] }
-    generation_run = outfit.outfit_generation_run
 
     payload["item_ids"] = ordered_outfit_items.map(&:clothing_item_id)
-    payload["generation_id"] = generation_run&.id
-    payload["generated_by_ai"] = generation_run.present?
-    payload["generated_item_ids"] = generation_run&.generated_item_ids || []
+    payload["recommendation_option_id"] = outfit.outfit_recommendation_option&.id
     modeled_workflow = outfit.ai_workflows
       .select { |workflow| workflow.kind == "modeled_outfit" }
       .max_by(&:created_at)
@@ -260,8 +295,27 @@ class ApiPayloads
 
   attr_reader :url_helpers
 
+  def wardrobe_image_versions(record)
+    record.image_versions.in_display_order.map do |version|
+      {
+        id: version.id,
+        kind: version.variant_kind,
+        image_url: attachment_url(version.image),
+        selected: version.selected,
+        provider: version.provider,
+        model: version.model,
+        created_at: version.created_at,
+        updated_at: version.updated_at
+      }
+    end
+  end
+
+  def version_url(versions, kind)
+    versions.find { |version| version[:kind] == kind }&.fetch(:image_url)
+  end
+
   def attachment_url(attachment, proxy: false)
-    return unless attachment.attached?
+    return unless attachment&.attached?
 
     return url_helpers.rails_storage_proxy_url(attachment) if proxy
 

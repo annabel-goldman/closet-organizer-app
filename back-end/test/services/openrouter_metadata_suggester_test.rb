@@ -27,6 +27,8 @@ class OpenrouterMetadataSuggesterTest < ActiveSupport::TestCase
     assert_equal "shoes", service.send(:normalize_category, "boots")
     assert_equal "accessory", service.send(:normalize_category, "handbag")
     assert_equal "accessory", service.send(:normalize_category, "bag")
+    assert_equal "accessory", service.send(:normalize_category, "necklace")
+    assert_equal "accessory", service.send(:normalize_category, "pendant")
     assert_equal "intimates", service.send(:normalize_category, "bra")
     assert_equal "swimwear", service.send(:normalize_category, "bikini")
     assert_equal "swimwear", service.send(:normalize_category, "swimsuit")

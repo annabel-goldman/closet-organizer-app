@@ -46,6 +46,33 @@ class ImageVariantsController < ApplicationController
     tempfile&.close!
   end
 
+  def transparent_preview
+    source_photo = params.dig(:image_variant, :source_photo)
+    if source_photo.blank?
+      render json: { error: "Select an AI-generated image before removing its background." }, status: :unprocessable_content
+      return
+    end
+
+    temporary_files = ManagedTempfiles.new
+    processed = CleanImageBackgroundRemover.call(
+      source_photo,
+      filename_root: File.basename(source_photo.original_filename.to_s, ".*").presence || "item",
+      temporary_files: temporary_files
+    )
+    tempfile = processed.fetch(:tempfile)
+    tempfile.rewind
+
+    render json: {
+      filename: processed.fetch(:filename),
+      content_type: processed.fetch(:content_type),
+      data_url: data_url_for(tempfile, processed.fetch(:content_type))
+    }
+  rescue StandardError => error
+    render json: { error: error.message }, status: :unprocessable_content
+  ensure
+    temporary_files&.close_all
+  end
+
   private
 
   def data_url_for(tempfile, content_type)

@@ -1,12 +1,12 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Plus, Search, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { ClothingItem, Decoration, OutfitDecoration, buildPlaceholderLabel } from "../lib/closet";
 import { OutfitCollageLayout, sortItemsByCollageLayer } from "../lib/outfitCollage";
 import { DecorationPickerPopover } from "./decorations/DecorationPickerPopover";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
+import { PrimitivePickerPopover } from "./primitives/PrimitivePickerPopover";
 import { PrimitiveText } from "./primitives/PrimitiveText";
-import { Input } from "./ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Popover, PopoverTrigger } from "./ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 interface OutfitCollageLayersPanelProps {
@@ -323,33 +323,18 @@ export function OutfitCollageLayersPanel({
             </TooltipTrigger>
             <TooltipContent side="top" sideOffset={6}>Add item</TooltipContent>
           </Tooltip>
-          <PopoverContent
+          <PrimitivePickerPopover
             side="right"
             align="start"
             sideOffset={12}
             collisionPadding={{ top: 16, right: 16, bottom: 76, left: 16 }}
-            className="flex max-h-[24rem] w-[15.5rem] flex-col overflow-hidden border-border p-0 shadow-[0_18px_40px_rgba(15,23,42,0.16)]"
-          >
-          <div className="shrink-0 space-y-2 border-b border-border px-3 py-2.5">
-            <PrimitiveText as="p" variant="overline" tone="muted" className="mb-1">
-              Add Item
-            </PrimitiveText>
-            <label className="relative block" htmlFor={addItemSearchId}>
-              <span className="sr-only">Search closet items to add</span>
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id={addItemSearchId}
-                value={addItemSearchQuery}
-                onChange={(event) => setAddItemSearchQuery(event.target.value)}
-                placeholder="Search closet"
-                className="h-8 pl-8 text-sm"
-                disabled={availableItems.length === 0}
-              />
-            </label>
-          </div>
-          <div
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3"
-            onWheel={(event) => event.stopPropagation()}
+            title="Add Item"
+            searchId={addItemSearchId}
+            searchLabel="Search closet items to add"
+            searchPlaceholder="Search closet"
+            searchValue={addItemSearchQuery}
+            searchDisabled={availableItems.length === 0}
+            onSearchValueChange={setAddItemSearchQuery}
           >
             {availableItems.length === 0 ? (
               <div className="rounded-sm border border-dashed border-border p-4 text-sm text-muted-foreground">
@@ -362,20 +347,21 @@ export function OutfitCollageLayersPanel({
             ) : (
               <div className="grid grid-cols-3 gap-1.5">
                 {filteredAvailableItems.map((item) => (
-                  <button
+                  <PrimitiveButton
                     key={item.id}
                     type="button"
+                    variant="ghost"
                     onClick={() => {
                       onAddItem(item.id);
                       setIsAddOpen(false);
                     }}
-                    className="group text-left"
+                    className="group h-auto w-full items-stretch whitespace-normal p-0 text-left hover:bg-transparent"
                     aria-label={`Add ${item.name} to outfit`}
                     title={item.name}
                   >
-                    <div className="relative aspect-[3/4] overflow-hidden border border-border bg-background transition-colors group-hover:bg-stone-50">
+                    <div className="relative aspect-[3/4] w-full overflow-hidden border border-border bg-background transition-colors group-hover:bg-stone-50">
                       {item.image_url ? (
-                        <img src={item.image_url} alt="" className="h-full w-full object-cover" />
+                        <img src={item.image_url} alt="" className="h-full w-full object-cover" draggable={false} />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center">
                           <PrimitiveText as="span" variant="bodySm" tone="muted">
@@ -384,12 +370,11 @@ export function OutfitCollageLayersPanel({
                         </div>
                       )}
                     </div>
-                  </button>
+                  </PrimitiveButton>
                 ))}
               </div>
             )}
-          </div>
-          </PopoverContent>
+          </PrimitivePickerPopover>
         </Popover>
         {onAddDecoration ? (
           <DecorationPickerPopover

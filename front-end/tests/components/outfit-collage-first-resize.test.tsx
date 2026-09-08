@@ -34,7 +34,7 @@ describe("OutfitCollageCanvas first resize", () => {
       resolveMeasurement = resolve;
     }));
 
-    render(
+    const { container } = render(
       <OutfitCollageCanvas
         editable
         items={[{
@@ -78,5 +78,38 @@ describe("OutfitCollageCanvas first resize", () => {
 
     expect(setRatio).toHaveBeenCalledWith(0.5);
     expect(setDragOrigin).toHaveBeenCalledWith([0, 0]);
+
+    const stage = container.querySelector<HTMLElement>("[data-outfit-collage-stage='true']");
+    const frame = container.querySelector<HTMLElement>("[data-collage-item-frame='true']");
+    const mediaBox = container.querySelector<HTMLElement>("[data-collage-media-box='true']");
+    expect(stage).not.toBeNull();
+    expect(frame).not.toBeNull();
+    expect(mediaBox?.style.width).toBe("62.5%");
+
+    vi.spyOn(stage!, "getBoundingClientRect").mockReturnValue({
+      bottom: 1000,
+      height: 1000,
+      left: 0,
+      right: 800,
+      top: 0,
+      width: 800,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    (mocks.moveableProps?.onResize as (event: unknown) => void)({
+      drag: { left: 160, top: 200 },
+      height: 400,
+      target: frame,
+      width: 200,
+    });
+
+    expect(frame?.style.width).toBe("200px");
+    expect(frame?.style.height).toBe("400px");
+    expect(mediaBox?.style.left).toBe("0%");
+    expect(mediaBox?.style.top).toBe("0%");
+    expect(mediaBox?.style.width).toBe("100%");
+    expect(mediaBox?.style.height).toBe("100%");
   });
 });
