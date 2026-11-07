@@ -1,5 +1,5 @@
 class OutfitPreferenceProfile < ApplicationRecord
-  CURRENT_VERSION = "outfit-preferences-v1".freeze
+  CURRENT_VERSION = "outfit-preferences-v2".freeze
 
   belongs_to :user
 

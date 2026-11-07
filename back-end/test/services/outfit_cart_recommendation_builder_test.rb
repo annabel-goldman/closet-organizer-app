@@ -145,6 +145,35 @@ class OutfitCartRecommendationBuilderTest < ActiveSupport::TestCase
     end
   end
 
+  test "changes multiple core pieces from an accepted outfit when the closet has alternatives" do
+    alternate_top = create_analyzed_item("top")
+    alternate_bottom = create_analyzed_item("bottom")
+    saved_outfit = @user.outfits.create!(name: "Accepted recommendation")
+    saved_outfit.clothing_items = @items.values
+    run = @user.outfit_recommendation_runs.create!(prompt: "casual outfit", status: :succeeded)
+    option = run.options.create!(
+      rank: 1,
+      status: :passing,
+      clothing_item_ids: @items.values.map(&:id),
+      outfit: saved_outfit
+    )
+    @user.outfit_recommendation_feedback_events.create!(
+      outfit_recommendation_run: run,
+      outfit_recommendation_option: option,
+      event_type: "save"
+    )
+
+    with_query_embedding do
+      result = OutfitCartRecommendationBuilder.call(user: @user, prompt: "casual outfit")
+      selected_ids = result.dig(:recommendation, :item_ids)
+      accepted_ids = @items.values.map(&:id)
+
+      assert_includes selected_ids, alternate_top.id
+      assert_includes selected_ids, alternate_bottom.id
+      assert_operator (selected_ids & accepted_ids).length, :<=, 1
+    end
+  end
+
   test "ranks an equally suitable unused item ahead of a repeatedly used item" do
     used = @items.fetch("top")
     unused = create_analyzed_item("top")

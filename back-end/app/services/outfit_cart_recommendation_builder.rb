@@ -8,8 +8,10 @@ class OutfitCartRecommendationBuilder
   OPTIONAL_ACCESSORY_LIMIT = 5
   VISUAL_SHORTLIST_SIZE = 6
   DIVERSITY_PENALTY = 0.16
-  ITEM_USAGE_PENALTY = 0.04
-  MAX_ITEM_USAGE_PENALTY = 0.12
+  ITEM_USAGE_PENALTY = 0.06
+  MAX_ITEM_USAGE_PENALTY = 0.18
+  HISTORY_OVERLAP_PENALTY = 0.18
+  NEAR_REPEAT_OVERLAP = 2.0 / 3.0
   MAX_FORMALITY_GAP = 2
   MAX_WARMTH_GAP = 3
   RECENT_REJECTION_LIMIT = 20
@@ -189,10 +191,11 @@ class OutfitCartRecommendationBuilder
       .reject(&:empty?)
       .uniq { |items| item_key(items) }
       .reject { |items| locally_incompatible?(items) || recently_rejected?(items) }
-    base = prefer_novel_combinations(base)
     best_coverage = base.map { |items| structural_coverage(items) }.max
     base = base
       .select { |items| structural_coverage(items) == best_coverage }
+    base = prefer_novel_combinations(base)
+    base = base
       .sort_by { |items| [ -candidate_rank_score(items, scorer), item_key(items) ] }
       .first(BASE_CANDIDATE_LIMIT)
 
@@ -274,13 +277,23 @@ class OutfitCartRecommendationBuilder
   end
 
   def prefer_novel_combinations(candidates)
-    novel = candidates.reject { |items| previously_used_core?(items) }
-    novel.presence || candidates
+    unseen = candidates.reject { |items| previously_used_core?(items) }
+    return candidates if unseen.empty?
+
+    substantially_different = unseen.reject { |items| near_previously_used_core?(items) }
+    substantially_different.presence || unseen
   end
 
   def previously_used_core?(items)
     core_ids = core_item_ids(items.map(&:id))
     core_ids.any? && prior_core_item_sets.include?(core_ids)
+  end
+
+  def near_previously_used_core?(items)
+    core_ids = core_item_ids(items.map(&:id))
+    core_ids.any? && prior_core_item_sets.any? do |prior_ids|
+      core_overlap(core_ids, prior_ids) >= NEAR_REPEAT_OVERLAP
+    end
   end
 
   def prior_core_item_sets
@@ -327,12 +340,24 @@ class OutfitCartRecommendationBuilder
   end
 
   def item_usage_penalty(item_id)
-    [ Math.log1p(item_usage_counts[item_id]) * ITEM_USAGE_PENALTY, MAX_ITEM_USAGE_PENALTY ].min
+    [ Math.log(item_usage_counts[item_id] + 1.0) * ITEM_USAGE_PENALTY, MAX_ITEM_USAGE_PENALTY ].min
   end
 
   def candidate_rank_score(items, scorer)
     usage_penalty = items.sum { |item| item_usage_penalty(item.id) } / items.length.to_f
-    scorer.combination_score(items) - usage_penalty
+    scorer.combination_score(items) - usage_penalty - history_overlap_penalty(items)
+  end
+
+  def history_overlap_penalty(items)
+    core_ids = core_item_ids(items.map(&:id))
+    overlap = prior_core_item_sets.map { |prior_ids| core_overlap(core_ids, prior_ids) }.max || 0.0
+    overlap * HISTORY_OVERLAP_PENALTY
+  end
+
+  def core_overlap(left, right)
+    return 0.0 if left.empty? || right.empty?
+
+    (left & right).length.to_f / [ left.length, right.length ].max
   end
 
   def visual_shortlist(candidates, scorer)

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Updated Brakeman to 8.1.0 so the required latest-version security scan runs successfully in CI; the scan reports no security warnings.
+- Reduced accepted-outfit repetition in the generator. Saving an AI look now teaches item and style preferences without double-counting the saved outfit or strongly reinforcing its exact item pairs; candidate selection favors combinations that change multiple core pieces when the closet supports it, with a stronger capped usage/overlap penalty and a fallback for closets with limited alternatives.
 - Fixed incremental collection grids getting stranded on their first batch when a browser missed the intersection-observer event. Closet, Outfits, Magazines, and Decorations now also append the next batch from a passive near-viewport scroll fallback.
 - Expanded outfit-generator variety by skipping previously generated or saved structural cores whenever alternatives exist and applying a capped usage penalty that helps suitable underused closet pieces reach the visual shortlist. Explicitly selected cart anchors remain mandatory.
 - Saved-outfit deletion now requires confirmation. Deleting an AI-generated outfit records strong negative recommendation feedback and prevents that core item combination from being generated again, while deleting a manually created outfit remains feedback-neutral.
