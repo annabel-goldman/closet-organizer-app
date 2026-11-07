@@ -5,7 +5,7 @@ Rails 8 JSON backend for Curated Closet.
 ## Stack
 
 - Ruby 3.3.6
-- Rails 8.1.3
+- Rails 8.1.4.1
 - SQLite for local development and test
 - PostgreSQL in deployment
 - Puma
