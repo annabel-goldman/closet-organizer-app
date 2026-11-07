@@ -63,6 +63,9 @@ describe("GenerationTaskToasts", () => {
       />,
     );
 
+    expect(screen.getByLabelText("Generation activity")).toHaveAttribute(
+      "data-generation-task-toasts",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onCancel).not.toHaveBeenCalled();
 

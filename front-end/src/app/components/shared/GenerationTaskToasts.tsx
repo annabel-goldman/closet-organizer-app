@@ -77,6 +77,7 @@ export function GenerationTaskToasts({
 
   return (
     <div
+      data-generation-task-toasts
       className="pointer-events-none fixed bottom-6 right-6 z-[90] flex w-[min(24rem,calc(100vw-3rem))] flex-col gap-3"
       aria-label="Generation activity"
     >

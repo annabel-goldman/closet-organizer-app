@@ -49,7 +49,20 @@ class OutfitsController < ApplicationController
   end
 
   def destroy
-    @outfit.destroy
+    recommendation_option = @outfit.outfit_recommendation_option
+
+    Outfit.transaction do
+      @outfit.destroy!
+      if recommendation_option
+        current_user.outfit_recommendation_feedback_events.create!(
+          outfit_recommendation_run: recommendation_option.outfit_recommendation_run,
+          outfit_recommendation_option: recommendation_option,
+          event_type: "delete_after_save",
+          metadata: { "source" => "saved_outfit_delete" }
+        )
+      end
+    end
+    OutfitPreferenceProfileBuilder.call(current_user, refresh: true) if recommendation_option
     head :no_content
   end
 

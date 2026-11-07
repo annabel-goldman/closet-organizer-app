@@ -78,6 +78,33 @@ test("category defaults place tops above bottoms with accessories on the left an
   assert.ok(accessory.y < shoes.y);
 });
 
+test("adding a piece renumbers colliding saved and default layer positions", () => {
+  const savedLayout = (layerOrder: number) => ({
+    x: 10 + layerOrder,
+    y: 12 + layerOrder,
+    width: 30,
+    height: 32,
+    rotation: 0,
+    layer_order: layerOrder,
+  });
+  const items = [
+    { id: 635, category: "top", collage_layout: savedLayout(2) },
+    { id: 569, category: "bottom", collage_layout: savedLayout(3) },
+    { id: 911, category: "accessory", collage_layout: savedLayout(4) },
+    { id: 1146, category: "accessory" },
+    { id: 608, category: "shoes", collage_layout: savedLayout(0) },
+    { id: 923, category: "outerwear", collage_layout: savedLayout(5) },
+  ];
+
+  const layouts = resolveOutfitCollageLayouts(items as never);
+  const layerOrders = Object.values(layouts).map((layout) => layout.layer_order);
+
+  assert.deepEqual([...layerOrders].sort((left, right) => left - right), [ 0, 1, 2, 3, 4, 5 ]);
+  assert.equal(new Set(layerOrders).size, items.length);
+  assert.notEqual(layouts[911].layer_order, layouts[1146].layer_order);
+  assert.equal(layouts[911].x, savedLayout(4).x);
+});
+
 test("contained media boxes preserve tall and wide item proportions without changing their frame", () => {
   const layout = {
     x: 20,

@@ -8,7 +8,8 @@ class OutfitPreferenceProfileBuilder
     "none" => -1.5,
     "save" => 4.0,
     "add_after_save" => 2.0,
-    "remove_after_save" => -2.5
+    "remove_after_save" => -2.5,
+    "delete_after_save" => -5.0
   }.freeze
 
   def self.call(user, refresh: false, excluded_outfit_ids: [])

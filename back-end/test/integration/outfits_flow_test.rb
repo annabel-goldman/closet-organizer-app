@@ -55,7 +55,7 @@ class OutfitsFlowTest < ActionDispatch::IntegrationTest
     assert_equal [ @user_item.id ], response_json["item_ids"]
   end
 
-  test "saving and editing a recommendation records learning without treating deletion as feedback" do
+  test "saving, editing, and deleting a recommendation records learning" do
     run = @user.outfit_recommendation_runs.create!(prompt: "polished dinner")
     option = run.options.create!(rank: 1, status: :passing, clothing_item_ids: [ @user_item.id ])
 
@@ -79,9 +79,15 @@ class OutfitsFlowTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal %w[add_after_save remove_after_save], run.feedback_events.order(:id).last(2).map(&:event_type).sort
-    before_delete = run.feedback_events.count
-    delete outfit_url(outfit), headers: auth_headers(@user), as: :json
-    assert_equal before_delete, run.feedback_events.count
+    assert_difference(-> { run.feedback_events.count }, 1) do
+      delete outfit_url(outfit), headers: auth_headers(@user), as: :json
+    end
+
+    assert_response :no_content
+    deletion_feedback = run.feedback_events.order(:id).last
+    assert_equal "delete_after_save", deletion_feedback.event_type
+    assert_equal option.id, deletion_feedback.outfit_recommendation_option_id
+    assert_equal({ "source" => "saved_outfit_delete" }, deletion_feedback.metadata)
   end
 
   test "suggests outfit details from the current draft items without saving" do
@@ -360,8 +366,10 @@ class OutfitsFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "can delete an outfit" do
-    assert_difference("Outfit.count", -1) do
-      delete outfit_url(@outfit), headers: auth_headers(@user), as: :json
+    assert_no_difference("OutfitRecommendationFeedbackEvent.count") do
+      assert_difference("Outfit.count", -1) do
+        delete outfit_url(@outfit), headers: auth_headers(@user), as: :json
+      end
     end
 
     assert_response :no_content

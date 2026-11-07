@@ -8,9 +8,13 @@ class OutfitCartRecommendationBuilder
   OPTIONAL_ACCESSORY_LIMIT = 5
   VISUAL_SHORTLIST_SIZE = 6
   DIVERSITY_PENALTY = 0.16
+  ITEM_USAGE_PENALTY = 0.04
+  MAX_ITEM_USAGE_PENALTY = 0.12
   MAX_FORMALITY_GAP = 2
   MAX_WARMTH_GAP = 3
   RECENT_REJECTION_LIMIT = 20
+  RECENT_NOVELTY_HISTORY_LIMIT = 50
+  CORE_CATEGORIES = %w[top bottom dress swimwear shoes].freeze
   OUTFIT_STRUCTURES = [ %w[dress shoes], %w[top bottom shoes], %w[swimwear shoes] ].freeze
 
   def self.call(user:, prompt:, locked_item_ids: [], draft_metadata: {})
@@ -185,10 +189,11 @@ class OutfitCartRecommendationBuilder
       .reject(&:empty?)
       .uniq { |items| item_key(items) }
       .reject { |items| locally_incompatible?(items) || recently_rejected?(items) }
+    base = prefer_novel_combinations(base)
     best_coverage = base.map { |items| structural_coverage(items) }.max
     base = base
       .select { |items| structural_coverage(items) == best_coverage }
-      .sort_by { |items| [ -scorer.combination_score(items), item_key(items) ] }
+      .sort_by { |items| [ -candidate_rank_score(items, scorer), item_key(items) ] }
       .first(BASE_CANDIDATE_LIMIT)
 
     outerwear = ranked_items(available_items.select { |item| item.category == "outerwear" }, scorer)
@@ -196,7 +201,7 @@ class OutfitCartRecommendationBuilder
     accessories = ranked_items(available_items.select { |item| item.category == "accessory" }, scorer)
       .first(OPTIONAL_ACCESSORY_LIMIT)
 
-    base.flat_map do |items|
+    expanded = base.flat_map do |items|
       additions = [ items ]
       additions.concat(outerwear.filter_map { |item| add_optional(items, item) })
       additions.concat(accessories.filter_map { |item| add_optional(items, item) })
@@ -206,7 +211,8 @@ class OutfitCartRecommendationBuilder
       .compact
       .uniq { |items| item_key(items) }
       .reject { |items| locally_incompatible?(items) || recently_rejected?(items) }
-      .sort_by { |items| [ -scorer.combination_score(items), item_key(items) ] }
+    prefer_novel_combinations(expanded)
+      .sort_by { |items| [ -candidate_rank_score(items, scorer), item_key(items) ] }
   end
 
   def add_optional(items, item)
@@ -225,7 +231,7 @@ class OutfitCartRecommendationBuilder
   end
 
   def ranked_items(items, scorer)
-    items.sort_by { |item| [ -scorer.item_score(item), item.id ] }
+    items.sort_by { |item| [ -(scorer.item_score(item) - item_usage_penalty(item.id)), item.id ] }
   end
 
   def locally_incompatible?(items)
@@ -250,7 +256,7 @@ class OutfitCartRecommendationBuilder
 
   def recent_rejected_item_sets
     @recent_rejected_item_sets ||= user.outfit_recommendation_feedback_events
-      .where(event_type: "none")
+      .where(event_type: %w[none delete_after_save])
       .order(created_at: :desc)
       .includes(:outfit_recommendation_option, outfit_recommendation_run: :options)
       .limit(RECENT_REJECTION_LIMIT)
@@ -267,9 +273,71 @@ class OutfitCartRecommendationBuilder
     recent_rejected_item_sets.any? { |rejected_ids| rejected_ids.subset?(candidate_ids) }
   end
 
+  def prefer_novel_combinations(candidates)
+    novel = candidates.reject { |items| previously_used_core?(items) }
+    novel.presence || candidates
+  end
+
+  def previously_used_core?(items)
+    core_ids = core_item_ids(items.map(&:id))
+    core_ids.any? && prior_core_item_sets.include?(core_ids)
+  end
+
+  def prior_core_item_sets
+    @prior_core_item_sets ||= begin
+      saved_sets = user.outfits.includes(:clothing_items).map do |outfit|
+        core_item_ids(outfit.clothing_items.map(&:id))
+      end
+      generated_sets = recent_passing_option_item_ids.map { |item_ids| core_item_ids(item_ids) }
+      (saved_sets + generated_sets).reject(&:empty?).uniq
+    end
+  end
+
+  def recent_passing_option_item_ids
+    @recent_passing_option_item_ids ||= OutfitRecommendationOption
+      .joins(:outfit_recommendation_run)
+      .where(
+        outfit_recommendation_runs: { user_id: user.id },
+        outfit_recommendation_options: { status: "passing" }
+      )
+      .order(created_at: :desc)
+      .limit(RECENT_NOVELTY_HISTORY_LIMIT)
+      .pluck(:clothing_item_ids)
+  end
+
+  def core_item_ids(item_ids)
+    Set.new(Array(item_ids).map(&:to_i).select { |item_id| CORE_CATEGORIES.include?(closet_category_by_id[item_id]) })
+  end
+
+  def closet_category_by_id
+    @closet_category_by_id ||= user.clothing_items.pluck(:id, :category).to_h
+  end
+
+  def item_usage_counts
+    @item_usage_counts ||= begin
+      counts = Hash.new(0)
+      user.outfits.includes(:clothing_items).find_each do |outfit|
+        outfit.clothing_items.each { |item| counts[item.id] += 1 }
+      end
+      recent_passing_option_item_ids.each do |item_ids|
+        Array(item_ids).each { |item_id| counts[item_id.to_i] += 1 }
+      end
+      counts
+    end
+  end
+
+  def item_usage_penalty(item_id)
+    [ Math.log1p(item_usage_counts[item_id]) * ITEM_USAGE_PENALTY, MAX_ITEM_USAGE_PENALTY ].min
+  end
+
+  def candidate_rank_score(items, scorer)
+    usage_penalty = items.sum { |item| item_usage_penalty(item.id) } / items.length.to_f
+    scorer.combination_score(items) - usage_penalty
+  end
+
   def visual_shortlist(candidates, scorer)
     remaining = candidates.first(180).map do |items|
-      { id: candidate_id(items), items: items, local_score: scorer.combination_score(items) }
+      { id: candidate_id(items), items: items, local_score: candidate_rank_score(items, scorer) }
     end
     selected = []
     while selected.length < VISUAL_SHORTLIST_SIZE && remaining.any?

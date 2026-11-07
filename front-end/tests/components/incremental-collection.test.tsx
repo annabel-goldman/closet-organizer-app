@@ -27,7 +27,7 @@ function CollectionHarness({ items, resetKey }: { items: number[]; resetKey: str
   return (
     <>
       <ul>{collection.visibleItems.map((item) => <li key={item}>{item}</li>)}</ul>
-      <div ref={collection.sentinelRef} />
+      <div data-testid="collection-sentinel" ref={collection.sentinelRef} />
     </>
   );
 }
@@ -69,5 +69,25 @@ describe("useIncrementalCollection", () => {
 
     view.rerender(<CollectionHarness items={[1, 3]} resetKey="filtered" />);
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("adds the next batch on scroll when the observer misses the sentinel", () => {
+    vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
+    render(<CollectionHarness items={[1, 2, 3, 4, 5]} resetKey="all" />);
+    vi.spyOn(screen.getByTestId("collection-sentinel"), "getBoundingClientRect").mockReturnValue({
+      bottom: 900,
+      height: 20,
+      left: 0,
+      right: 100,
+      top: 880,
+      width: 100,
+      x: 0,
+      y: 880,
+      toJSON: () => ({}),
+    });
+
+    act(() => window.dispatchEvent(new Event("scroll")));
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
   });
 });

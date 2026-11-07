@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed incremental collection grids getting stranded on their first batch when a browser missed the intersection-observer event. Closet, Outfits, Magazines, and Decorations now also append the next batch from a passive near-viewport scroll fallback.
+- Expanded outfit-generator variety by skipping previously generated or saved structural cores whenever alternatives exist and applying a capped usage penalty that helps suitable underused closet pieces reach the visual shortlist. Explicitly selected cart anchors remain mandatory.
+- Saved-outfit deletion now requires confirmation. Deleting an AI-generated outfit records strong negative recommendation feedback and prevents that core item combination from being generated again, while deleting a manually created outfit remains feedback-neutral.
+- Fixed generation-toast controls being mistaken for attempts to close an outfit editor with unsaved changes. Cancelling or dismissing outfit and modeled-image generation now leaves the editor open without showing the unsaved-changes warning.
+- Fixed saved-outfit edits failing after adding a piece from the layers-panel plus button. Existing and default collage layouts now preserve their visual stacking order while being renumbered into unique consecutive layer positions before save.
 - Sped up large Closet, Outfits, Magazines, and Decorations collections by eager-loading wardrobe image versions, attachments, modeled-workflow artifacts, and nested outfit records instead of querying them once per card. Collection grids now render in bounded batches and automatically append the next batch near the bottom of the page, with no pagination controls to click.
 - Moved AI outfit generation from My Outfits into the Closet Outfit Cart's sparkle action. An empty cart generates one new outfit; existing cart pieces become required anchors. Draft name, tags, and notes now act as explicit retrieval context for choosing the pieces, then the finalized pieces rewrite and expand those fields into editable outfit-specific details before saving. The product no longer exposes excluded-piece controls.
 - Outfit Cart generation now explicitly continues after the cart is closed and uses the shared bottom-of-screen generation notification for live progress, cancellation, dismissal, completion, and reopening the finished cart.

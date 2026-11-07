@@ -96,6 +96,74 @@ class OutfitCartRecommendationBuilderTest < ActiveSupport::TestCase
     end
   end
 
+  test "does not return a recently deleted AI outfit or a superset of it" do
+    alternate = create_analyzed_item("top")
+    run = @user.outfit_recommendation_runs.create!(prompt: "casual outfit", status: :succeeded)
+    option = run.options.create!(
+      rank: 1,
+      status: :passing,
+      clothing_item_ids: @items.values.map(&:id)
+    )
+    @user.outfit_recommendation_feedback_events.create!(
+      outfit_recommendation_run: run,
+      outfit_recommendation_option: option,
+      event_type: "delete_after_save"
+    )
+
+    with_query_embedding do
+      result = OutfitCartRecommendationBuilder.call(user: @user, prompt: "casual outfit")
+      selected_ids = result.dig(:recommendation, :item_ids)
+
+      assert_includes selected_ids, alternate.id
+      refute @items.values.map(&:id).all? { |id| selected_ids.include?(id) }
+    end
+  end
+
+  test "does not rebuild a previously saved generated core when an alternative exists" do
+    alternate = create_analyzed_item("top")
+    saved_outfit = @user.outfits.create!(name: "Saved recommendation")
+    saved_outfit.clothing_items = @items.values
+    run = @user.outfit_recommendation_runs.create!(prompt: "casual outfit", status: :succeeded)
+    option = run.options.create!(
+      rank: 1,
+      status: :passing,
+      clothing_item_ids: @items.values.map(&:id),
+      outfit: saved_outfit
+    )
+    @user.outfit_recommendation_feedback_events.create!(
+      outfit_recommendation_run: run,
+      outfit_recommendation_option: option,
+      event_type: "save"
+    )
+
+    with_query_embedding do
+      result = OutfitCartRecommendationBuilder.call(user: @user, prompt: "casual outfit")
+      selected_ids = result.dig(:recommendation, :item_ids)
+
+      assert_includes selected_ids, alternate.id
+      refute_includes selected_ids, @items.fetch("top").id
+    end
+  end
+
+  test "ranks an equally suitable unused item ahead of a repeatedly used item" do
+    used = @items.fetch("top")
+    unused = create_analyzed_item("top")
+    outfit = @user.outfits.create!(name: "Previously worn")
+    outfit.clothing_items << used
+    scorer = Object.new
+    scorer.define_singleton_method(:item_score) { |_item| 0.8 }
+    builder = OutfitCartRecommendationBuilder.new(
+      user: @user,
+      prompt: "casual outfit",
+      locked_item_ids: [],
+      draft_metadata: {}
+    )
+
+    ranked = builder.send(:ranked_items, [ used, unused ], scorer)
+
+    assert_equal unused.id, ranked.first.id
+  end
+
   test "filters combinations with an excessive formality gap" do
     @items.fetch("top").wardrobe_item_analysis.update!(extracted_attributes: { "visual" => { "formality" => 1 } })
     @items.fetch("bottom").wardrobe_item_analysis.update!(extracted_attributes: { "visual" => { "formality" => 4 } })

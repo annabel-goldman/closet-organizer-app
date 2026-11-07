@@ -1,5 +1,5 @@
 class OutfitRecommendationFeedbackEvent < ApplicationRecord
-  EVENT_TYPES = %w[keep exclude swap best none save add_after_save remove_after_save].freeze
+  EVENT_TYPES = %w[keep exclude swap best none save add_after_save remove_after_save delete_after_save].freeze
 
   belongs_to :user
   belongs_to :outfit_recommendation_run, inverse_of: :feedback_events
