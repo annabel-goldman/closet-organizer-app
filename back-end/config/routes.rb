@@ -48,8 +48,7 @@ Rails.application.routes.draw do
     end
     resource :wardrobe_item_analysis, only: %i[show create]
     resources :outfit_recommendations, only: %i[create show] do
-      post :feedback, on: :member
-      post :retry_judge, on: :member
+      post :discard, on: :member
     end
     resources :outfit_folders, except: %i[new edit] do
       post :generate_metadata_suggestions, on: :collection

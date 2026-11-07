@@ -15,8 +15,8 @@ class AiWorkflow < ApplicationRecord
     "modeled_item" => %w[prepare modeled verify],
     "modeled_outfit" => %w[prepare modeled verify],
     "lookbook" => %w[curate modeled verify],
-    "wardrobe_index" => %w[embed enrich],
-    "outfit_recommendation" => %w[plan retrieve judge finalize]
+    "wardrobe_index" => %w[embed],
+    "outfit_recommendation" => %w[retrieve finalize]
   }.freeze
 
   belongs_to :user

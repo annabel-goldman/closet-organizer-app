@@ -13,11 +13,9 @@ class WardrobeAnalysisStatus
       image_versions: { image_attachment: :blob }
     ).to_a
     counts = Hash.new(0)
-    enrichment_counts = Hash.new(0)
 
     items.each do |item|
       counts[status_for(item)] += 1
-      enrichment_counts[enrichment_status_for(item)] += 1
     end
 
     active_workflow = user.ai_workflows
@@ -33,33 +31,9 @@ class WardrobeAnalysisStatus
       failed: counts[:failed],
       stale: counts[:stale],
       missing_image: counts[:missing_image],
-      enriched: enrichment_counts[:ready],
-      enrichment_pending: enrichment_counts[:pending] + enrichment_counts[:stale],
-      enrichment_processing: enrichment_counts[:processing],
-      enrichment_failed: enrichment_counts[:failed],
-      complete: items.any? &&
-        counts.values_at(:ready, :failed, :missing_image).sum == items.length &&
-        enrichment_counts.values_at(:ready, :failed, :missing_image).sum == items.length,
+      complete: items.any? && counts.values_at(:ready, :failed, :missing_image).sum == items.length,
       workflow: active_workflow
     }
-  end
-
-  def enrichment_status_for(item)
-    return :missing_image unless item.display_photo_attachment.attached?
-
-    analysis = item.wardrobe_item_analysis
-    return :stale unless analysis
-    return analysis.enrichment_status.to_sym unless analysis.enrichment_succeeded?
-
-    return :ready if analysis.enrichment_ready_for?(
-      fingerprint: WardrobeItemEnricher.fingerprint(item),
-      model: ENV.fetch("OPENROUTER_ENRICHMENT_MODEL", OpenrouterWardrobeEnricher::DEFAULT_MODEL),
-      enrichment_version: WardrobeItemEnricher::ENRICHMENT_VERSION
-    )
-
-    :stale
-  rescue StandardError
-    :stale
   end
 
   private

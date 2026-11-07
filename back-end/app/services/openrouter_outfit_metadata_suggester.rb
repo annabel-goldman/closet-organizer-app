@@ -112,7 +112,8 @@ class OpenrouterOutfitMetadataSuggester
       - Prefer an evocative but useful title over generic titles such as "Outfit" or "Look" followed by a date.
       - Tags should cover the most useful combination of palette, season, occasion, silhouette, and mood.
       - Keep the title under #{InputLengthPolicy::MAX_OUTFIT_NAME} characters and notes under #{InputLengthPolicy::MAX_OUTFIT_NOTES} characters.
-      - Current outfit details are optional user-maintained context, but replace placeholder or generic details when the pieces support something more specific.
+      - Treat the current outfit details as the user's creative brief. Preserve its occasion, mood, and concrete requirements when they are compatible with the included pieces.
+      - Rewrite and expand all three fields for the finalized outfit. Do not merely echo the draft title, tags, or notes; make them more specific to the selected pieces.
       - Return only JSON and no markdown.
 
       Current outfit details:

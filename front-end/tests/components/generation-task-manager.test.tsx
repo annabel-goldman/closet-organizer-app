@@ -6,7 +6,7 @@ import { useGenerationTaskManager } from "../../src/app/lib/useGenerationTaskMan
 
 const pendingWorkflow: AiWorkflow = {
   id: 24,
-  kind: "modeled_outfit",
+  kind: "outfit_recommendation",
   status: "processing",
   completed_count: 0,
   failed_count: 0,

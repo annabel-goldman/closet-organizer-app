@@ -2,6 +2,7 @@ class OutfitRecommendationRun < ApplicationRecord
   STATUSES = %w[pending processing succeeded failed].freeze
 
   belongs_to :user
+  has_many :outfit_provider_attempts, dependent: :nullify
   belongs_to :parent_run, class_name: "OutfitRecommendationRun", optional: true
   has_many :retry_runs, class_name: "OutfitRecommendationRun", foreign_key: :parent_run_id,
     dependent: :nullify, inverse_of: :parent_run

@@ -5,9 +5,15 @@ class OutfitRecommendationScorer
     @brief = brief
     @query_embedding = query_embedding
     @preference_profile = preference_profile || {}
+    @item_scores = {}
   end
 
   def item_score(item)
+    key = item.respond_to?(:id) ? item.id : item.object_id
+    @item_scores[key] ||= compute_item_score(item)
+  end
+
+  def compute_item_score(item)
     analysis = item.wardrobe_item_analysis
     semantic = normalized_cosine(query_embedding, analysis.embedding)
     color = requested_color_score(analysis)
@@ -32,16 +38,18 @@ class OutfitRecommendationScorer
   end
 
   def hard_violation?(items)
-    items.any? { |item| excluded_color_match?(item.wardrobe_item_analysis) } ||
-      excessive_formality_gap?(items) || excessive_warmth_gap?(items) ||
-      competing_statement_pieces?(items) || pattern_conflict?(items) || silhouette_conflict?(items)
+    items.any? do |item|
+      excluded_color_match?(item.wardrobe_item_analysis) || Array(brief["excluded_item_terms"]).any? do |term|
+        OutfitStructure.item_text(item).match?(/\b#{Regexp.escape(term.to_s)}\b/i)
+      end
+    end
   end
 
   def reasons(items)
     reasons = []
-    reasons << "Matches the #{brief['preferred_colors'].to_sentence} palette" if Array(brief["preferred_colors"]).any?
-    reasons << "Fits the #{brief['style_terms'].first(2).to_sentence} direction" if Array(brief["style_terms"]).any?
-    reasons << "Balances silhouette, formality, and visual weight across the complete look"
+    reasons << "Selected for the #{brief['preferred_colors'].to_sentence} palette" if Array(brief["preferred_colors"]).any?
+    reasons << "Selected for the #{brief['style_terms'].first(2).to_sentence} direction" if Array(brief["style_terms"]).any?
+    reasons << "Compared as a complete combination"
     reasons.first(3)
   end
 
@@ -113,7 +121,8 @@ class OutfitRecommendationScorer
     warmth = items.map { |item| visual_value(item, "warmth") }.compact.map(&:to_f)
     formality = range_score(formalities, 3.0)
     weather = range_score(warmth, 3.0)
-    ((palette * 0.45) + (formality * 0.30) + (weather * 0.25)).clamp(0.0, 1.0)
+    conflicts = [ competing_statement_pieces?(items), pattern_conflict?(items), silhouette_conflict?(items) ].count(true)
+    ((palette * 0.45) + (formality * 0.30) + (weather * 0.25) - conflicts * 0.1).clamp(0.0, 1.0)
   end
 
   def range_score(values, maximum)

@@ -21,18 +21,11 @@ class WardrobeItemAnalysisScheduler
       model: model,
       analysis_version: WardrobeItemAnalyzer::ANALYSIS_VERSION
     )
-    enrichment_model = ENV.fetch("OPENROUTER_ENRICHMENT_MODEL", OpenrouterWardrobeEnricher::DEFAULT_MODEL)
-    enrichment_ready = analysis.enrichment_ready_for?(
-      fingerprint: WardrobeItemEnricher.fingerprint(item),
-      model: enrichment_model,
-      enrichment_version: WardrobeItemEnricher::ENRICHMENT_VERSION
-    )
-    return analysis if !force && embedding_ready && enrichment_ready
+    return analysis if !force && embedding_ready
     return analysis if !force && analysis.status.in?(%w[pending processing]) &&
       analysis.source_fingerprint == fingerprints.fetch(:source) &&
       analysis.metadata_fingerprint == fingerprints.fetch(:metadata) &&
-      OpenrouterWardrobeEmbedder.same_model?(analysis.model, model) &&
-      analysis.enrichment_status.in?(%w[pending processing])
+      OpenrouterWardrobeEmbedder.same_model?(analysis.model, model)
 
     update_attributes = {
       provider: "openrouter",
@@ -43,15 +36,6 @@ class WardrobeItemAnalysisScheduler
       error_message: nil
     }
     update_attributes[:status] = :pending unless embedding_ready
-    unless enrichment_ready
-      update_attributes.merge!(
-        enrichment_status: :pending,
-        enrichment_model: enrichment_model,
-        enrichment_version: WardrobeItemEnricher::ENRICHMENT_VERSION,
-        enrichment_fingerprint: WardrobeItemEnricher.fingerprint(item),
-        enrichment_error_message: nil
-      )
-    end
     analysis.update!(update_attributes)
     WardrobeItemAnalysisJob.perform_later(item.id)
     analysis

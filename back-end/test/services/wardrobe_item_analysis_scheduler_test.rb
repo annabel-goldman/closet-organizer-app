@@ -13,32 +13,27 @@ class WardrobeItemAnalysisSchedulerTest < ActiveSupport::TestCase
     clear_enqueued_jobs
   end
 
-  test "does not rerun a valid embedding and enrichment" do
-    make_current(enriched: true)
+  test "does not rerun a current embedding" do
+    make_current
 
     assert_no_enqueued_jobs do
       WardrobeItemAnalysisScheduler.call(@item.reload)
     end
   end
 
-  test "queues missing enrichment without invalidating a valid embedding" do
-    analysis = make_current(enriched: false)
+  test "does not require visual enrichment when the embedding is current" do
+    analysis = make_current
+    analysis.update!(enrichment_status: :pending, extracted_attributes: {})
 
-    assert_enqueued_with(job: WardrobeItemAnalysisJob) do
+    assert_no_enqueued_jobs do
       WardrobeItemAnalysisScheduler.call(@item.reload)
     end
-
-    assert analysis.reload.succeeded?
-    assert analysis.enrichment_pending?
-    assert_equal [ 0.5, 0.5 ], analysis.embedding
   end
 
   private
 
-  def make_current(enriched:)
+  def make_current
     fingerprints = WardrobeItemFingerprint.call(@item)
-    attributes = { "styles" => [ "casual" ] }
-    attributes["visual"] = { "fit" => "regular" } if enriched
     (@item.wardrobe_item_analysis || @item.build_wardrobe_item_analysis).tap do |analysis|
       analysis.update!(
         status: :succeeded,
@@ -47,12 +42,7 @@ class WardrobeItemAnalysisSchedulerTest < ActiveSupport::TestCase
         source_fingerprint: fingerprints.fetch(:source),
         metadata_fingerprint: fingerprints.fetch(:metadata),
         embedding: [ 0.5, 0.5 ],
-        extracted_attributes: attributes,
-        enrichment_status: enriched ? :succeeded : :pending,
-        enrichment_model: OpenrouterWardrobeEnricher::DEFAULT_MODEL,
-        enrichment_version: WardrobeItemEnricher::ENRICHMENT_VERSION,
-        enrichment_fingerprint: WardrobeItemEnricher.fingerprint(@item),
-        enriched_at: enriched ? Time.current : nil
+        extracted_attributes: {}
       )
     end
   end

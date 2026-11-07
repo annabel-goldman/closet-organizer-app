@@ -11,6 +11,12 @@ class OpenrouterClient
   end
 
   def post_json(path:, body:, unreadable_message: "OpenRouter returned an unreadable response.")
+    OutfitProviderBudget.track(path, body) { perform_post(path: path, body: body, unreadable_message: unreadable_message) }
+  end
+
+  private
+
+  def perform_post(path:, body:, unreadable_message:)
     response = http_for(path).request(build_request(path, body))
     parsed = JSON.parse(response.body)
     return parsed if response.is_a?(Net::HTTPSuccess)

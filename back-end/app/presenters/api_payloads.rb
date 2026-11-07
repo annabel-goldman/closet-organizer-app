@@ -3,7 +3,7 @@ class ApiPayloads
     @url_helpers = url_helpers
   end
 
-  def user(user, include_items: true, include_model_references: false)
+  def user(user, include_items: true, include_model_references: false, clothing_items: nil)
     payload = user.serializable_hash(
       only: %i[
         id username preferred_style email avatar_url admin model_reference_consent_at created_at updated_at
@@ -25,7 +25,12 @@ class ApiPayloads
     end
 
     if include_items
-      payload["clothing_items"] = user.clothing_items.order(:name).map do |item|
+      items = clothing_items || user.clothing_items.includes(
+        { photo_attachment: :blob },
+        { cleaned_photo_attachment: :blob },
+        { image_versions: { image_attachment: :blob } }
+      ).order(:name)
+      payload["clothing_items"] = items.map do |item|
         clothing_item(item, include_user: false)
       end
     end
@@ -145,7 +150,7 @@ class ApiPayloads
       usage: run.usage,
       parent_run_id: run.parent_run_id,
       workflow: workflow ? ai_workflow(workflow) : nil,
-      recommendations: run.options.passing.order(judge_score: :desc).limit(3).map do |option|
+      recommendations: run.options.passing.order(judge_score: :desc).limit(1).map do |option|
         {
           id: option.id,
           title: option.title,
@@ -296,7 +301,15 @@ class ApiPayloads
   attr_reader :url_helpers
 
   def wardrobe_image_versions(record)
-    record.image_versions.in_display_order.map do |version|
+    versions = if record.association(:image_versions).loaded?
+      record.image_versions.sort_by do |version|
+        [ WardrobeImageVersion::KINDS.index(version.variant_kind) || WardrobeImageVersion::KINDS.length, version.id ]
+      end
+    else
+      record.image_versions.in_display_order.to_a
+    end
+
+    versions.map do |version|
       {
         id: version.id,
         kind: version.variant_kind,

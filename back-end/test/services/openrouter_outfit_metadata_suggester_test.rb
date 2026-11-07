@@ -16,6 +16,8 @@ class OpenrouterOutfitMetadataSuggesterTest < ActiveSupport::TestCase
     assert_includes prompt, "Weekend Placeholder"
     assert_includes prompt, clothing_items(:one).name
     assert_includes prompt, "Do not invent garments, brands, colors, or details"
+    assert_includes prompt, "Treat the current outfit details as the user's creative brief"
+    assert_includes prompt, "Rewrite and expand all three fields"
   end
 
   test "normalizes generated details to outfit limits" do

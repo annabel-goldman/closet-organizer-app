@@ -38,9 +38,7 @@ export function generationTaskMessage(task: GenerationTask) {
     case "outfit_recommendation": {
       if (!running) return completed ? "Finished styling" : "Outfit creation updated for";
       const activeStage = task.workflow.stages.find((stage) => stage.status === "processing")?.key;
-      if (activeStage === "plan") return "Planning";
       if (activeStage === "retrieve") return "Finding pieces for";
-      if (activeStage === "judge") return "Checking compatibility for";
       if (activeStage === "finalize") return "Finalizing";
       return "Preparing";
     }

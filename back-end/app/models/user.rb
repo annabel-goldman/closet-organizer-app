@@ -1,4 +1,5 @@
 class User < ApplicationRecord
+  has_many :outfit_experiments, dependent: :destroy
   ALLOWED_GOOGLE_EMAILS = %w[
     annabelgoldman2025@u.northwestern.edu
     annabel.m.goldman@gmail.com

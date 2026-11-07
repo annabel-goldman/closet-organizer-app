@@ -56,6 +56,12 @@ class OpenrouterOutfitBriefParser
 
             Define an anchor and flexible garment roles instead of forcing every request into dress or separates.
             Distinguish hard constraints explicitly requested by the user from soft styling preferences.
+            excluded_colors must ONLY contain colors the user explicitly forbids, never inferred style preferences.
+            excluded_item_terms must ONLY contain concrete forbidden garment terms explicitly requested (for example heels for no heels).
+            Include the anchor in garment_roles. Include full body coverage (dress OR top and bottom) and shoes.
+            These roles are suggested styling goals, not rejection criteria. The user accepts incomplete outfits.
+            Do not invent mandatory props or specialized clothing for a theme or aesthetic. Mark inferred accessories/props optional.
+            Name specific accessory roles (hat, bag, belt, jewelry), not just accessory. Extra accessories are optional.
             Preserve exact shade meaning (for example burgundy is not bright red, cream is not white).
             Do not invent specific owned items. The plan describes roles used for later closet retrieval.
           PROMPT
@@ -68,7 +74,7 @@ class OpenrouterOutfitBriefParser
     {
       type: "object",
       additionalProperties: false,
-      required: %w[summary anchor garment_roles layering_strategy silhouette_strategy palette_strategy preferred_colors excluded_colors style_terms material_terms pattern_strategy texture_strategy seasons weather occasion formality hard_constraints soft_constraints],
+      required: %w[summary anchor garment_roles layering_strategy silhouette_strategy palette_strategy preferred_colors excluded_colors excluded_item_terms style_terms material_terms pattern_strategy texture_strategy seasons weather occasion formality hard_constraints soft_constraints],
       properties: {
         summary: { type: "string" },
         anchor: {
@@ -90,6 +96,7 @@ class OpenrouterOutfitBriefParser
         palette_strategy: { type: "string" },
         preferred_colors: { type: "array", maxItems: 6, items: { type: "string" } },
         excluded_colors: { type: "array", maxItems: 6, items: { type: "string" } },
+        excluded_item_terms: { type: "array", maxItems: 8, items: { type: "string" } },
         style_terms: { type: "array", maxItems: 10, items: { type: "string" } },
         material_terms: { type: "array", maxItems: 8, items: { type: "string" } },
         pattern_strategy: { type: "string" }, texture_strategy: { type: "string" },
@@ -132,6 +139,7 @@ class OpenrouterOutfitBriefParser
       "palette_strategy" => value["palette_strategy"].to_s.squish,
       "preferred_colors" => normalized_terms(value["preferred_colors"]),
       "excluded_colors" => normalized_terms(value["excluded_colors"]),
+      "excluded_item_terms" => normalized_terms(value["excluded_item_terms"]),
       "style_terms" => normalized_terms(value["style_terms"]),
       "material_terms" => normalized_terms(value["material_terms"]),
       "pattern_strategy" => value["pattern_strategy"].to_s.squish,

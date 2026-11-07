@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_07_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_12_000000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -197,6 +197,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_07_010000) do
     t.index ["outfit_upload_id"], name: "index_outfit_detections_on_outfit_upload_id"
   end
 
+  create_table "outfit_example_descriptions", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.json "description", default: {}, null: false
+    t.string "fingerprint", null: false
+    t.integer "outfit_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["outfit_id"], name: "index_outfit_example_descriptions_on_outfit_id", unique: true
+  end
+
+  create_table "outfit_experiments", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.json "manifest", default: {}, null: false
+    t.string "name", null: false
+    t.decimal "reserved_usd", precision: 12, scale: 8, default: "0.0", null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["user_id", "name"], name: "index_outfit_experiments_on_user_id_and_name", unique: true
+    t.index ["user_id"], name: "index_outfit_experiments_on_user_id"
+  end
+
   create_table "outfit_folder_decorations", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "decoration_id"
@@ -259,6 +279,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_07_010000) do
     t.integer "user_id", null: false
     t.string "version", null: false
     t.index ["user_id"], name: "index_outfit_preference_profiles_on_user_id", unique: true
+  end
+
+  create_table "outfit_provider_attempts", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "endpoint", null: false
+    t.text "error_message"
+    t.integer "latency_ms"
+    t.string "model", null: false
+    t.integer "outfit_experiment_id"
+    t.integer "outfit_recommendation_run_id"
+    t.decimal "reserved_usd", precision: 12, scale: 8, null: false
+    t.string "status", default: "reserved", null: false
+    t.datetime "updated_at", null: false
+    t.json "usage", default: {}, null: false
+    t.index ["outfit_experiment_id"], name: "index_outfit_provider_attempts_on_outfit_experiment_id"
+    t.index ["outfit_recommendation_run_id"], name: "index_outfit_provider_attempts_on_outfit_recommendation_run_id"
   end
 
   create_table "outfit_recommendation_feedback_events", force: :cascade do |t|
@@ -411,6 +447,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_07_010000) do
   add_foreign_key "outfit_decorations", "decorations"
   add_foreign_key "outfit_decorations", "outfits"
   add_foreign_key "outfit_detections", "outfit_uploads"
+  add_foreign_key "outfit_example_descriptions", "outfits", on_delete: :cascade
+  add_foreign_key "outfit_experiments", "users"
   add_foreign_key "outfit_folder_decorations", "decorations"
   add_foreign_key "outfit_folder_decorations", "outfit_folders"
   add_foreign_key "outfit_folder_memberships", "outfit_folders"
@@ -419,6 +457,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_07_010000) do
   add_foreign_key "outfit_items", "clothing_items"
   add_foreign_key "outfit_items", "outfits"
   add_foreign_key "outfit_preference_profiles", "users"
+  add_foreign_key "outfit_provider_attempts", "outfit_experiments"
+  add_foreign_key "outfit_provider_attempts", "outfit_recommendation_runs"
   add_foreign_key "outfit_recommendation_feedback_events", "clothing_items"
   add_foreign_key "outfit_recommendation_feedback_events", "outfit_recommendation_options"
   add_foreign_key "outfit_recommendation_feedback_events", "outfit_recommendation_runs"

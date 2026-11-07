@@ -3,33 +3,39 @@ require "json"
 
 class OpenrouterOutfitVisualJudge
   DEFAULT_MODEL = "google/gemini-2.5-flash".freeze
-  DEFAULT_QUALITY_FLOOR = 70
   DEFAULT_MAX_OUTPUT_TOKENS = 6_000
   MAX_RESPONSE_ATTEMPTS = 2
-  RUBRIC_KEYS = %w[prompt_accuracy color_harmony silhouette_proportion pattern_texture occasion_weather overall_cohesion].freeze
+  RUBRIC_KEYS = %w[prompt_accuracy role_suitability visual_compatibility personal_taste].freeze
   InvalidJudgmentResponse = Class.new(StandardError)
+
+  def self.highest_ranked(evaluations)
+    evaluations.min_by { |evaluation| [ -evaluation.fetch("overall_score"), evaluation.fetch("candidate_id") ] }
+  end
 
   def self.call(brief:, candidates:)
     new(brief: brief, candidates: candidates).call
   end
 
-  def initialize(brief:, candidates:)
+  def initialize(brief:, candidates:, max_response_attempts: MAX_RESPONSE_ATTEMPTS, max_output_tokens: nil)
     @brief = brief
     @candidates = candidates
+    @requested_max_response_attempts = max_response_attempts
+    @requested_max_output_tokens = max_output_tokens
   end
 
   def call
     raise "There are no outfit candidates to judge." if candidates.empty?
 
-    collages = candidates.map { |candidate| OutfitCandidateCollageRenderer.call(candidate.fetch(:items)) }
+    collages = []
+    candidates.each { |candidate| collages << OutfitCandidateCollageRenderer.call(candidate.fetch(:items)) }
     response, evaluations, usage = request_evaluations(collages)
 
     {
       evaluations: evaluations,
-      passing: evaluations.select { |evaluation| passing?(evaluation) }.sort_by { |evaluation| -evaluation["overall_score"] }.first(3),
+      passing: [ self.class.highest_ranked(evaluations) ],
       model: response["model"].presence || configured_model,
       usage: usage.merge("estimated_cost_usd" => estimated_cost(usage)),
-      quality_floor: quality_floor
+      quality_floor: nil
     }
   ensure
     Array(collages).each(&:close!)
@@ -42,7 +48,7 @@ class OpenrouterOutfitVisualJudge
   def request_evaluations(collages)
     responses = []
 
-    MAX_RESPONSE_ATTEMPTS.times do |attempt|
+    max_response_attempts.times do |attempt|
       response = client.post_json(
         path: "/chat/completions",
         body: request_body(collages, retrying: attempt.positive?),
@@ -60,7 +66,7 @@ class OpenrouterOutfitVisualJudge
         return [ response, evaluations, usage.merge("attempts" => responses.length) ]
       rescue InvalidJudgmentResponse => error
         log_invalid_response(response, error, attempt: attempt + 1)
-        raise invalid_response_error(response, error) if attempt + 1 == MAX_RESPONSE_ATTEMPTS
+        raise invalid_response_error(response, error) if attempt + 1 == max_response_attempts
       end
     end
   end
@@ -77,7 +83,7 @@ class OpenrouterOutfitVisualJudge
       messages: [
         {
           role: "system",
-          content: "You are a strict expert fashion editor. Judge only the complete outfits shown. Return one complete JSON object with concise text and no Markdown."
+          content: "You are a fashion editor ranking available clothing combinations, including incomplete outfits. Return one complete JSON object with concise text and no Markdown."
         },
         { role: "user", content: request_content(collages, retrying: retrying) }
       ]
@@ -89,11 +95,22 @@ class OpenrouterOutfitVisualJudge
       {
         type: "text",
         text: <<~PROMPT
-          Judge these complete outfit collages against this structured styling plan:
+          Rank these clothing combinations against this suggested styling plan:
           #{brief.to_json}
 
           Score each rubric dimension from 0 to 100. overall_score must reflect the whole look, not an average of isolated items.
-          List any violation of a hard constraint. Be strict about exact colors, occasion, weather, competing focal pieces, proportions, and pattern conflict.
+          Score prompt accuracy, specific garment-role suitability, whole-look visual compatibility, and personal taste separately.
+          Treat the actual garment images as authoritative. If an image conflicts with an item's name or metadata,
+          heavily penalize that candidate for data integrity instead of trusting the text.
+          Reject category-complete looks that visibly clash in formality, season, footwear, palette, silhouette, or context.
+          Taste examples in the plan are guidance, never permission to override the request.
+          Only list explicit user exclusions or missing locked pieces as hard_violations. Aesthetic mismatches, inferred preferences,
+          exact-shade compromises, weather, and occasion suitability lower scores; they do not make an outfit invalid.
+          Garment roles, props, and the anchor are suggestions, not mandatory prerequisites. Missing props or clothing
+          coverage may lower scores but MUST NOT veto a candidate. Always score every candidate, including partial outfits.
+          Explain missing pieces honestly; describe the closest available interpretation rather than demanding a literal costume or ideal wardrobe.
+          In summary briefly explain the most important concrete compromise, if any. Never claim an exact match where one is absent.
+          Return repair_item_id (an existing candidate item ID) and repair_instruction for one correctable mismatch, or null and an empty string.
           Every candidate ID must appear exactly once.
           Keep every title, summary, reason, and violation concise so the complete JSON response is not truncated.
           #{"The previous judging response was malformed. Return only a complete JSON object this time." if retrying}
@@ -101,7 +118,7 @@ class OpenrouterOutfitVisualJudge
       }
     ]
     collages.each_with_index do |collage, index|
-      content << { type: "text", text: "Candidate #{candidates[index].fetch(:id)}" }
+      content << { type: "text", text: "Candidate #{candidates[index].fetch(:id)}; pieces: #{candidates[index].fetch(:items).map { |item| { id: item.id, name: item.name, category: item.category } }.to_json}" }
       content << { type: "image_url", image_url: { url: data_url(collage) } }
     end
     content
@@ -114,12 +131,14 @@ class OpenrouterOutfitVisualJudge
       required: %w[evaluations],
       properties: {
         evaluations: {
-          type: "array", minItems: 1, maxItems: 12,
+          type: "array", minItems: 1, maxItems: 6,
           items: {
             type: "object", additionalProperties: false,
-            required: [ "candidate_id", *RUBRIC_KEYS, "overall_score", "title", "summary", "reasons", "hard_violations" ],
+            required: [ "candidate_id", *RUBRIC_KEYS, "overall_score", "title", "summary", "reasons", "hard_violations", "repair_item_id", "repair_instruction" ],
             properties: {
               candidate_id: { type: "string" },
+              repair_item_id: { type: [ "integer", "null" ] },
+              repair_instruction: { type: "string", maxLength: 160 },
               **RUBRIC_KEYS.index_with { { type: "integer", minimum: 0, maximum: 100 } },
               overall_score: { type: "integer", minimum: 0, maximum: 100 },
               title: { type: "string", maxLength: 80 },
@@ -160,11 +179,16 @@ class OpenrouterOutfitVisualJudge
 
   def normalize_evaluations(values)
     values.map do |value|
+      unless [ *RUBRIC_KEYS, "overall_score" ].all? { |key| value[key].is_a?(Numeric) && value[key].finite? && (0..100).cover?(value[key]) }
+        raise InvalidJudgmentResponse, "The outfit judgment contains missing or invalid scores."
+      end
       scores = RUBRIC_KEYS.index_with { |key| value[key].to_i.clamp(0, 100) }
       {
         "candidate_id" => value["candidate_id"].to_s,
         "scores" => scores,
-        "overall_score" => value["overall_score"].to_i.clamp(0, 100),
+        "overall_score" => (scores["prompt_accuracy"] * 0.4 + scores["role_suitability"] * 0.25 + scores["visual_compatibility"] * 0.25 + scores["personal_taste"] * 0.1).round,
+        "repair_item_id" => Integer(value["repair_item_id"], exception: false),
+        "repair_instruction" => value["repair_instruction"].to_s.truncate(160),
         "title" => value["title"].to_s.squish.truncate(80),
         "summary" => value["summary"].to_s.squish.truncate(300),
         "reasons" => Array(value["reasons"]).map { |reason| reason.to_s.squish }.reject(&:blank?).first(4),
@@ -177,20 +201,17 @@ class OpenrouterOutfitVisualJudge
     evaluations.map { |value| value["candidate_id"] }.sort == candidates.map { |value| value.fetch(:id).to_s }.sort
   end
 
-  def passing?(evaluation)
-    evaluation["hard_violations"].empty? && evaluation["overall_score"] >= quality_floor
-  end
-
   def data_url(file)
     "data:image/png;base64,#{Base64.strict_encode64(File.binread(file.path))}"
   end
 
-  def quality_floor
-    Integer(ENV.fetch("OUTFIT_RECOMMENDATION_QUALITY_FLOOR", DEFAULT_QUALITY_FLOOR)).clamp(0, 100)
+  def max_output_tokens
+    requested = @requested_max_output_tokens.presence || ENV.fetch("OUTFIT_JUDGE_MAX_TOKENS", DEFAULT_MAX_OUTPUT_TOKENS)
+    Integer(requested).clamp(900, 6_000)
   end
 
-  def max_output_tokens
-    Integer(ENV.fetch("OUTFIT_JUDGE_MAX_TOKENS", DEFAULT_MAX_OUTPUT_TOKENS)).clamp(2_600, 12_000)
+  def max_response_attempts
+    Integer(@requested_max_response_attempts).clamp(1, MAX_RESPONSE_ATTEMPTS)
   end
 
   def combined_usage(values)

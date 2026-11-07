@@ -6,8 +6,13 @@ class OutfitsController < ApplicationController
 
   def index
     outfits = current_user.outfits.includes(
-      :ai_workflows,
-      outfit_items: :clothing_item,
+      :outfit_recommendation_option,
+      { ai_workflows: { stages: { artifacts: { file_attachment: :blob } } } },
+      { outfit_items: { clothing_item: [
+        { photo_attachment: :blob },
+        { cleaned_photo_attachment: :blob },
+        { image_versions: { image_attachment: :blob } }
+      ] } },
       outfit_decorations: { decoration: { image_attachment: :blob } }
     ).order(created_at: :desc)
     render json: outfits.map { |outfit| payloads.outfit(outfit) }
@@ -52,8 +57,13 @@ class OutfitsController < ApplicationController
 
   def set_outfit
     @outfit = current_user.outfits.includes(
-      :ai_workflows,
-      outfit_items: :clothing_item,
+      :outfit_recommendation_option,
+      { ai_workflows: { stages: { artifacts: { file_attachment: :blob } } } },
+      { outfit_items: { clothing_item: [
+        { photo_attachment: :blob },
+        { cleaned_photo_attachment: :blob },
+        { image_versions: { image_attachment: :blob } }
+      ] } },
       outfit_decorations: { decoration: { image_attachment: :blob } }
     ).find(params[:id])
   end

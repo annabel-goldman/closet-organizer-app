@@ -7,8 +7,18 @@ class OutfitFoldersController < ApplicationController
   def index
     folders = current_user.outfit_folders
       .includes(
+        :memberships,
         decorations: [ { image_attachment: :blob }, { decoration: { image_attachment: :blob } } ],
-        outfits: [ :ai_workflows, { outfit_items: :clothing_item }, { outfit_decorations: { decoration: { image_attachment: :blob } } } ]
+        outfits: [
+          :outfit_recommendation_option,
+          { ai_workflows: { stages: { artifacts: { file_attachment: :blob } } } },
+          { outfit_items: { clothing_item: [
+            { photo_attachment: :blob },
+            { cleaned_photo_attachment: :blob },
+            { image_versions: { image_attachment: :blob } }
+          ] } },
+          { outfit_decorations: { decoration: { image_attachment: :blob } } }
+        ]
       )
       .order(created_at: :desc)
     render json: folders.map { |folder| payloads.outfit_folder(folder) }
@@ -57,7 +67,20 @@ class OutfitFoldersController < ApplicationController
   private
 
   def set_outfit_folder
-    @outfit_folder = current_user.outfit_folders.find(params[:id])
+    @outfit_folder = current_user.outfit_folders.includes(
+      :memberships,
+      decorations: [ { image_attachment: :blob }, { decoration: { image_attachment: :blob } } ],
+      outfits: [
+        :outfit_recommendation_option,
+        { ai_workflows: { stages: { artifacts: { file_attachment: :blob } } } },
+        { outfit_items: { clothing_item: [
+          { photo_attachment: :blob },
+          { cleaned_photo_attachment: :blob },
+          { image_versions: { image_attachment: :blob } }
+        ] } },
+        { outfit_decorations: { decoration: { image_attachment: :blob } } }
+      ]
+    ).find(params[:id])
   end
 
   def outfit_folder_params

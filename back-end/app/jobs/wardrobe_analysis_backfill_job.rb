@@ -15,30 +15,17 @@ class WardrobeAnalysisBackfillJob < ApplicationJob
 
     embed_stage = workflow.stage("embed")
     embed_stage.processing!
-    embed_failure_ids = []
+    failure_ids = []
     items.each do |item|
       break if workflow.reload.cancelled?
 
-      embed_failure_ids << item.id unless embed_item(item)
+      failure_ids << item.id unless embed_item(item)
     end
     return if workflow.reload.cancelled?
-    embed_stage.update!(diagnostics: { "ready_count" => current_embedding_count(items), "failed_count" => embed_failure_ids.length })
+    succeeded = current_embedding_count(items)
+    embed_stage.update!(diagnostics: { "ready_count" => succeeded, "failed_count" => failure_ids.length })
     embed_stage.auto_approve!
-
-    enrich_stage = workflow.stage("enrich")
-    enrich_stage.processing!
-    enrichment_failure_ids = []
-    items.each do |item|
-      break if workflow.reload.cancelled?
-
-      enrichment_failure_ids << item.id unless enrich_item(item)
-    end
-    return if workflow.reload.cancelled?
-
-    succeeded = current_enrichment_count(items)
-    enrich_stage.update!(diagnostics: { "ready_count" => succeeded, "failed_count" => enrichment_failure_ids.length })
-    enrich_stage.auto_approve!
-    workflow.update!(completed_count: succeeded, failed_count: (embed_failure_ids | enrichment_failure_ids).length)
+    workflow.update!(completed_count: succeeded, failed_count: failure_ids.length)
     workflow.mark_succeeded!
   rescue StandardError => error
     fail_ai_workflow!(workflow, error, context: "Wardrobe analysis backfill")
@@ -57,24 +44,6 @@ class WardrobeAnalysisBackfillJob < ApplicationJob
     false
   end
 
-  def enrich_item(item)
-    analysis = item.reload.wardrobe_item_analysis
-    unless embedding_current?(item, analysis)
-      analysis&.update!(
-        enrichment_status: :failed,
-        enrichment_error_message: "Embedding preparation failed. Retry this item to continue visual enrichment."
-      )
-      return false
-    end
-    return true if enrichment_current?(item, analysis)
-
-    WardrobeItemEnricher.call(item)
-    true
-  rescue StandardError => error
-    Rails.logger.error("Wardrobe enrichment item #{item.id} failed: #{error.class}: #{error.message}")
-    false
-  end
-
   def embedding_current?(item, analysis)
     return false unless analysis
 
@@ -87,19 +56,7 @@ class WardrobeAnalysisBackfillJob < ApplicationJob
     )
   end
 
-  def enrichment_current?(item, analysis)
-    analysis.enrichment_ready_for?(
-      fingerprint: WardrobeItemEnricher.fingerprint(item),
-      model: ENV.fetch("OPENROUTER_ENRICHMENT_MODEL", OpenrouterWardrobeEnricher::DEFAULT_MODEL),
-      enrichment_version: WardrobeItemEnricher::ENRICHMENT_VERSION
-    )
-  end
-
   def current_embedding_count(items)
     items.count { |item| embedding_current?(item, item.reload.wardrobe_item_analysis) }
-  end
-
-  def current_enrichment_count(items)
-    items.count { |item| item.reload.wardrobe_item_analysis && enrichment_current?(item, item.wardrobe_item_analysis) }
   end
 end

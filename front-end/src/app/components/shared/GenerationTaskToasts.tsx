@@ -9,6 +9,7 @@ import {
   isGenerationTaskSuccessful,
 } from "../../lib/generationTasks";
 import { PrimitiveButton } from "../primitives/PrimitiveButton";
+import { PrimitiveConfirmationDialog } from "../primitives/PrimitiveConfirmationDialog";
 import { PrimitiveText } from "../primitives/PrimitiveText";
 
 interface GenerationTaskToastsProps {
@@ -138,16 +139,23 @@ export function GenerationTaskToasts({
                 </div>
 
                 {running ? (
-                  <PrimitiveButton
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={task.isCancelling}
-                    onClick={() => onCancel(task.workflow.id)}
-                    className="-mr-2 -mt-2"
+                  <PrimitiveConfirmationDialog
+                    title="Cancel generation?"
+                    description={`This will stop generating ${label}. Any result that finishes after cancellation will be discarded.`}
+                    cancelLabel="Keep generating"
+                    confirmLabel="Cancel generation"
+                    onConfirm={() => onCancel(task.workflow.id)}
                   >
-                    {task.isCancelling ? "Cancelling…" : "Cancel"}
-                  </PrimitiveButton>
+                    <PrimitiveButton
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={task.isCancelling}
+                      className="-mr-2 -mt-2"
+                    >
+                      {task.isCancelling ? "Cancelling…" : "Cancel"}
+                    </PrimitiveButton>
+                  </PrimitiveConfirmationDialog>
                 ) : (
                   <div className="-mr-2 -mt-2 flex items-center gap-1">
                     {failed ? (

@@ -1,6 +1,6 @@
 class OutfitRecommendationsController < ApplicationController
   before_action :require_login
-  before_action :set_run, only: %i[show feedback retry_judge]
+  before_action :set_run, only: %i[show discard]
 
   def create
     unless OutfitRecommenderV2.enabled?
@@ -21,10 +21,9 @@ class OutfitRecommendationsController < ApplicationController
 
     run = current_user.outfit_recommendation_runs.create!(
       prompt: recommendation_params[:prompt],
-      parent_run: parent_run,
       constraints: {
         "locked_item_ids" => owned_item_ids(recommendation_params[:locked_item_ids]),
-        "excluded_item_ids" => owned_item_ids(recommendation_params[:excluded_item_ids])
+        "draft_metadata" => normalized_draft_metadata
       },
       models: configured_models
     )
@@ -39,39 +38,18 @@ class OutfitRecommendationsController < ApplicationController
     render json: payloads.outfit_recommendation_run(@run)
   end
 
-  def feedback
-    event_type = feedback_params[:event_type].to_s
-    option = feedback_params[:option_id].present? ? @run.options.find(feedback_params[:option_id]) : nil
-    item = feedback_params[:clothing_item_id].present? ? current_user.clothing_items.find(feedback_params[:clothing_item_id]) : nil
-    if %w[best keep].include?(event_type) && option.nil? && item.nil?
-      render json: { error: "Choose a look or item for this feedback." }, status: :unprocessable_content
-      return
-    end
-
+  def discard
+    option = @run.options.passing.find(discard_params[:option_id])
     event = OutfitRecommendationFeedbackRecorder.call(
       user: current_user,
       run: @run,
-      event_type: event_type,
       option: option,
-      clothing_item: item,
-      metadata: feedback_params[:metadata]&.to_h || {}
+      event_type: "none",
+      metadata: { "source" => "outfit_cart_clear" }
     )
     render json: { id: event.id, event_type: event.event_type }, status: :created
   rescue ActiveRecord::RecordInvalid => error
     render_validation_errors(error.record)
-  end
-
-  def retry_judge
-    if @run.candidate_item_sets.blank?
-      render json: { error: "This run does not have a saved shortlist to judge." }, status: :unprocessable_content
-      return
-    end
-
-    @run.update!(status: :pending, error_message: nil, completed_at: nil)
-    @run.options.update_all(status: "candidate", judge_score: nil, judge_scores: {}, hard_violations: [])
-    workflow = create_workflow(@run, metadata: { "retry_stage" => "judge" })
-    OutfitRecommendationRunJob.perform_later(workflow.id, start_at: "judge")
-    render json: payloads.outfit_recommendation_run(@run.reload), status: :accepted
   end
 
   private
@@ -86,19 +64,13 @@ class OutfitRecommendationsController < ApplicationController
       kind: "outfit_recommendation",
       status: :pending,
       provider: "openrouter",
-      model: ENV.fetch("OPENROUTER_OUTFIT_JUDGE_MODEL", OpenrouterOutfitVisualJudge::DEFAULT_MODEL),
-      prompt_version: "outfit-recommender-v2",
-      requested_count: OutfitRecommenderV2.shortlist_size,
+      model: ENV.fetch("OPENROUTER_EMBEDDING_MODEL", OpenrouterWardrobeEmbedder::DEFAULT_MODEL),
+      prompt_version: "outfit-cart-visual-selection-v1",
+      requested_count: 1,
       metadata: metadata.merge("run_id" => run.id)
     )
     workflow.initialize_stages!
     workflow
-  end
-
-  def parent_run
-    return if recommendation_params[:parent_run_id].blank?
-
-    current_user.outfit_recommendation_runs.find(recommendation_params[:parent_run_id])
   end
 
   def owned_item_ids(values)
@@ -112,17 +84,30 @@ class OutfitRecommendationsController < ApplicationController
   def configured_models
     {
       "embedding" => ENV.fetch("OPENROUTER_EMBEDDING_MODEL", OpenrouterWardrobeEmbedder::DEFAULT_MODEL),
-      "enrichment" => ENV.fetch("OPENROUTER_ENRICHMENT_MODEL", OpenrouterWardrobeEnricher::DEFAULT_MODEL),
-      "planner" => ENV.fetch("OPENROUTER_OUTFIT_PLANNER_MODEL", OpenrouterOutfitBriefParser::DEFAULT_MODEL),
-      "judge" => ENV.fetch("OPENROUTER_OUTFIT_JUDGE_MODEL", OpenrouterOutfitVisualJudge::DEFAULT_MODEL)
+      "visual_selector" => ENV.fetch("OPENROUTER_OUTFIT_JUDGE_MODEL", OpenrouterOutfitVisualJudge::DEFAULT_MODEL)
     }
   end
 
   def recommendation_params
-    params.require(:outfit_recommendation).permit(:prompt, :parent_run_id, locked_item_ids: [], excluded_item_ids: [])
+    params.require(:outfit_recommendation).permit(
+      :prompt,
+      locked_item_ids: [],
+      draft_metadata: [ :name, :notes, { tags: [] } ]
+    )
   end
 
-  def feedback_params
-    params.require(:feedback).permit(:event_type, :option_id, :clothing_item_id, metadata: {})
+  def normalized_draft_metadata
+    metadata = recommendation_params[:draft_metadata]
+    return {} if metadata.blank?
+
+    {
+      "name" => metadata[:name].to_s.squish.truncate(InputLengthPolicy::MAX_OUTFIT_NAME),
+      "tags" => TagListNormalizer.call(metadata[:tags]).first(InputLengthPolicy::MAX_TAGS_PER_RECORD),
+      "notes" => metadata[:notes].to_s.squish.truncate(InputLengthPolicy::MAX_OUTFIT_NOTES)
+    }
+  end
+
+  def discard_params
+    params.require(:outfit_recommendation).permit(:option_id)
   end
 end

@@ -30,6 +30,8 @@ import { CollectionNotice } from "./shared/CollectionNotice";
 import { VisualStatePanel } from "./shared/VisualStatePanel";
 import { Input } from "./ui/input";
 import { mapWithConcurrency } from "../lib/asyncPool";
+import { useIncrementalCollection } from "../lib/useIncrementalCollection";
+import { InfiniteCollectionSentinel } from "./shared/InfiniteCollectionSentinel";
 
 interface UploadProgress {
   failed: number;
@@ -120,6 +122,14 @@ export function MyDecorationsPage({
   const filteredDecorations = normalizedSearchQuery
     ? decorations.filter((decoration) => decoration.name.toLocaleLowerCase().includes(normalizedSearchQuery))
     : decorations;
+  const {
+    hasMore,
+    sentinelRef,
+    visibleItems: visibleDecorations,
+  } = useIncrementalCollection(filteredDecorations, {
+    batchSize: 60,
+    resetKey: normalizedSearchQuery,
+  });
 
   return (
     <CollectionPageShell>
@@ -200,7 +210,7 @@ export function MyDecorationsPage({
         </VisualStatePanel>
       ) : (
         <CollectionGrid variant="dense">
-          {filteredDecorations.map((decoration) => (
+          {visibleDecorations.map((decoration) => (
             <CollectionCard key={decoration.id} className="group">
               <CollectionCardMedia className="flex aspect-square items-center justify-center bg-white p-4">
                 <CollectionImage src={decoration.image_url} alt={decoration.name} fit="contain" />
@@ -242,6 +252,13 @@ export function MyDecorationsPage({
           ))}
         </CollectionGrid>
       )}
+      {!isLoading && filteredDecorations.length > 0 ? (
+        <InfiniteCollectionSentinel
+          hasMore={hasMore}
+          label="Loading more decorations…"
+          sentinelRef={sentinelRef}
+        />
+      ) : null}
     </CollectionPageShell>
   );
 }

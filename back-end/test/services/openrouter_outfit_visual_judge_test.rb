@@ -2,9 +2,9 @@ require "test_helper"
 require "tempfile"
 
 class OpenrouterOutfitVisualJudgeTest < ActiveSupport::TestCase
-  test "returns fewer than three options when only one clears the quality floor" do
+  test "always returns the highest score even when every candidate has inferred-role warnings" do
     judge = OpenrouterOutfitVisualJudge.new(
-      brief: { "hard_constraints" => [ "no orange" ] },
+      brief: { "hard_constraints" => [] },
       candidates: [ { id: "a", items: [] }, { id: "b", items: [] } ]
     )
     build_evaluation = method(:evaluation)
@@ -15,8 +15,8 @@ class OpenrouterOutfitVisualJudgeTest < ActiveSupport::TestCase
         "usage" => { "cost" => 0.004 },
         "choices" => [ { "message" => { "content" => {
           evaluations: [
-            build_evaluation.call("a", score: 88, violations: []),
-            build_evaluation.call("b", score: 91, violations: [ "contains excluded orange" ])
+            build_evaluation.call("a", score: 8, violations: [ "Missing required prop" ]),
+            build_evaluation.call("b", score: 23, violations: [ "Missing required headwear", "Missing clothing coverage" ])
           ]
         }.to_json } } ]
       }
@@ -26,7 +26,8 @@ class OpenrouterOutfitVisualJudgeTest < ActiveSupport::TestCase
     with_fake_collages do
       result = judge.call
 
-      assert_equal [ "a" ], result.fetch(:passing).map { |value| value.fetch("candidate_id") }
+      assert_equal [ "b" ], result.fetch(:passing).map { |value| value.fetch("candidate_id") }
+      assert_equal 23, result[:passing].first["overall_score"]
       assert_equal 0.004, result.dig(:usage, "estimated_cost_usd")
     end
   end
@@ -99,12 +100,38 @@ class OpenrouterOutfitVisualJudgeTest < ActiveSupport::TestCase
     end
   end
 
+  test "supports a single bounded visual-selection attempt and smaller output budget" do
+    judge = OpenrouterOutfitVisualJudge.new(
+      brief: {},
+      candidates: [ { id: "a", items: [] } ],
+      max_response_attempts: 1,
+      max_output_tokens: 1_800
+    )
+    requests = []
+    fake_client = Object.new
+    fake_client.define_singleton_method(:post_json) do |**args|
+      requests << args
+      { "choices" => [ { "finish_reason" => "length", "message" => { "content" => '{"evaluations":[' } } ] }
+    end
+    judge.define_singleton_method(:client) { fake_client }
+
+    with_fake_collages do
+      assert_raises(RuntimeError) { judge.call }
+      assert_equal 1, requests.length
+      assert_equal 1_800, requests.first.fetch(:body).fetch(:max_tokens)
+      assert_includes requests.first.dig(:body, :messages, 1, :content, 0, :text), "actual garment images as authoritative"
+    end
+  end
+
   private
 
   def evaluation(candidate_id, score:, violations:)
     {
       candidate_id: candidate_id,
       prompt_accuracy: score,
+      role_suitability: score,
+      visual_compatibility: score,
+      personal_taste: score,
       color_harmony: score,
       silhouette_proportion: score,
       pattern_texture: score,

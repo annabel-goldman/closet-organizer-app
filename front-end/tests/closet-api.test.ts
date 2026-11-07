@@ -7,6 +7,7 @@ import {
   createOutfitDecoration,
   createOutfitFolder,
   createOutfitFolderDecoration,
+  discardOutfitRecommendation,
   fetchDecorations,
   deleteModeledPreview,
   fetchOutfitFolder,
@@ -30,7 +31,7 @@ import {
   updateOutfitDecoration,
 } from "../src/app/lib/closet.ts";
 
-test("outfit creator APIs prepare the wardrobe and preserve keep and exclude choices", async () => {
+test("outfit cart generator prepares embeddings and preserves selected anchor pieces", async () => {
   const originalFetch = globalThis.fetch;
   const requests: Array<{ path: string; init?: RequestInit }> = [];
   globalThis.fetch = async (input, init) => {
@@ -71,7 +72,11 @@ test("outfit creator APIs prepare the wardrobe and preserve keep and exclude cho
     const result = await generateOutfitRecommendations({
       prompt: "Brown fall layers",
       lockedItemIds: [4],
-      excludedItemIds: [8],
+      draftMetadata: {
+        name: "Thanksgiving",
+        tags: ["warm", "family dinner"],
+        notes: "Comfortable enough for hosting.",
+      },
     });
 
     assert.deepEqual(requests.map((request) => request.path), [
@@ -83,10 +88,36 @@ test("outfit creator APIs prepare the wardrobe and preserve keep and exclude cho
       outfit_recommendation: {
         prompt: "Brown fall layers",
         locked_item_ids: [4],
-        excluded_item_ids: [8],
+        draft_metadata: {
+          name: "Thanksgiving",
+          tags: ["warm", "family dinner"],
+          notes: "Comfortable enough for hosting.",
+        },
       },
     });
     assert.equal(result.recommendations[0].items[0].name, "Brown Jacket");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("clearing an AI-generated cart records the rejected recommendation", async () => {
+  const originalFetch = globalThis.fetch;
+  let request: { path: string; init?: RequestInit } | null = null;
+  globalThis.fetch = async (input, init) => {
+    request = { path: String(input), init };
+    return new Response(JSON.stringify({ id: 8, event_type: "none" }), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    await discardOutfitRecommendation({ runId: 12, optionId: 27 });
+    assert.equal(request?.path, "/api/outfit_recommendations/12/discard");
+    assert.deepEqual(JSON.parse(String(request?.init?.body)), {
+      outfit_recommendation: { option_id: 27 },
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }

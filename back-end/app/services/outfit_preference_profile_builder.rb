@@ -11,15 +11,17 @@ class OutfitPreferenceProfileBuilder
     "remove_after_save" => -2.5
   }.freeze
 
-  def self.call(user, refresh: false)
-    new(user).call(refresh: refresh)
+  def self.call(user, refresh: false, excluded_outfit_ids: [])
+    new(user, excluded_outfit_ids: excluded_outfit_ids).call(refresh: refresh)
   end
 
-  def initialize(user)
+  def initialize(user, excluded_outfit_ids: [])
     @user = user
+    @excluded_outfit_ids = excluded_outfit_ids
   end
 
   def call(refresh: false)
+    return build_profile if @excluded_outfit_ids.any?
     profile = user.outfit_preference_profile || user.build_outfit_preference_profile(
       version: OutfitPreferenceProfile::CURRENT_VERSION
     )
@@ -42,8 +44,9 @@ class OutfitPreferenceProfileBuilder
     item_scores = Hash.new(0.0)
     pair_scores = Hash.new(0.0)
     attribute_scores = Hash.new(0.0)
+    event_count = 0
 
-    user.outfits.includes(:clothing_items).find_each do |outfit|
+    user.outfits.where.not(id: @excluded_outfit_ids).includes(:clothing_items).find_each do |outfit|
       weight = 1.5 * decay(outfit.updated_at)
       apply_combination(outfit.clothing_items.to_a, weight, item_scores, pair_scores, attribute_scores)
     end
@@ -51,12 +54,14 @@ class OutfitPreferenceProfileBuilder
     user.outfit_recommendation_feedback_events
       .includes(:clothing_item, outfit_recommendation_option: :outfit_recommendation_run)
       .find_each do |event|
+        next if held_out_feedback?(event)
+        event_count += 1
         weight = EVENT_WEIGHTS.fetch(event.event_type) * decay(event.created_at)
         items = feedback_items(event)
         if items.any?
           apply_combination(items, weight, item_scores, pair_scores, attribute_scores)
         elsif event.event_type == "none" && event.outfit_recommendation_run
-          event.outfit_recommendation_run.options.each do |option|
+          event.outfit_recommendation_run.options.passing.each do |option|
             apply_combination(option.clothing_items.to_a, weight, item_scores, pair_scores, attribute_scores)
           end
         end
@@ -66,8 +71,8 @@ class OutfitPreferenceProfileBuilder
       "item_scores" => rounded_hash(item_scores),
       "pair_scores" => rounded_hash(pair_scores),
       "attribute_scores" => rounded_hash(attribute_scores),
-      "source_outfit_count" => user.outfits.count,
-      "feedback_event_count" => user.outfit_recommendation_feedback_events.count
+      "source_outfit_count" => user.outfits.where.not(id: @excluded_outfit_ids).count,
+      "feedback_event_count" => event_count
     }
   end
 
@@ -76,6 +81,17 @@ class OutfitPreferenceProfileBuilder
     return event.outfit_recommendation_option.clothing_items.to_a if event.outfit_recommendation_option
 
     []
+  end
+
+  def held_out_feedback?(event)
+    return false if @excluded_outfit_ids.empty?
+    held_ids = user.outfits.where(id: @excluded_outfit_ids).joins(:clothing_items).pluck("clothing_items.id").uniq
+    option = event.outfit_recommendation_option
+    return true if option && @excluded_outfit_ids.include?(option.outfit_id)
+    return true if event.clothing_item_id && held_ids.include?(event.clothing_item_id)
+
+    run_items = event.outfit_recommendation_run&.candidate_item_sets.to_a.flat_map { |candidate| candidate["item_ids"] || [] }
+    (run_items & held_ids).any?
   end
 
   def apply_combination(items, weight, item_scores, pair_scores, attribute_scores)

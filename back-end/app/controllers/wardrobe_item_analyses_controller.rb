@@ -19,8 +19,8 @@ class WardrobeItemAnalysesController < ApplicationController
       kind: "wardrobe_index",
       status: :pending,
       provider: "openrouter",
-      model: ENV.fetch("OPENROUTER_ENRICHMENT_MODEL", OpenrouterWardrobeEnricher::DEFAULT_MODEL),
-      prompt_version: WardrobeItemEnricher::ENRICHMENT_VERSION,
+      model: ENV.fetch("OPENROUTER_EMBEDDING_MODEL", OpenrouterWardrobeEmbedder::DEFAULT_MODEL),
+      prompt_version: WardrobeItemAnalyzer::ANALYSIS_VERSION,
       requested_count: [ current_user.clothing_items.count, 1 ].max,
       metadata: { "purpose" => "outfit_recommendations" }
     )

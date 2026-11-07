@@ -42,6 +42,6 @@ class AiWorkflowTest < ActiveSupport::TestCase
 
     workflow.initialize_stages!
 
-    assert_equal %w[plan retrieve judge finalize], workflow.stages.order(:id).pluck(:key)
+    assert_equal %w[retrieve finalize], workflow.stages.order(:id).pluck(:key)
   end
 end

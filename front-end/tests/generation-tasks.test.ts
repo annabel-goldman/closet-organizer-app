@@ -28,9 +28,9 @@ test("generation task copy reflects each durable workflow kind", () => {
   assert.equal(generationTaskMessage(task("item_clean", "processing")), "Cleaning the image for");
   assert.equal(generationTaskMessage(task("modeled_outfit", "succeeded")), "Generated a modeled preview for");
   assert.equal(generationTaskMessage(task("outfit_upload", "review")), "Detected items in");
-  const judging = task("outfit_recommendation", "processing");
-  judging.workflow.stages = [{ key: "judge", status: "processing" }];
-  assert.equal(generationTaskMessage(judging), "Checking compatibility for");
+  const retrieving = task("outfit_recommendation", "processing");
+  retrieving.workflow.stages = [{ key: "retrieve", status: "processing" }];
+  assert.equal(generationTaskMessage(retrieving), "Finding pieces for");
 });
 
 test("generation tasks remain cancellable only while pending or processing", () => {

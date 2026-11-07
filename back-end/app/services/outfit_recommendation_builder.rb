@@ -1,57 +1,76 @@
 require "digest"
 
 class OutfitRecommendationBuilder
-  DEFAULT_SHORTLIST_COUNT = 12
+  DEFAULT_SHORTLIST_COUNT = 6
   CANDIDATES_PER_ROLE = 16
   BEAM_WIDTH = 120
 
-  def self.call(user:, prompt:, locked_item_ids: [], excluded_item_ids: [], shortlist_count: 3, brief: nil)
+  def self.call(user:, prompt:, locked_item_ids: [], excluded_item_ids: [], shortlist_count: 6, brief: nil, method: "contextual", pools: nil, preference_profile: nil)
     new(
       user: user,
       prompt: prompt,
       locked_item_ids: locked_item_ids,
       excluded_item_ids: excluded_item_ids,
       shortlist_count: shortlist_count,
-      brief: brief
+      brief: brief, method: method, pools: pools, preference_profile: preference_profile
     ).call
   end
 
-  def initialize(user:, prompt:, locked_item_ids:, excluded_item_ids:, shortlist_count:, brief: nil)
+  def initialize(user:, prompt:, locked_item_ids:, excluded_item_ids:, shortlist_count:, brief: nil, method: "contextual", pools: nil, preference_profile: nil)
     @user = user
     @prompt = prompt.to_s.squish
     @locked_item_ids = normalize_ids(locked_item_ids)
-    @excluded_item_ids = normalize_ids(excluded_item_ids) - @locked_item_ids
+    @excluded_item_ids = normalize_ids(excluded_item_ids)
+    raise "A piece cannot be both kept and excluded." if (@locked_item_ids & @excluded_item_ids).any?
     @shortlist_count = shortlist_count.to_i.clamp(1, DEFAULT_SHORTLIST_COUNT)
     @supplied_brief = brief
+    @method = method
+    @supplied_pools = pools
+    @profile = preference_profile
+    @role_usage = []
   end
 
   def call
     items = available_items
     locked_items = resolve_locked_items(items)
-    brief = supplied_brief || parse_brief(locked_items)
+    brief = (supplied_brief || parse_brief(locked_items)).deep_dup
     query_result = OpenrouterWardrobeEmbedder.embed_query(search_query(brief))
-    profile = OutfitPreferenceProfileBuilder.call(user)
+    profile = @profile || OutfitPreferenceProfileBuilder.call(user)
     scorer = OutfitRecommendationScorer.new(
       brief: brief,
       query_embedding: query_result.fetch(:embedding),
       preference_profile: profile
     )
     candidate_items = items.reject { |item| locked_item_ids.include?(item.id) || excluded_item_ids.include?(item.id) }
+    adapt_roles!(brief, (candidate_items + locked_items).reject { |item| scorer.hard_violation?([ item ]) })
+    @role_pools = @supplied_pools || build_role_pools(brief, candidate_items, profile)
     beams = assemble(brief, locked_items, candidate_items, scorer)
+    if @method == "visual"
+      visual_beams = OpenrouterOutfitSelector.call(brief: brief, pools: @role_pools, locked_items: locked_items, count: shortlist_count)
+      beams = visual_beams if visual_beams.any?
+    end
+    if beams.all?(&:empty?)
+      beams = candidate_items.reject { |item| scorer.hard_violation?([ item ]) }.sort_by { |item| -scorer.item_score(item) }.first(shortlist_count).map { |item| locked_items + [ item ] }
+    end
+    beams.select! { |outfit| OutfitStructure.eligible?(outfit, brief: brief, user_id: user.id, locked_ids: locked_item_ids, excluded_ids: excluded_item_ids) }
     selected = diversify(beams, scorer, locked_items.map(&:id))
-    raise limiting_message(brief, candidate_items) if selected.empty?
+    # Compare a prop-free base as well as accessorized variants. Optional details
+    # should never crowd all simpler alternatives out of the visual shortlist.
+    base = Array(@base_beams).reject(&:empty?).max_by { |outfit| scorer.combination_score(outfit) }
+    selected = ([ base ] + selected).uniq { |outfit| outfit.map(&:id).sort }.first(shortlist_count) if base && @method != "visual" && shortlist_count > 1
+    raise "No available analyzed pieces remain after your explicit exclusions." if selected.empty?
 
     {
       brief: brief.except("usage", "model"),
       provider: "openrouter",
+      pools: @role_pools,
       models: {
         planner: brief["model"] || configured_planner_model,
         embedding: query_result.fetch(:model)
       },
       usage: {
-        planner: brief["usage"] || {},
-        query_embedding: query_result.fetch(:usage, {})
-      },
+        query_embedding: query_result.fetch(:usage, {}), role_embeddings: @role_usage
+      }.merge(brief["usage"] ? { planner: brief["usage"] } : {}),
       recommendations: selected.each_with_index.map do |outfit_items, index|
         {
           id: recommendation_id(outfit_items),
@@ -119,12 +138,13 @@ class OutfitRecommendationBuilder
 
     required_roles.each do |role|
       candidates = ranked_for_role(candidate_items, role, scorer)
-      return [] if candidates.empty?
+      next if candidates.empty?
 
-      beams = expand(beams, candidates, scorer)
-      return [] if beams.empty?
+      expanded = expand(beams, candidates, scorer)
+      beams = expanded if expanded.any?
     end
 
+    @base_beams = beams
     optional_roles.each do |role|
       candidates = ranked_for_role(candidate_items, role, scorer).first(8)
       next if candidates.empty?
@@ -138,31 +158,61 @@ class OutfitRecommendationBuilder
   end
 
   def remaining_roles(brief, locked_items)
-    covered = locked_items.map(&:category).tally
+    covered = locked_items.dup
     required = []
     optional = []
-    Array(brief["garment_roles"]).each do |role|
-      category = role["category"]
-      if covered[category].to_i.positive?
-        covered[category] -= 1
-      elsif role["required"] == false
+    OutfitStructure.roles(brief).sort_by { |role| locked_items.count { |item| OutfitStructure.matches?(item, role) } }.each do |role|
+      match = covered.find { |item| OutfitStructure.matches?(item, role) }
+      if match
+        covered.delete(match)
+      elsif role["required"] == false || %w[accessory outerwear].include?(role["category"])
         optional << role
       else
         required << role
       end
     end
 
-    if required.empty? && optional.empty?
-      Array(brief["required_categories"]).each { |category| required << { "category" => category, "layer" => 1 } }
-      Array(brief["optional_categories"]).each { |category| optional << { "category" => category, "layer" => 2 } }
-    end
     [ required, optional ]
   end
 
   def ranked_for_role(items, role, scorer)
-    items.select { |item| item.category == role["category"] && !scorer.hard_violation?([ item ]) }
-      .sort_by { |item| -scorer.item_score(item) }
-      .first(CANDIDATES_PER_ROLE)
+    @role_pools.fetch(role.fetch("role_id"), []).select { |item| items.include?(item) && !scorer.hard_violation?([ item ]) }
+  end
+
+  def build_role_pools(brief, items, profile)
+    OutfitStructure.roles(brief).to_h do |role|
+      query = [ prompt, role["name"], role["description"], brief["preferred_colors"], brief["material_terms"] ].join(" | ")
+      result = OpenrouterWardrobeEmbedder.embed_query(query)
+      @role_usage << result.fetch(:usage, {})
+      scorer = OutfitRecommendationScorer.new(brief: brief, query_embedding: result.fetch(:embedding), preference_profile: profile)
+      pool = items.select { |item| OutfitStructure.matches?(item, role) && !scorer.hard_violation?([ item ]) }
+        .sort_by { |item| -scorer.item_score(item) }.first(CANDIDATES_PER_ROLE)
+      [ role.fetch("role_id"), pool ]
+    end
+  end
+
+  def adapt_roles!(brief, items)
+    roles = OutfitStructure.roles(brief)
+    compromises = []
+    roles.reject! do |role|
+      missing = items.none? { |item| OutfitStructure.matches?(item, role) }
+      if missing
+        compromises << "No available #{role['name']} matches that role."
+        brief["anchor"] = {} if role["category"] == brief.dig("anchor", "category")
+      end
+      missing
+    end
+    categories = roles.pluck("category")
+    if !(categories.include?("dress") || (%w[top bottom] - categories).empty? || categories.include?("swimwear")) && items.any? { |item| item.category == "dress" }
+      roles.reject! { |role| %w[top bottom].include?(role["category"]) }
+      roles << OutfitStructure.role("dress")
+      compromises << "Used a dress to provide complete clothing coverage."
+    end
+    brief["garment_roles"] = roles
+    brief["garment_roles"] = OutfitStructure.roles(brief)
+    brief["required_categories"] = brief["garment_roles"].select { |role| role["required"] != false }.pluck("category")
+    brief["structure"] = brief["required_categories"].include?("dress") ? "dress" : (brief["required_categories"].include?("swimwear") ? "swimwear" : "separates")
+    brief["compromises"] = compromises
   end
 
   def expand(beams, candidates, scorer)
@@ -209,18 +259,6 @@ class OutfitRecommendationBuilder
       "weather: #{brief['weather']}",
       "occasion: #{brief['occasion']}"
     ].compact.join(" | ")
-  end
-
-  def limiting_message(brief, items)
-    required = Array(brief["required_categories"])
-    missing = required.reject { |category| items.any? { |item| item.category == category } || locked_category?(category) }
-    return "Your closet does not have an analyzed #{missing.to_sentence} option required by this look." if missing.any?
-
-    "No complete outfit met the requested color, weather, occasion, and compatibility constraints. Try relaxing one constraint."
-  end
-
-  def locked_category?(category)
-    user.clothing_items.where(id: locked_item_ids, category: category).exists?
   end
 
   def recommendation_id(items)

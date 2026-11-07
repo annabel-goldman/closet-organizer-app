@@ -5,7 +5,12 @@ class ClothingItemsController < ApplicationController
   ]
 
   def index
-    @clothing_items = current_user.clothing_items.includes(:user).order(:name)
+    @clothing_items = current_user.clothing_items.includes(
+      :user,
+      { photo_attachment: :blob },
+      { cleaned_photo_attachment: :blob },
+      { image_versions: { image_attachment: :blob } }
+    ).order(:name)
     render json: @clothing_items.map { |clothing_item| payloads.clothing_item(clothing_item) }
   end
 

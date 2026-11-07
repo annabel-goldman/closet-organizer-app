@@ -31,7 +31,7 @@ class OutfitRecommendationBuilderTest < ActiveSupport::TestCase
       { embedding: [ 1.0, 0.0 ], provider: "openrouter", model: OpenrouterWardrobeEmbedder::DEFAULT_MODEL, usage: {} }
     end
 
-    result = OutfitRecommendationBuilder.call(user: users(:one), prompt: "fall weekend")
+    result = OutfitRecommendationBuilder.call(user: users(:one), prompt: "fall weekend", shortlist_count: 3)
 
     assert_equal 3, result.fetch(:recommendations).length
     result.fetch(:recommendations).each do |recommendation|
@@ -44,7 +44,67 @@ class OutfitRecommendationBuilderTest < ActiveSupport::TestCase
     OpenrouterWardrobeEmbedder.define_singleton_method(:embed_query) { |*args| original_embedder.call(*args) } if original_embedder
   end
 
+  test "missing planned dress falls back to complete separates with an honest compromise" do
+    original = OpenrouterWardrobeEmbedder.method(:embed_query)
+    queries = []
+    OpenrouterWardrobeEmbedder.define_singleton_method(:embed_query) do |query|
+      queries << query
+      { embedding: [ 1.0, 0.0 ], model: OpenrouterWardrobeEmbedder::DEFAULT_MODEL, usage: {} }
+    end
+    result = OutfitRecommendationBuilder.call(user: users(:one), prompt: "a dress for dinner", brief: {
+      "anchor" => { "category" => "dress", "description" => "evening dress" }, "formality" => 3
+    }, excluded_item_ids: [ @items.first.id ], shortlist_count: 2)
+    assert_equal 2, result[:recommendations].length
+    assert_equal "separates", result[:brief]["structure"]
+    assert_match(/No available dress/, result[:brief]["compromises"].join)
+    result[:recommendations].each do |outfit|
+      assert_equal %w[bottom shoes top], outfit[:items].map(&:category).sort
+      refute_includes outfit[:item_ids], @items.first.id
+    end
+    assert queries.any? { |query| query.include?("top") }
+    assert queries.any? { |query| query.include?("bottom") }
+    assert queries.any? { |query| query.include?("shoes") }
+  ensure
+    OpenrouterWardrobeEmbedder.define_singleton_method(:embed_query) { |*args| original.call(*args) } if original
+  end
+
+  test "contradictory kept and excluded pieces are not silently relaxed" do
+    assert_raises(RuntimeError) do
+      OutfitRecommendationBuilder.call(user: users(:one), prompt: "anything", locked_item_ids: [ @items.first.id ], excluded_item_ids: [ @items.first.id ])
+    end
+  end
+
+  test "missing bottom and footwear no longer prevent returning an available top" do
+    original = OpenrouterWardrobeEmbedder.method(:embed_query)
+    OpenrouterWardrobeEmbedder.define_singleton_method(:embed_query) do |_query|
+      { embedding: [ 1.0, 0.0 ], model: OpenrouterWardrobeEmbedder::DEFAULT_MODEL, usage: {} }
+    end
+    excluded = @items.reject { |item| item.category == "top" }.map(&:id)
+    result = OutfitRecommendationBuilder.call(user: users(:one), prompt: "casual outfit", excluded_item_ids: excluded, brief: {}, shortlist_count: 2)
+    assert result[:recommendations].any?
+    result[:recommendations].each do |outfit|
+      assert_equal [ "top" ], outfit[:items].map(&:category)
+      assert_empty outfit[:item_ids] & excluded
+    end
+  ensure
+    OpenrouterWardrobeEmbedder.define_singleton_method(:embed_query) { |*args| original.call(*args) } if original
+  end
+
+  test "inferred accessories do not crowd the simple base look out of the shortlist" do
+    create_analyzed_item("accessory", 0)
+    original = OpenrouterWardrobeEmbedder.method(:embed_query)
+    OpenrouterWardrobeEmbedder.define_singleton_method(:embed_query) do |_query|
+      { embedding: [ 1.0, 0.0 ], model: OpenrouterWardrobeEmbedder::DEFAULT_MODEL, usage: {} }
+    end
+    brief = { "garment_roles" => %w[top bottom shoes accessory].map { |category| OutfitStructure.role(category) } }
+    result = OutfitRecommendationBuilder.call(user: users(:one), prompt: "party look", brief: brief, shortlist_count: 3)
+    assert result[:recommendations].any? { |outfit| outfit[:items].none? { |item| item.category == "accessory" } }
+  ensure
+    OpenrouterWardrobeEmbedder.define_singleton_method(:embed_query) { |*args| original.call(*args) } if original
+  end
+
   private
+
 
   def create_analyzed_item(category, index)
     item = users(:one).clothing_items.create!(

@@ -183,36 +183,15 @@ export interface WardrobeAnalysisStatus {
   failed: number;
   stale: number;
   missing_image: number;
-  enriched: number;
-  enrichment_pending: number;
-  enrichment_processing: number;
-  enrichment_failed: number;
   complete: boolean;
   workflow?: AiWorkflow | null;
 }
 
 export interface OutfitSearchBrief {
   summary: string;
-  structure: "dress" | "separates" | "swimwear";
-  required_categories: string[];
-  optional_categories: string[];
   preferred_colors: string[];
-  excluded_colors: string[];
   style_terms: string[];
-  material_terms: string[];
   seasons: string[];
-  formality: number;
-  anchor?: { category: string; description: string };
-  garment_roles?: Array<{ name: string; category: string; required: boolean; layer: number; description: string }>;
-  layering_strategy?: string;
-  silhouette_strategy?: string;
-  palette_strategy?: string;
-  pattern_strategy?: string;
-  texture_strategy?: string;
-  weather?: string;
-  occasion?: string;
-  hard_constraints?: string[];
-  soft_constraints?: string[];
 }
 
 export interface OutfitRecommendation {
@@ -231,7 +210,14 @@ export interface OutfitRecommendationResponse {
   status: "pending" | "processing" | "succeeded" | "failed";
   prompt: string;
   brief: OutfitSearchBrief;
-  constraints: { locked_item_ids?: number[]; excluded_item_ids?: number[] };
+  constraints: {
+    locked_item_ids?: number[];
+    draft_metadata?: {
+      name?: string;
+      tags?: string[];
+      notes?: string;
+    };
+  };
   result_message?: string | null;
   error_message?: string | null;
   workflow?: AiWorkflow | null;
@@ -351,6 +337,8 @@ export interface OutfitDraft {
   notes: string;
   tagInput: string;
   itemIds: number[];
+  recommendationRunId?: number;
+  recommendationOptionId?: number;
 }
 
 export interface OutfitMetadataSuggestion {
@@ -375,6 +363,8 @@ export function emptyOutfitDraft(): OutfitDraft {
     notes: "",
     tagInput: "",
     itemIds: [],
+    recommendationRunId: undefined,
+    recommendationOptionId: undefined,
   };
 }
 
@@ -388,12 +378,20 @@ function normalizeOutfitDraft(raw: Partial<OutfitDraft> | null | undefined): Out
         .map((value) => Number(value))
         .filter((value, index, array) => Number.isInteger(value) && value > 0 && array.indexOf(value) === index)
     : [];
+  const recommendationRunId = Number(raw?.recommendationRunId);
+  const recommendationOptionId = Number(raw?.recommendationOptionId);
 
   return {
     name: typeof raw?.name === "string" ? raw.name : "",
     notes: typeof raw?.notes === "string" ? raw.notes : "",
     tagInput: typeof raw?.tagInput === "string" ? raw.tagInput : "",
     itemIds,
+    recommendationRunId: Number.isInteger(recommendationRunId) && recommendationRunId > 0
+      ? recommendationRunId
+      : undefined,
+    recommendationOptionId: Number.isInteger(recommendationOptionId) && recommendationOptionId > 0
+      ? recommendationOptionId
+      : undefined,
   };
 }
 
@@ -429,7 +427,9 @@ export function saveOutfitDraft(userId: number, draft: OutfitDraft) {
     normalized.name.trim().length === 0 &&
     normalized.notes.trim().length === 0 &&
     normalized.tagInput.trim().length === 0 &&
-    normalized.itemIds.length === 0;
+    normalized.itemIds.length === 0 &&
+    !normalized.recommendationRunId &&
+    !normalized.recommendationOptionId;
 
   if (isEmpty) {
     window.localStorage.removeItem(outfitDraftStorageKey(userId));
@@ -723,8 +723,11 @@ export async function startWardrobeAnalysis() {
 export async function generateOutfitRecommendations(input: {
   prompt: string;
   lockedItemIds?: number[];
-  excludedItemIds?: number[];
-  parentRunId?: number;
+  draftMetadata?: {
+    name?: string;
+    tags?: string[];
+    notes?: string;
+  };
 }) {
   const response = await requestJson<OutfitRecommendationResponse>(`${API_BASE_URL}/outfit_recommendations`, {
     method: "POST",
@@ -733,8 +736,7 @@ export async function generateOutfitRecommendations(input: {
       outfit_recommendation: {
         prompt: input.prompt,
         locked_item_ids: input.lockedItemIds ?? [],
-        excluded_item_ids: input.excludedItemIds ?? [],
-        parent_run_id: input.parentRunId,
+        draft_metadata: input.draftMetadata ?? {},
       },
     }),
   });
@@ -759,29 +761,20 @@ export async function fetchOutfitRecommendation(id: number, signal?: AbortSignal
   };
 }
 
-export async function recordOutfitRecommendationFeedback(input: {
+export async function discardOutfitRecommendation(input: {
   runId: number;
-  eventType: "keep" | "exclude" | "swap" | "best" | "none";
-  optionId?: number;
-  clothingItemId?: number;
+  optionId: number;
 }) {
-  return requestJson<{ id: number; event_type: string }>(`${API_BASE_URL}/outfit_recommendations/${input.runId}/feedback`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      feedback: {
-        event_type: input.eventType,
-        option_id: input.optionId,
-        clothing_item_id: input.clothingItemId,
-      },
-    }),
-  });
-}
-
-export async function retryOutfitRecommendationJudge(runId: number) {
-  return requestJson<OutfitRecommendationResponse>(`${API_BASE_URL}/outfit_recommendations/${runId}/retry_judge`, {
-    method: "POST",
-  });
+  return requestJson<{ id: number; event_type: string }>(
+    `${API_BASE_URL}/outfit_recommendations/${input.runId}/discard`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        outfit_recommendation: { option_id: input.optionId },
+      }),
+    },
+  );
 }
 
 export async function fetchDecorations(signal?: AbortSignal) {

@@ -7,7 +7,6 @@ import {
   Pencil,
   Plus,
   SearchX,
-  Sparkles,
   Trash2,
   UserRound,
 } from "lucide-react";
@@ -85,14 +84,13 @@ import {
 } from "./shared/CollectionLayout";
 import { VisualStatePanel } from "./shared/VisualStatePanel";
 import { useBackNavigationGuard } from "../lib/useBackNavigationGuard";
-import { AiOutfitCreatorDialog } from "./AiOutfitCreatorDialog";
+import { useIncrementalCollection } from "../lib/useIncrementalCollection";
+import { InfiniteCollectionSentinel } from "./shared/InfiniteCollectionSentinel";
 
 interface MyOutfitsPageProps {
   isLoading: boolean;
   loadErrorMessage: string;
   onOutfitDeleted: (outfitId: number) => void;
-  onOutfitCreated: (outfit: Outfit) => void;
-  onGenerationTaskStarted: (workflow: AiWorkflow, label: string) => void;
   onOutfitModeledWorkflowUpdated: (outfitId: number, workflow: AiWorkflow) => void;
   onOutfitUpdated: (outfit: Outfit) => void;
   outfits: Outfit[];
@@ -135,8 +133,6 @@ export function MyOutfitsPage({
   isLoading,
   loadErrorMessage,
   onOutfitDeleted,
-  onOutfitCreated,
-  onGenerationTaskStarted,
   onOutfitModeledWorkflowUpdated,
   onOutfitUpdated,
   outfits,
@@ -166,12 +162,6 @@ export function MyOutfitsPage({
   const [outfitSearchQuery, setOutfitSearchQuery] = useState("");
   const [regenerationConfirmationOutfitId, setRegenerationConfirmationOutfitId] = useState<number | null>(null);
   const [showUnsavedNavigationWarning, setShowUnsavedNavigationWarning] = useState(false);
-  const [showAiOutfitCreator, setShowAiOutfitCreator] = useState(false);
-  const requestedRecommendationRunId = Number(new URLSearchParams(window.location.search).get("recommendation")) || undefined;
-
-  useEffect(() => {
-    if (requestedRecommendationRunId) setShowAiOutfitCreator(true);
-  }, [requestedRecommendationRunId]);
   const outfitDetailsRequestIdRef = useRef(0);
   const initialEditorSnapshotRef = useRef<string | null>(null);
   const showFlash = useCallback((kind: FlashState["kind"], message: string) => {
@@ -212,6 +202,14 @@ export function MyOutfitsPage({
     () => searchOutfits(outfits, outfitSearchQuery),
     [outfitSearchQuery, outfits],
   );
+  const {
+    hasMore: hasMoreOutfits,
+    sentinelRef: outfitsSentinelRef,
+    visibleItems: visibleOutfits,
+  } = useIncrementalCollection(filteredOutfits, {
+    batchSize: 24,
+    resetKey: outfitSearchQuery.trim().toLocaleLowerCase(),
+  });
   const outfitSearchSuggestions = useMemo(
     () => getOutfitSearchSuggestions(outfits, outfitSearchQuery),
     [outfitSearchQuery, outfits],
@@ -606,10 +604,6 @@ export function MyOutfitsPage({
           : `${hydratedFolders.length} ${hydratedFolders.length === 1 ? "magazine" : "magazines"} · Group saved outfits into a story and decorate each page.`}
         actions={pageView === "outfits" ? (
           <div className="flex flex-wrap gap-2">
-            <PrimitiveButton type="button" onClick={() => setShowAiOutfitCreator(true)}>
-              <Sparkles className="h-4 w-4" />
-              Create with AI
-            </PrimitiveButton>
             <PrimitiveButton
               type="button"
               variant={galleryView === "modeled" ? "default" : "outline"}
@@ -817,7 +811,7 @@ export function MyOutfitsPage({
           </VisualStatePanel>
         ) : (
           <CollectionGrid variant="wardrobe">
-            {filteredOutfits.map((outfit, index) => {
+            {visibleOutfits.map((outfit, index) => {
               const galleryModelPreview = resolveOutfitGalleryModelPreview(outfit.modeled_workflow);
 
               return (
@@ -891,6 +885,13 @@ export function MyOutfitsPage({
             })}
           </CollectionGrid>
         )}
+        {!isLoading && !loadErrorMessage && filteredOutfits.length > 0 ? (
+          <InfiniteCollectionSentinel
+            hasMore={hasMoreOutfits}
+            label="Loading more outfits…"
+            sentinelRef={outfitsSentinelRef}
+          />
+        ) : null}
         </section>
       )}
 
@@ -926,26 +927,6 @@ export function MyOutfitsPage({
           </PrimitiveText>
         </motion.div>
       ) : null}
-
-      <AiOutfitCreatorDialog
-        open={showAiOutfitCreator}
-        initialRecommendationRunId={requestedRecommendationRunId}
-        onOpenChange={(nextOpen) => {
-          setShowAiOutfitCreator(nextOpen);
-          if (!nextOpen && requestedRecommendationRunId) {
-            const nextUrl = new URL(window.location.href);
-            nextUrl.searchParams.delete("recommendation");
-            window.history.replaceState({}, "", `${nextUrl.pathname}${nextUrl.search}`);
-          }
-        }}
-        userId={user.id}
-        onGenerationTaskStarted={onGenerationTaskStarted}
-        onOutfitCreated={(outfit) => {
-          onOutfitCreated(outfit);
-          startEditing(outfit);
-          showFlash("success", "Outfit saved. You can refine it now.");
-        }}
-      />
 
       <Dialog open={Boolean(editingOutfitId)} onOpenChange={(open) => !open && requestEditorClose()}>
         <DialogContent

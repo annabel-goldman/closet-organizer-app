@@ -4,6 +4,6 @@ class OutfitRecommenderV2
   end
 
   def self.shortlist_size
-    Integer(ENV.fetch("OUTFIT_RECOMMENDATION_SHORTLIST_SIZE", 12)).clamp(3, 12)
+    1
   end
 end

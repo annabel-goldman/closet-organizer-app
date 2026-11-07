@@ -50,11 +50,12 @@ class ClothingItem < ApplicationRecord
   end
 
   def active_image_version
-    image_versions.find(&:selected?) || image_versions.in_display_order.to_a.last
+    versions = ordered_image_versions
+    versions.find(&:selected?) || versions.last
   end
 
   def original_image_version
-    image_versions.find { |version| version.variant_kind == "original" }
+    ordered_image_versions.find { |version| version.variant_kind == "original" }
   end
 
   def self.human_attribute_name(attribute, options = {})
@@ -64,6 +65,14 @@ class ClothingItem < ApplicationRecord
   end
 
   private
+
+  def ordered_image_versions
+    return image_versions.in_display_order.to_a unless association(:image_versions).loaded?
+
+    image_versions.sort_by do |version|
+      [ WardrobeImageVersion::KINDS.index(version.variant_kind) || WardrobeImageVersion::KINDS.length, version.id ]
+    end
+  end
 
   def photo_must_be_an_image
     return unless photo.attached?
