@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed production startup by installing Solid Queue's runtime tables through the normal database migration path, ensuring Heroku's embedded background worker can boot after a fresh deployment.
 - Updated Brakeman to 8.1.0 and upgraded Rails to 8.1.4.1 plus affected transitive gems to patched releases, clearing the current static-analysis and dependency-advisory security checks.
 - Reduced accepted-outfit repetition in the generator. Saving an AI look now teaches item and style preferences without double-counting the saved outfit or strongly reinforcing its exact item pairs; candidate selection favors combinations that change multiple core pieces when the closet supports it, with a stronger capped usage/overlap penalty and a fallback for closets with limited alternatives.
 - Fixed incremental collection grids getting stranded on their first batch when a browser missed the intersection-observer event. Closet, Outfits, Magazines, and Decorations now also append the next batch from a passive near-viewport scroll fallback.
