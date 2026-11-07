@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=1920, initial-scale=1" />
+    <title>Curated Closet demo assets</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        margin: 0;
+        overflow: hidden;
+        background: transparent;
+      }
+
+      body {
+        color: #171717;
+        font-family: "Avenir Next", Avenir, Helvetica, sans-serif;
+      }
+
+      .card {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #f6f3ed;
+      }
+
+      .card img {
+        width: 110px;
+        height: 165px;
+        margin-bottom: 50px;
+        object-fit: contain;
+      }
+
+      .card h1 {
+        margin: 0;
+        font-family: "New York", Georgia, serif;
+        font-size: 104px;
+        font-weight: 400;
+        letter-spacing: -3px;
+        line-height: 1;
+      }
+
+      .card .tagline {
+        margin: 40px 0 0;
+        color: #4b4b4b;
+        font-size: 38px;
+        font-weight: 400;
+      }
+
+      .card .eyebrow,
+      .card .credit {
+        margin: 42px 0 0;
+        color: #77736b;
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: 5px;
+        text-transform: uppercase;
+      }
+
+      .card .credit {
+        letter-spacing: 0.5px;
+        text-transform: none;
+      }
+
+      .lower-third {
+        position: absolute;
+        left: 60px;
+        bottom: 70px;
+        min-width: 940px;
+        padding: 24px 34px 27px;
+        border-radius: 16px;
+        background: rgba(23, 23, 23, 0.92);
+        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.2);
+        color: white;
+      }
+
+      .lower-third .label {
+        margin: 0 0 8px;
+        color: #d8d2c5;
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: 2.5px;
+      }
+
+      .lower-third .message {
+        margin: 0;
+        font-size: 36px;
+        font-weight: 500;
+        line-height: 1.15;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      const asset = new URLSearchParams(window.location.search).get("asset");
+      const lowers = {
+        "lower-closet": ["YOUR CLOSET", "Browse, search, filter, and sort every piece"],
+        "lower-outfit": ["OUTFIT BUILDER", "Select pieces and save reusable looks"],
+        "lower-ai-outfit": [
+          "AI OUTFIT GENERATION",
+          "Create a Date Night look from your own closet",
+        ],
+        "lower-import": ["SMART IMPORT", "Detect multiple items from one outfit photo"],
+        "lower-editing": [
+          "AI-ASSISTED EDITING",
+          "Autofill metadata and clean product imagery",
+        ],
+        "lower-filter": ["FIND IT FAST", "Refine hundreds of items with layered filters"],
+      };
+
+      if (asset === "intro" || asset === "outro") {
+        document.body.innerHTML = `
+          <main class="card">
+            <img src="../front-end/public/brand-mark.png" alt="" />
+            <h1>Curated Closet</h1>
+            <p class="tagline">${
+              asset === "intro" ? "Find your fit, faster." : "Your wardrobe, reimagined."
+            }</p>
+            ${
+              asset === "intro"
+                ? '<p class="eyebrow">Product demo</p>'
+                : '<p class="credit">Music: “Deep Urban” by Eugenio Mininni · Mixkit</p>'
+            }
+          </main>
+        `;
+      } else {
+        const [label, message] = lowers[asset];
+        document.body.innerHTML = `
+          <aside class="lower-third">
+            <p class="label">${label}</p>
+            <p class="message">${message}</p>
+          </aside>
+        `;
+      }
+    </script>
+  </body>
+</html>

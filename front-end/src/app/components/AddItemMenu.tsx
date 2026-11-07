@@ -41,7 +41,7 @@ export function AddItemMenu({
           <Camera className="w-4 h-4" />
           <div className="flex flex-col">
             <PrimitiveText as="span" variant="bodySm">
-              Detect Items from Image
+              Add Multiple Items
             </PrimitiveText>
             <PrimitiveText as="span" variant="caption" tone="muted">
               Choose a photo in the next step before reviewing detected items.

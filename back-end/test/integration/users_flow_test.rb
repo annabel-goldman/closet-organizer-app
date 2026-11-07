@@ -92,11 +92,81 @@ class UsersFlowTest < ActionDispatch::IntegrationTest
     assert @user.authenticate("password123")
   end
 
+  test "user can add, view, reorder, and remove private model references" do
+    post model_reference_images_url, params: {
+      model_reference_images: {
+        photos: [ item_photo_upload, item_photo_upload ]
+      }
+    }, headers: auth_headers(@user)
+
+    assert_response :created
+    assert_equal 2, response_json["model_reference_photo_count"]
+    assert response_json["model_reference_photo_attached"]
+    assert_not_nil response_json["model_reference_consent_at"]
+    references = response_json.fetch("model_reference_photos")
+    assert_equal [ 0, 1 ], references.map { |reference| reference.fetch("position") }
+
+    first_reference_id = references.first.fetch("id")
+    get photo_model_reference_image_url(first_reference_id), headers: auth_headers(@user)
+
+    assert_response :success
+    assert_equal "image/png", response.media_type
+    assert_includes response.headers["Cache-Control"], "private"
+    assert_includes response.headers["Cache-Control"], "max-age=300"
+
+    get photo_model_reference_image_url(first_reference_id), headers: auth_headers(@admin)
+    assert_response :not_found
+
+    ordered_ids = references.reverse.map { |reference| reference.fetch("id") }
+    patch reorder_model_reference_images_url, params: {
+      reference_image_ids: ordered_ids
+    }, headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal ordered_ids, response_json.fetch("model_reference_photos").map { |reference| reference.fetch("id") }
+
+    delete model_reference_image_url(first_reference_id), headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal 1, response_json["model_reference_photo_count"]
+    assert_not_nil response_json["model_reference_consent_at"]
+
+    delete me_model_reference_url, headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal 0, response_json["model_reference_photo_count"]
+    assert_nil response_json["model_reference_consent_at"]
+  end
+
+  test "user cannot save more than three model reference photos" do
+    post model_reference_images_url, params: {
+      model_reference_images: {
+        photos: [ item_photo_upload, item_photo_upload, item_photo_upload ]
+      }
+    }, headers: auth_headers(@user)
+
+    assert_response :created
+
+    post model_reference_images_url, params: {
+      model_reference_images: { photos: [ item_photo_upload ] }
+    }, headers: auth_headers(@user)
+
+    assert_response :unprocessable_content
+    assert_includes response_json["error"], "up to 3"
+    assert_equal 3, @user.model_reference_images.count
+  end
+
   test "can delete a user" do
     assert_difference("User.count", -1) do
       delete user_url(@user), headers: auth_headers(@user), as: :json
     end
 
     assert_response :no_content
+  end
+
+  private
+
+  def item_photo_upload
+    Rack::Test::UploadedFile.new(file_fixture("item-photo.png"), "image/png")
   end
 end

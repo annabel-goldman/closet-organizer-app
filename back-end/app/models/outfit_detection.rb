@@ -1,6 +1,11 @@
 class OutfitDetection < ApplicationRecord
   belongs_to :outfit_upload
   has_one_attached :cleaned_photo
+  has_many :image_versions,
+    as: :imageable,
+    class_name: "WardrobeImageVersion",
+    dependent: :destroy,
+    inverse_of: :imageable
 
   enum :crop_status, {
     pending: 0,
@@ -57,7 +62,11 @@ class OutfitDetection < ApplicationRecord
   end
 
   def source_photo_for_cleaning
-    cleaned_photo.attached? ? cleaned_photo : nil
+    image_versions.find { |version| version.variant_kind == "original" }&.image
+  end
+
+  def active_image_version
+    image_versions.find(&:selected?) || image_versions.in_display_order.to_a.last
   end
 
   private

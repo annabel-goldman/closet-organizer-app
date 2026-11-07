@@ -1,4 +1,5 @@
 class User < ApplicationRecord
+  has_many :outfit_experiments, dependent: :destroy
   ALLOWED_GOOGLE_EMAILS = %w[
     annabelgoldman2025@u.northwestern.edu
     annabel.m.goldman@gmail.com
@@ -11,8 +12,14 @@ class User < ApplicationRecord
 
   has_many :clothing_items, dependent: :destroy
   has_many :outfits, dependent: :destroy
-  has_many :outfit_generation_runs, dependent: :destroy
+  has_many :outfit_folders, dependent: :destroy
+  has_many :decorations, dependent: :destroy
   has_many :outfit_uploads, dependent: :destroy
+  has_many :ai_workflows, dependent: :destroy
+  has_many :outfit_recommendation_runs, dependent: :destroy
+  has_many :outfit_recommendation_feedback_events, dependent: :destroy
+  has_one :outfit_preference_profile, dependent: :destroy
+  has_many :model_reference_images, -> { ordered }, dependent: :destroy, inverse_of: :user
 
   validates :username, presence: true, uniqueness: true,
                        length: { maximum: InputLengthPolicy::MAX_USERNAME }
@@ -76,5 +83,6 @@ class User < ApplicationRecord
     scope = scope.where.not(id: except_id) if except_id.present?
     scope.exists?
   end
+
   private_class_method :find_for_google_auth, :find_by_normalized_email, :resolved_google_username, :username_taken?
 end

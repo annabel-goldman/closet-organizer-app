@@ -7,7 +7,8 @@ class OutfitUpload < ApplicationRecord
     pending: 0,
     processing: 1,
     succeeded: 2,
-    failed: 3
+    failed: 3,
+    cancelled: 4
   }
 
   validates :status, presence: true

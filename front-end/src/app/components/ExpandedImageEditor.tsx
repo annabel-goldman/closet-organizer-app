@@ -18,13 +18,14 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { useAiActionState } from "../lib/useAiActionState";
+import { fitImageWithinViewport } from "../lib/imageEditorGeometry";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import { cn } from "./ui/utils";
 
 type EditorTool = "crop" | "wand";
 type AspectPreset = "free" | "square" | "portrait" | "classic";
-export type ExpandedImageEditorImageKind = "base" | "cleaned" | "transparent";
+export type ExpandedImageEditorImageKind = "base" | "generated" | "transparent";
 
 interface WandDragState {
   seedX: number;
@@ -51,6 +52,11 @@ export interface ExpandedImageEditorImageActions {
   initialKind?: ExpandedImageEditorImageKind;
   onClean?: (file: File) => Promise<File>;
   onMakeTransparent?: (file: File) => Promise<File>;
+  versions?: Array<{
+    getFile: () => Promise<File | null>;
+    kind: ExpandedImageEditorImageKind;
+    label: string;
+  }>;
 }
 
 interface ExpandedImageEditorProps {
@@ -58,6 +64,7 @@ interface ExpandedImageEditorProps {
   imageActions?: ExpandedImageEditorImageActions;
   isApplying?: boolean;
   onApply: (file: File, context: ExpandedImageEditorApplyContext) => Promise<void> | void;
+  sourceKey: string;
   title: string;
 }
 
@@ -68,11 +75,14 @@ const ASPECT_OPTIONS: Array<{ label: string; value: AspectPreset }> = [
   { label: "3:4", value: "classic" },
 ];
 
+const EDITOR_MEDIA_INSET = 32;
+
 export function ExpandedImageEditor({
   getEditableFile,
   imageActions,
   isApplying = false,
   onApply,
+  sourceKey,
   title,
 }: ExpandedImageEditorProps) {
   const [isLoading, setIsLoading] = useState(true);
@@ -100,7 +110,12 @@ export function ExpandedImageEditor({
   const wandBaseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const wandOverlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const wandImageSourceRef = useRef<WandImageSource | null>(null);
+  const editableFileLoaderRef = useRef(getEditableFile);
   const imageUrl = useObjectUrl(currentFile);
+
+  useEffect(() => {
+    editableFileLoaderRef.current = getEditableFile;
+  }, [getEditableFile]);
 
   useEffect(() => {
     let isMounted = true;
@@ -110,7 +125,7 @@ export function ExpandedImageEditor({
       setLoadError("");
 
       try {
-        const file = await getEditableFile();
+        const file = await editableFileLoaderRef.current();
         if (!isMounted) {
           return;
         }
@@ -142,7 +157,9 @@ export function ExpandedImageEditor({
     return () => {
       isMounted = false;
     };
-  }, [getEditableFile, imageActions?.initialKind]);
+    // The parent may re-render while unrelated background work is polling. Reload only
+    // when the underlying image changes, not when an inline loader gets a new identity.
+  }, [sourceKey, imageActions?.initialKind]);
 
   useEffect(() => {
     setSelectionMask(null);
@@ -260,7 +277,7 @@ export function ExpandedImageEditor({
   const canRunTransparent = Boolean(
     currentFile
     && imageActions?.onMakeTransparent
-    && currentImageKind === "cleaned",
+    && currentImageKind === "generated",
   );
   const editorBusy =
     isLoading
@@ -501,7 +518,7 @@ export function ExpandedImageEditor({
     cleanImageAction.start();
     try {
       const cleanedFile = await imageActions.onClean(currentFile);
-      await pushNextFile(cleanedFile, { imageKind: "cleaned" });
+      await pushNextFile(cleanedFile, { imageKind: "generated" });
       cleanImageAction.succeed();
     } catch (error) {
       cleanImageAction.fail(
@@ -511,7 +528,7 @@ export function ExpandedImageEditor({
   }
 
   async function handleRunTransparent() {
-    if (!currentFile || !imageActions?.onMakeTransparent || currentImageKind !== "cleaned") {
+    if (!currentFile || !imageActions?.onMakeTransparent || currentImageKind !== "generated") {
       return;
     }
 
@@ -524,6 +541,26 @@ export function ExpandedImageEditor({
       transparentPngAction.fail(
         error instanceof Error ? error.message : "Unable to make a transparent PNG for this item image.",
       );
+    }
+  }
+
+  async function handleSelectVersion(version: NonNullable<ExpandedImageEditorImageActions["versions"]>[number]) {
+    if (version.kind === currentImageKind || editorBusy) {
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      const file = await version.getFile();
+      if (!file) {
+        throw new Error(`Unable to load the ${version.label.toLowerCase()} image.`);
+      }
+      await pushNextFile(file, { imageKind: version.kind });
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Unable to load this image version.");
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -610,11 +647,11 @@ export function ExpandedImageEditor({
     "h-9 border-white/20 bg-white/8 px-3 text-white hover:bg-white/14 data-[active=true]:bg-white data-[active=true]:text-stone-950";
   const editorViewportClass =
     "relative h-full min-h-0 w-full overflow-hidden bg-black/60";
-  const fittedMediaSize = containSize(mediaNaturalSize, viewportSize);
+  const fittedMediaSize = fitImageWithinViewport(mediaNaturalSize, viewportSize, EDITOR_MEDIA_INSET);
   const editorMediaBoxStyle = fittedMediaSize
     ? ({
-        height: `${Math.max(1, Math.floor(fittedMediaSize.height))}px`,
-        width: `${Math.max(1, Math.floor(fittedMediaSize.width))}px`,
+        aspectRatio: `${mediaNaturalSize.width} / ${mediaNaturalSize.height}`,
+        width: `${Math.max(1, fittedMediaSize.width)}px`,
       } as const)
     : undefined;
 
@@ -644,13 +681,12 @@ export function ExpandedImageEditor({
                   onComplete={(nextCrop) => setCompletedCrop(nextCrop)}
                   aspect={aspectRatioForPreset(aspectPreset) ?? undefined}
                   className="expanded-image-editor-crop"
-                  style={editorMediaBoxStyle}
                 >
                   <img
                     ref={imageRef}
                     src={imageUrl}
                     alt={title}
-                    className="block h-full w-full"
+                    className="block h-auto w-full max-w-full object-contain"
                     onLoad={handleCropImageLoad}
                   />
                 </ReactCrop>
@@ -683,23 +719,38 @@ export function ExpandedImageEditor({
       </div>
 
       <div className="flex h-full max-h-full w-full shrink-0 flex-col gap-5 overflow-y-auto border border-white/12 bg-black/45 p-5 text-white lg:w-[24rem] xl:w-[26rem] xl:p-6">
-        <div className="space-y-2">
+        <div>
           <PrimitiveText variant="overline" className="text-white/60">
             Image Tools
           </PrimitiveText>
-          <PrimitiveText as="h2" variant="title" className="text-white">
-            Adjust {title}
-          </PrimitiveText>
-          <PrimitiveText variant="bodySm" className="text-white/72">
-            Crop the frame or remove background regions manually before saving the edited image back into the flow.
-          </PrimitiveText>
         </div>
 
-        {imageActions?.onClean || imageActions?.onMakeTransparent ? (
+        {imageActions?.versions?.length ? (
           <div className="space-y-3">
             <PrimitiveText variant="overline" className="text-white/60">
-              Image Actions
+              Saved Versions
             </PrimitiveText>
+            <div className="grid grid-cols-3 gap-2">
+              {imageActions.versions.map((version) => (
+                <PrimitiveButton
+                  key={version.kind}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  data-active={currentImageKind === version.kind}
+                  className="border-white/20 bg-white/8 px-2 text-white hover:bg-white/14 data-[active=true]:bg-white data-[active=true]:text-stone-950"
+                  disabled={editorBusy}
+                  onClick={() => void handleSelectVersion(version)}
+                >
+                  {version.label}
+                </PrimitiveButton>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {imageActions?.onClean || imageActions?.onMakeTransparent ? (
+          <div>
             <div className="flex flex-col gap-2">
               {imageActions?.onClean ? (
                 <PrimitiveButton
@@ -821,9 +872,6 @@ export function ExpandedImageEditor({
                 </PrimitiveButton>
               ))}
             </div>
-            <PrimitiveText variant="bodySm" className="text-white/72">
-              Drag the crop frame to choose a new image size. Free mode lets you crop without a fixed ratio.
-            </PrimitiveText>
             <PrimitiveButton
               type="button"
               variant="outline"
@@ -937,30 +985,6 @@ function centerAspectCrop(width: number, height: number, aspect: number) {
     width,
     height,
   );
-}
-
-function containSize(
-  naturalSize: { height: number; width: number },
-  viewportSize: { height: number; width: number },
-) {
-  if (
-    naturalSize.width <= 0 ||
-    naturalSize.height <= 0 ||
-    viewportSize.width <= 0 ||
-    viewportSize.height <= 0
-  ) {
-    return null;
-  }
-
-  const scale = Math.min(
-    viewportSize.width / naturalSize.width,
-    viewportSize.height / naturalSize.height,
-  );
-
-  return {
-    height: Math.max(1, Math.floor(naturalSize.height * scale)),
-    width: Math.max(1, Math.floor(naturalSize.width * scale)),
-  };
 }
 
 function useObjectUrl(file: File | null) {

@@ -1,6 +1,6 @@
 # Curated Closet
 
-Curated Closet is a monorepo with a Rails JSON API in `back-end/` and a React + Vite client in `front-end/`. The current app supports Google-authenticated closet management, item creation and editing, AI-assisted metadata and image cleanup, outfit building, and outfit-photo import that detects visible clothing pieces.
+Curated Closet is a monorepo with a Rails JSON API in `back-end/` and a React + Vite client in `front-end/`. The current app supports Google-authenticated closet management, item creation and editing, AI-assisted metadata and image cleanup, closet-grounded outfit recommendations, outfit building, and outfit-photo import that detects visible clothing pieces.
 
 ## Current Scope
 
@@ -10,6 +10,8 @@ Curated Closet is a monorepo with a Rails JSON API in `back-end/` and a React + 
 - Search, filter, and sort on the closet page
 - Saved outfits built from closet items
 - Outfit-photo upload and detection review flow
+- Staged AI workflows for upload review and on-demand private modeled item previews
+- Explicit per-user private model-reference consent and removal
 - Flash/error/empty-state handling across the main user journey
 - Heroku deployment from the repository root
 
@@ -21,18 +23,20 @@ Curated Closet is a monorepo with a Rails JSON API in `back-end/` and a React + 
 - Choose item types from the canonical wardrobe taxonomy while AI and legacy aliases normalize into those supported types
 - Generate AI metadata suggestions for item type, name, brand, and tags
 - Generate cleaned catalog-style item images
+- Keep a private model reference photo for optional modeled item previews, with an explicit consent/removal flow
+- Queue and review modeled item previews through the existing item-detail surface
 - Undo or redo manual add-item, detected-item draft, and saved item-detail edits from the main item workflows
 - Build outfits from the closet cart and browse/edit saved outfits at `/outfits`
+- Ask for three closet-grounded outfit options by occasion, weather, mood, style, and exact color; keep, exclude, or swap pieces before saving a result
 - Add or remove closet pieces directly while editing a saved outfit
 - Reuse already-loaded closet and saved-outfit data across protected-page navigation, patching local state after writes instead of refetching unchanged collections
-- Generate saved outfits through an AI reference-analysis, shortlist, and refinement flow that uses closet metadata, visual descriptions, optional uploaded flatlay references, photos for shortlisted candidate items, and passive feedback from the user's generated-outfit edits/deletions, with stronger matching for required reference pieces like hoodies, denim shorts, chain bags, and sneakers
 - Upload an outfit photo, review and image-edit detections, and convert detections into closet items
 - Restrict `/users` and `/users/:id` to admin users only
 - Show frontend not-found and unauthorized states instead of raw backend responses
 
 ## Product Demo
 
-Watch the two-minute [Curated Closet product demo](https://closet-organizer-165f918adeda.herokuapp.com/demo/curated-closet-demo.mp4) for a quick tour of closet browsing, outfit building, Date Night AI outfit generation, smart photo import, AI-assisted item editing, and layered filtering.
+Watch the two-minute [Curated Closet product demo](https://closet-organizer-165f918adeda.herokuapp.com/demo/curated-closet-demo.mp4) for a quick tour of closet browsing, outfit building, smart photo import, AI-assisted item editing, and layered filtering. The recording includes the retired AI saved-outfit generator and therefore does not fully represent the current build.
 
 ## Team Members
 
@@ -71,7 +75,7 @@ Deployment setup, required config variable names, OAuth URLs, and operational co
 - Shared frontend control patterns live under `front-end/src/app/components/primitives/` and should be reused before introducing custom button, dropdown, select-trigger, or typography markup.
 - The add/edit item workflow is centered on `ItemEditorWorkspace.tsx`, `CreateItemPage.tsx`, `ItemDetailPage.tsx`, the canonical wardrobe taxonomy in `front-end/src/app/lib/wardrobeTaxonomy.ts`, and extracted review components under `front-end/src/app/components/create-item/`.
 - Backend JSON response shaping lives in `back-end/app/presenters/api_payloads.rb`.
-- Backend image-preparation, metadata suggestion, reference-aware outfit generation, generated-outfit preference feedback, and tempfile lifecycle helpers live under `back-end/app/services/`.
+- Backend image-preparation, metadata suggestion, image generation, and tempfile lifecycle helpers live under `back-end/app/services/`.
 
 ## Getting Started
 
@@ -152,9 +156,10 @@ npm run dev
 
 `back-end/db/seeds.rb` currently creates:
 
-- one admin Google-backed user: `annabel_goldman`
-- the Northwestern email `annabelgoldman2025@u.northwestern.edu`
+- one admin Google-backed user: `annabel_goldman` with the Northwestern email
+  `annabelgoldman2025@u.northwestern.edu`
 - a 20-item demo closet with realistic wardrobe tags
+- approximately 1,050 additional generated users, 5,200 clothing items, and 2,100 outfits for pagination and performance testing
 
 ## Testing And CI
 

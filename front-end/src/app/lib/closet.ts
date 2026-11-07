@@ -1,37 +1,29 @@
 import { requestJson, requestJsonOrNull, requestVoid } from "./api.ts";
+import { API_BASE_URL, BACKEND_BASE_URL } from "./apiConfig.ts";
+import { normalizeAttachmentUrl } from "./imageSources.ts";
+import { normalizeAiWorkflowPayload } from "./api/workflows.ts";
 import type { OutfitCollageLayout } from "./outfitCollage.ts";
+import { normalizeMagazinePageLayouts, type MagazinePageLayouts } from "./magazineLayout.ts";
+import type { AiWorkflow } from "./types/ai.ts";
 import { normalizeCategory } from "./wardrobeTaxonomy.ts";
 
-const LOCAL_BACKEND_BASE_URL = "http://127.0.0.1:3000";
-
-function isLocalDevelopmentHost(hostname: string) {
-  return hostname === "localhost" || hostname === "127.0.0.1";
-}
-
-function defaultApiBaseUrl() {
-  if (typeof window === "undefined") {
-    return "/api";
-  }
-
-  return isLocalDevelopmentHost(window.location.hostname) && window.location.port !== "3000" ? "/api" : "";
-}
-
-function defaultBackendBaseUrl() {
-  if (typeof window === "undefined") {
-    return LOCAL_BACKEND_BASE_URL;
-  }
-
-  return isLocalDevelopmentHost(window.location.hostname) && window.location.port !== "3000"
-    ? LOCAL_BACKEND_BASE_URL
-    : window.location.origin;
-}
-
-const importMetaEnv = (import.meta as ImportMeta & {
-  env?: Record<string, string | undefined>;
-}).env ?? {};
-
-const API_BASE_URL = importMetaEnv.VITE_API_BASE_URL ?? defaultApiBaseUrl();
-const BACKEND_BASE_URL = importMetaEnv.VITE_BACKEND_BASE_URL ?? defaultBackendBaseUrl();
+export { fetchImageFileFromUrl, resolveEditableImageFetchUrl } from "./imageSources.ts";
+export type {
+  AiArtifact,
+  AiStatus,
+  AiWorkflow,
+  AiWorkflowStage,
+  AiWorkflowStageStatus,
+} from "./types/ai.ts";
+export {
+  cancelAiWorkflow,
+  createAiWorkflow,
+  deleteModeledPreview,
+  fetchAiStatus,
+  fetchAiWorkflow,
+  requestModeledImage,
+  updateModeledPreview,
+} from "./api/workflows.ts";
 
 export interface UserSummary {
   id: number;
@@ -55,6 +47,9 @@ export interface ClothingItem {
   image_url?: string | null;
   original_image_url?: string | null;
   cleaned_image_url?: string | null;
+  generated_image_url?: string | null;
+  transparent_image_url?: string | null;
+  image_versions?: WardrobeImageVersion[];
   clean_image_status?: "idle" | "processing" | "succeeded" | "failed";
   clean_image_error_message?: string | null;
   clean_image_provider?: string | null;
@@ -66,9 +61,32 @@ export interface ClothingItem {
   user?: UserSummary;
 }
 
+export type WardrobeImageVersionKind = "original" | "generated" | "transparent";
+
+export interface WardrobeImageVersion {
+  id: number;
+  kind: WardrobeImageVersionKind;
+  image_url: string;
+  selected: boolean;
+  provider?: string | null;
+  model?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface User extends UserSummary {
   clothing_items: ClothingItem[];
   clothing_items_count: number;
+  model_reference_consent_at?: string | null;
+  model_reference_photo_attached?: boolean;
+  model_reference_photo_count?: number;
+  model_reference_photos?: ModelReferencePhoto[];
+}
+
+export interface ModelReferencePhoto {
+  id: number;
+  position: number;
+  photo_url: string;
 }
 
 export interface PaginationMeta {
@@ -106,6 +124,10 @@ export interface OutfitDetection {
   refined_box?: OutfitDetectionBoundingBox | null;
   final_box?: OutfitDetectionBoundingBox | null;
   cleaned_image_url?: string | null;
+  image_url?: string | null;
+  generated_image_url?: string | null;
+  transparent_image_url?: string | null;
+  image_versions?: WardrobeImageVersion[];
   clean_image_status?: "idle" | "processing" | "succeeded" | "failed";
   clean_image_error_message?: string | null;
   clean_image_provider?: string | null;
@@ -132,6 +154,7 @@ export interface OutfitUpload {
   error_message?: string | null;
   detected_at?: string | null;
   source_photo_url?: string | null;
+  ai_workflow?: AiWorkflow | null;
   detections: OutfitDetection[];
   created_at?: string;
   updated_at?: string;
@@ -145,80 +168,120 @@ export interface Outfit {
   notes?: string | null;
   item_ids: number[];
   items: ClothingItem[];
-  generation_id?: number | null;
-  generated_by_ai?: boolean;
-  generated_item_ids?: number[];
+  decorations?: OutfitDecoration[];
+  modeled_workflow?: AiWorkflow | null;
+  recommendation_option_id?: number | null;
   created_at?: string;
   updated_at?: string;
 }
 
-function normalizeAttachmentUrl(rawUrl: unknown) {
-  if (typeof rawUrl !== "string" || rawUrl.trim().length === 0) {
-    return null;
-  }
-
-  const trimmed = rawUrl.trim();
-
-  if (typeof window === "undefined") {
-    return trimmed;
-  }
-
-  if (!isLocalDevelopmentHost(window.location.hostname) || window.location.port === "3000") {
-    return trimmed;
-  }
-
-  try {
-    const normalizedBackendOrigin = new URL(BACKEND_BASE_URL, window.location.origin).origin;
-    const parsed = new URL(trimmed, normalizedBackendOrigin);
-
-    if (isLocalBackendActiveStorageUrl(parsed, normalizedBackendOrigin)) {
-      return `${parsed.pathname}${parsed.search}`;
-    }
-  } catch {
-    return trimmed;
-  }
-
-  return trimmed;
+export interface WardrobeAnalysisStatus {
+  total: number;
+  ready: number;
+  pending: number;
+  processing: number;
+  failed: number;
+  stale: number;
+  missing_image: number;
+  complete: boolean;
+  workflow?: AiWorkflow | null;
 }
 
-function isLocalBackendActiveStorageUrl(parsed: URL, normalizedBackendOrigin: string) {
-  if (!parsed.pathname.startsWith("/rails/active_storage/")) {
-    return false;
-  }
-
-  if (parsed.origin === normalizedBackendOrigin) {
-    return true;
-  }
-
-  const backendUrl = new URL(normalizedBackendOrigin);
-  return (
-    isLocalDevelopmentHost(parsed.hostname)
-    && isLocalDevelopmentHost(backendUrl.hostname)
-    && parsed.port === backendUrl.port
-  );
+export interface OutfitSearchBrief {
+  summary: string;
+  preferred_colors: string[];
+  style_terms: string[];
+  seasons: string[];
 }
 
-export function resolveEditableImageFetchUrl(imageUrl: string) {
-  const normalizedUrl = normalizeAttachmentUrl(imageUrl) ?? imageUrl;
+export interface OutfitRecommendation {
+  id: number;
+  title: string;
+  summary: string;
+  item_ids: number[];
+  items: ClothingItem[];
+  score: number;
+  scores?: Record<string, number>;
+  reasons: string[];
+}
 
-  try {
-    const parsed = new URL(normalizedUrl, typeof window === "undefined" ? LOCAL_BACKEND_BASE_URL : window.location.origin);
-    if (!parsed.pathname.startsWith("/rails/active_storage/")) {
-      return normalizedUrl;
-    }
+export interface OutfitRecommendationResponse {
+  id: number;
+  status: "pending" | "processing" | "succeeded" | "failed";
+  prompt: string;
+  brief: OutfitSearchBrief;
+  constraints: {
+    locked_item_ids?: number[];
+    draft_metadata?: {
+      name?: string;
+      tags?: string[];
+      notes?: string;
+    };
+  };
+  result_message?: string | null;
+  error_message?: string | null;
+  workflow?: AiWorkflow | null;
+  models: Record<string, string>;
+  usage?: Record<string, unknown>;
+  parent_run_id?: number | null;
+  recommendations: OutfitRecommendation[];
+}
 
-    const proxiedPathname = parsed.pathname
-      .replace("/rails/active_storage/blobs/redirect/", "/rails/active_storage/blobs/proxy/")
-      .replace("/rails/active_storage/representations/redirect/", "/rails/active_storage/representations/proxy/");
+export interface Decoration {
+  id: number;
+  user_id: number;
+  name: string;
+  image_url: string;
+  created_at?: string;
+  updated_at?: string;
+}
 
-    if (proxiedPathname === parsed.pathname) {
-      return normalizedUrl;
-    }
+export interface DecorationPlacement {
+  id: number;
+  decoration_id: number;
+  name: string;
+  image_url: string;
+  x: number;
+  y: number;
+  width: number;
+  rotation: number;
+  layer_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
 
-    return `${proxiedPathname}${parsed.search}`;
-  } catch {
-    return normalizedUrl;
-  }
+export interface OutfitDecoration extends DecorationPlacement {
+  outfit_id: number;
+}
+
+export interface OutfitFolderDecoration {
+  id: number;
+  outfit_folder_id: number;
+  decoration_id?: number | null;
+  name?: string | null;
+  page_key: string;
+  image_url: string;
+  x: number;
+  y: number;
+  width: number;
+  rotation: number;
+  layer_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface OutfitFolder {
+  id: number;
+  user_id: number;
+  name: string;
+  occasion?: string | null;
+  notes?: string | null;
+  page_layouts: MagazinePageLayouts;
+  outfit_ids: number[];
+  outfits: Outfit[];
+  decorations: OutfitFolderDecoration[];
+  created_at?: string;
+  updated_at?: string;
 }
 
 export type CreateItemMode = "manual" | "image";
@@ -235,11 +298,13 @@ export interface ClothingItemFormValues {
 
 export interface ClothingItemPhotoOptions {
   cleanedPhoto?: File | null;
+  generatedPhoto?: File | null;
   photo?: File | null;
   crop?: OutfitDetectionBoundingBox | null;
   sourceOutfitDetectionId?: number | null;
   removeCleanedPhoto?: boolean;
   removePhoto?: boolean;
+  selectedImageKind?: WardrobeImageVersionKind;
 }
 
 export interface OutfitUploadPhotoOptions {
@@ -272,6 +337,24 @@ export interface OutfitDraft {
   notes: string;
   tagInput: string;
   itemIds: number[];
+  recommendationRunId?: number;
+  recommendationOptionId?: number;
+}
+
+export interface OutfitMetadataSuggestion {
+  name: string;
+  notes: string;
+  tags: string[];
+  provider?: string | null;
+  model?: string | null;
+}
+
+export interface MagazineMetadataSuggestion {
+  name: string;
+  notes: string;
+  outfit_ids: number[];
+  provider?: string | null;
+  model?: string | null;
 }
 
 export function emptyOutfitDraft(): OutfitDraft {
@@ -280,6 +363,8 @@ export function emptyOutfitDraft(): OutfitDraft {
     notes: "",
     tagInput: "",
     itemIds: [],
+    recommendationRunId: undefined,
+    recommendationOptionId: undefined,
   };
 }
 
@@ -293,12 +378,20 @@ function normalizeOutfitDraft(raw: Partial<OutfitDraft> | null | undefined): Out
         .map((value) => Number(value))
         .filter((value, index, array) => Number.isInteger(value) && value > 0 && array.indexOf(value) === index)
     : [];
+  const recommendationRunId = Number(raw?.recommendationRunId);
+  const recommendationOptionId = Number(raw?.recommendationOptionId);
 
   return {
     name: typeof raw?.name === "string" ? raw.name : "",
     notes: typeof raw?.notes === "string" ? raw.notes : "",
     tagInput: typeof raw?.tagInput === "string" ? raw.tagInput : "",
     itemIds,
+    recommendationRunId: Number.isInteger(recommendationRunId) && recommendationRunId > 0
+      ? recommendationRunId
+      : undefined,
+    recommendationOptionId: Number.isInteger(recommendationOptionId) && recommendationOptionId > 0
+      ? recommendationOptionId
+      : undefined,
   };
 }
 
@@ -334,7 +427,9 @@ export function saveOutfitDraft(userId: number, draft: OutfitDraft) {
     normalized.name.trim().length === 0 &&
     normalized.notes.trim().length === 0 &&
     normalized.tagInput.trim().length === 0 &&
-    normalized.itemIds.length === 0;
+    normalized.itemIds.length === 0 &&
+    !normalized.recommendationRunId &&
+    !normalized.recommendationOptionId;
 
   if (isEmpty) {
     window.localStorage.removeItem(outfitDraftStorageKey(userId));
@@ -479,6 +574,46 @@ export async function fetchCurrentUser(signal?: AbortSignal) {
   return user ? normalizeUserPayload(user) : null;
 }
 
+export async function saveModelReferences(photos: File[]) {
+  const formData = new FormData();
+  photos.forEach((photo) => formData.append("model_reference_images[photos][]", photo));
+
+  return normalizeUserPayload(
+    await requestJson<User>(`${API_BASE_URL}/model_reference_images`, {
+      method: "POST",
+      body: formData,
+    }),
+  );
+}
+
+export async function reorderModelReferences(referenceImageIds: number[]) {
+  return normalizeUserPayload(
+    await requestJson<User>(`${API_BASE_URL}/model_reference_images/reorder`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ reference_image_ids: referenceImageIds }),
+    }),
+  );
+}
+
+export async function destroyModelReferenceImage(id: number) {
+  return normalizeUserPayload(
+    await requestJson<User>(`${API_BASE_URL}/model_reference_images/${id}`, {
+      method: "DELETE",
+    }),
+  );
+}
+
+export async function destroyAllModelReferences() {
+  return normalizeUserPayload(
+    await requestJson<User>(`${API_BASE_URL}/me/model_reference`, {
+      method: "DELETE",
+    }),
+  );
+}
+
 export function beginGoogleSignIn() {
   window.location.assign(`${BACKEND_BASE_URL}/auth/google_oauth2`);
 }
@@ -575,6 +710,150 @@ export async function fetchOutfits(signal?: AbortSignal) {
   return (await requestJson<Outfit[]>(`${API_BASE_URL}/outfits`, { signal })).map(normalizeOutfitPayload);
 }
 
+export async function fetchWardrobeAnalysisStatus(signal?: AbortSignal) {
+  return requestJson<WardrobeAnalysisStatus>(`${API_BASE_URL}/wardrobe_item_analysis`, { signal });
+}
+
+export async function startWardrobeAnalysis() {
+  return requestJson<WardrobeAnalysisStatus>(`${API_BASE_URL}/wardrobe_item_analysis`, {
+    method: "POST",
+  });
+}
+
+export async function generateOutfitRecommendations(input: {
+  prompt: string;
+  lockedItemIds?: number[];
+  draftMetadata?: {
+    name?: string;
+    tags?: string[];
+    notes?: string;
+  };
+}) {
+  const response = await requestJson<OutfitRecommendationResponse>(`${API_BASE_URL}/outfit_recommendations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      outfit_recommendation: {
+        prompt: input.prompt,
+        locked_item_ids: input.lockedItemIds ?? [],
+        draft_metadata: input.draftMetadata ?? {},
+      },
+    }),
+  });
+
+  return {
+    ...response,
+    recommendations: response.recommendations.map((recommendation) => ({
+      ...recommendation,
+      items: recommendation.items.map(normalizeClothingItemPayload),
+    })),
+  };
+}
+
+export async function fetchOutfitRecommendation(id: number, signal?: AbortSignal) {
+  const response = await requestJson<OutfitRecommendationResponse>(`${API_BASE_URL}/outfit_recommendations/${id}`, { signal });
+  return {
+    ...response,
+    recommendations: response.recommendations.map((recommendation) => ({
+      ...recommendation,
+      items: recommendation.items.map(normalizeClothingItemPayload),
+    })),
+  };
+}
+
+export async function discardOutfitRecommendation(input: {
+  runId: number;
+  optionId: number;
+}) {
+  return requestJson<{ id: number; event_type: string }>(
+    `${API_BASE_URL}/outfit_recommendations/${input.runId}/discard`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        outfit_recommendation: { option_id: input.optionId },
+      }),
+    },
+  );
+}
+
+export async function fetchDecorations(signal?: AbortSignal) {
+  return (await requestJson<Decoration[]>(`${API_BASE_URL}/decorations`, { signal }))
+    .map(normalizeDecorationPayload);
+}
+
+export async function createDecoration(input: { file: File; name?: string }) {
+  const formData = new FormData();
+  formData.append("decoration[image]", input.file);
+  formData.append("decoration[name]", input.name?.trim() || decorationNameFromFile(input.file));
+  return normalizeDecorationPayload(await requestJson<Decoration>(`${API_BASE_URL}/decorations`, {
+    method: "POST",
+    body: formData,
+  }));
+}
+
+export async function updateDecoration(id: number, input: { file?: File; name?: string }) {
+  const formData = new FormData();
+  if (input.file) formData.append("decoration[image]", input.file);
+  if (input.name != null) formData.append("decoration[name]", input.name);
+  return normalizeDecorationPayload(await requestJson<Decoration>(`${API_BASE_URL}/decorations/${id}`, {
+    method: "PATCH",
+    body: formData,
+  }));
+}
+
+export async function destroyDecoration(id: number) {
+  await requestVoid(`${API_BASE_URL}/decorations/${id}`, { method: "DELETE" });
+}
+
+export async function createOutfitDecoration(
+  outfitId: number,
+  input: { decorationId: number; x?: number; y?: number; width?: number; rotation?: number; layerOrder?: number },
+) {
+  return normalizeOutfitDecorationPayload(await requestJson<OutfitDecoration>(
+    `${API_BASE_URL}/outfits/${outfitId}/decorations`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        decoration: {
+          decoration_id: input.decorationId,
+          x: input.x,
+          y: input.y,
+          width: input.width,
+          rotation: input.rotation,
+          layer_order: input.layerOrder,
+        },
+      }),
+    },
+  ));
+}
+
+export async function updateOutfitDecoration(
+  outfitId: number,
+  placementId: number,
+  input: Partial<Pick<OutfitDecoration, "x" | "y" | "width" | "rotation" | "layer_order">>,
+) {
+  return normalizeOutfitDecorationPayload(await requestJson<OutfitDecoration>(
+    `${API_BASE_URL}/outfits/${outfitId}/decorations/${placementId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decoration: input }),
+    },
+  ));
+}
+
+export async function destroyOutfitDecoration(outfitId: number, placementId: number) {
+  await requestVoid(`${API_BASE_URL}/outfits/${outfitId}/decorations/${placementId}`, { method: "DELETE" });
+}
+
+export async function fetchOutfit(id: number, signal?: AbortSignal) {
+  return normalizeOutfitPayload(
+    await requestJson<Outfit>(`${API_BASE_URL}/outfits/${id}`, { signal }),
+  );
+}
+
 interface CreateOutfitInput {
   userId: number;
   name: string;
@@ -582,6 +861,7 @@ interface CreateOutfitInput {
   itemLayouts?: OutfitCollageLayoutInput[];
   notes?: string;
   tags?: string[];
+  recommendationOptionId?: number;
 }
 
 interface OutfitCollageLayoutInput extends OutfitCollageLayout {
@@ -595,6 +875,7 @@ function buildOutfitPayload(input: {
   notes?: string;
   tags?: string[];
   userId?: number;
+  recommendationOptionId?: number;
 }) {
   return {
     outfit: {
@@ -604,6 +885,7 @@ function buildOutfitPayload(input: {
       item_layouts: input.itemLayouts,
       notes: input.notes,
       tags: input.tags,
+      recommendation_option_id: input.recommendationOptionId,
     },
   };
 }
@@ -643,36 +925,206 @@ export async function destroyOutfit(id: number) {
   });
 }
 
-interface GenerateOutfitInput {
-  occasion?: string;
-  referencePhoto?: File | null;
+export async function fetchOutfitFolders(signal?: AbortSignal) {
+  return (await requestJson<OutfitFolder[]>(`${API_BASE_URL}/outfit_folders`, { signal }))
+    .map(normalizeOutfitFolderPayload);
 }
 
-export async function generateOutfit(input: string | GenerateOutfitInput = {}) {
-  const occasion = typeof input === "string" ? input : input.occasion;
-  const referencePhoto = typeof input === "string" ? null : input.referencePhoto;
+export async function fetchOutfitFolder(id: number, signal?: AbortSignal) {
+  return normalizeOutfitFolderPayload(
+    await requestJson<OutfitFolder>(`${API_BASE_URL}/outfit_folders/${id}`, { signal }),
+  );
+}
 
-  if (referencePhoto) {
+interface SaveOutfitFolderInput {
+  name: string;
+  occasion?: string;
+  notes?: string;
+  outfitIds: number[];
+  pageLayouts?: MagazinePageLayouts;
+}
+
+function outfitFolderPayload(input: SaveOutfitFolderInput) {
+  return {
+    outfit_folder: {
+      name: input.name,
+      occasion: input.occasion,
+      notes: input.notes,
+      page_layouts: input.pageLayouts,
+      outfit_ids: input.outfitIds,
+    },
+  };
+}
+
+export async function createOutfitFolder(input: SaveOutfitFolderInput) {
+  return normalizeOutfitFolderPayload(await requestJson<OutfitFolder>(`${API_BASE_URL}/outfit_folders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(outfitFolderPayload(input)),
+  }));
+}
+
+export async function updateOutfitFolder(id: number, input: SaveOutfitFolderInput) {
+  return normalizeOutfitFolderPayload(await requestJson<OutfitFolder>(`${API_BASE_URL}/outfit_folders/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(outfitFolderPayload(input)),
+  }));
+}
+
+export async function generateMagazineMetadataSuggestions(input: {
+  folderId?: number;
+  name: string;
+  notes: string;
+  outfitIds: number[];
+}) {
+  const path = input.folderId
+    ? `${API_BASE_URL}/outfit_folders/${input.folderId}/generate_metadata_suggestions`
+    : `${API_BASE_URL}/outfit_folders/generate_metadata_suggestions`;
+
+  return requestJson<MagazineMetadataSuggestion>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      outfit_folder: {
+        name: input.name,
+        notes: input.notes,
+        outfit_ids: input.outfitIds,
+      },
+    }),
+  });
+}
+
+export async function destroyOutfitFolder(id: number) {
+  await requestVoid(`${API_BASE_URL}/outfit_folders/${id}`, { method: "DELETE" });
+}
+
+export async function createOutfitFolderDecoration(
+  outfitFolderId: number,
+  input: {
+    file?: File;
+    decorationId?: number;
+    pageKey: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    rotation?: number;
+    layerOrder?: number;
+  },
+) {
+  const formData = new FormData();
+  if (input.file) formData.append("decoration[image]", input.file);
+  if (input.decorationId != null) formData.append("decoration[decoration_id]", String(input.decorationId));
+  formData.append("decoration[page_key]", input.pageKey);
+  if (input.x != null) formData.append("decoration[x]", String(input.x));
+  if (input.y != null) formData.append("decoration[y]", String(input.y));
+  if (input.width != null) formData.append("decoration[width]", String(input.width));
+  if (input.rotation != null) formData.append("decoration[rotation]", String(input.rotation));
+  if (input.layerOrder != null) formData.append("decoration[layer_order]", String(input.layerOrder));
+
+  return normalizeOutfitFolderDecorationPayload(
+    await requestJson<OutfitFolderDecoration>(
+      `${API_BASE_URL}/outfit_folders/${outfitFolderId}/decorations`,
+      { method: "POST", body: formData },
+    ),
+  );
+}
+
+export async function updateOutfitFolderDecoration(
+  outfitFolderId: number,
+  decorationId: number,
+  input: Partial<Pick<OutfitFolderDecoration, "page_key" | "x" | "y" | "width" | "rotation" | "layer_order">>,
+) {
+  return normalizeOutfitFolderDecorationPayload(
+    await requestJson<OutfitFolderDecoration>(
+      `${API_BASE_URL}/outfit_folders/${outfitFolderId}/decorations/${decorationId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decoration: input }),
+      },
+    ),
+  );
+}
+
+export async function destroyOutfitFolderDecoration(outfitFolderId: number, decorationId: number) {
+  await requestVoid(`${API_BASE_URL}/outfit_folders/${outfitFolderId}/decorations/${decorationId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function generateOutfitMetadataSuggestions(input: {
+  outfitId?: number;
+  itemIds: number[];
+  name: string;
+  notes: string;
+  tags: string[];
+}) {
+  const path = input.outfitId
+    ? `${API_BASE_URL}/outfits/${input.outfitId}/generate_metadata_suggestions`
+    : `${API_BASE_URL}/outfits/generate_metadata_suggestions`;
+
+  return requestJson<OutfitMetadataSuggestion>(
+    path,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        outfit: {
+          item_ids: input.itemIds,
+          name: input.name,
+          notes: input.notes,
+          tags: input.tags,
+        },
+      }),
+    },
+  );
+}
+
+export async function requestModeledOutfit(
+  outfitId: number,
+  draft?: {
+    itemIds: number[];
+    name: string;
+    notes: string;
+    tags: string[];
+  },
+  flatlaySnapshot?: File,
+) {
+  if (draft && flatlaySnapshot) {
     const formData = new FormData();
-    const trimmedOccasion = occasion?.trim();
-    if (trimmedOccasion) {
-      formData.append("occasion", trimmedOccasion);
-    }
-    formData.append("reference_photo", referencePhoto);
+    draft.itemIds.forEach((itemId) => formData.append("modeled_outfit[item_ids][]", String(itemId)));
+    draft.tags.forEach((tag) => formData.append("modeled_outfit[tags][]", tag));
+    formData.append("modeled_outfit[name]", draft.name);
+    formData.append("modeled_outfit[notes]", draft.notes);
+    formData.append("flatlay_snapshot", flatlaySnapshot);
 
-    return normalizeOutfitPayload(await requestJson<Outfit>(`${API_BASE_URL}/outfits/generate`, {
+    return requestJson<AiWorkflow>(`${API_BASE_URL}/outfits/${outfitId}/generate_modeled_image`, {
       method: "POST",
       body: formData,
-    }));
+    }).then(normalizeAiWorkflowPayload);
   }
 
-  return normalizeOutfitPayload(await requestJson<Outfit>(`${API_BASE_URL}/outfits/generate`, {
+  return requestJson<AiWorkflow>(`${API_BASE_URL}/outfits/${outfitId}/generate_modeled_image`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ occasion: occasion?.trim() || undefined }),
-  }));
+    headers: draft
+      ? {
+          "Content-Type": "application/json",
+        }
+      : undefined,
+    body: draft
+      ? JSON.stringify({
+          modeled_outfit: {
+            item_ids: draft.itemIds,
+            name: draft.name,
+            notes: draft.notes,
+            tags: draft.tags,
+          },
+        })
+      : undefined,
+  }).then(normalizeAiWorkflowPayload);
 }
 
 export async function destroyClothingItem(id: number) {
@@ -685,10 +1137,10 @@ export async function generateClothingItemCleanImage(
   id: number,
   metadata?: ClothingItemFormValues,
 ) {
-  return requestJson<ClothingItem>(`${API_BASE_URL}/clothing_items/${id}/generate_clean_image`, {
+  return requestJson<AiWorkflow>(`${API_BASE_URL}/clothing_items/${id}/generate_clean_image`, {
     method: "POST",
     body: buildAiContextFormData(metadata),
-  });
+  }).then(normalizeAiWorkflowPayload);
 }
 
 export async function generateOutfitDetectionCleanImage(
@@ -699,6 +1151,60 @@ export async function generateOutfitDetectionCleanImage(
     method: "POST",
     body: buildAiContextFormData(metadata),
   });
+}
+
+export async function generateOutfitDetectionImage(
+  id: number,
+  metadata?: ClothingItemFormValues,
+) {
+  return normalizeOutfitDetectionPayload(
+    await requestJson<OutfitDetection>(`${API_BASE_URL}/outfit_detections/${id}/generate_image`, {
+      method: "POST",
+      body: buildAiContextFormData(metadata),
+    }),
+  );
+}
+
+export async function removeOutfitDetectionImageBackground(id: number) {
+  return normalizeOutfitDetectionPayload(
+    await requestJson<OutfitDetection>(`${API_BASE_URL}/outfit_detections/${id}/remove_image_background`, {
+      method: "POST",
+    }),
+  );
+}
+
+export async function selectOutfitDetectionImageVersion(
+  id: number,
+  variantKind: WardrobeImageVersionKind,
+) {
+  return normalizeOutfitDetectionPayload(
+    await requestJson<OutfitDetection>(`${API_BASE_URL}/outfit_detections/${id}/select_image_version`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ variant_kind: variantKind }),
+    }),
+  );
+}
+
+export async function removeClothingItemImageBackground(id: number) {
+  return normalizeClothingItemPayload(
+    await requestJson<ClothingItem>(`${API_BASE_URL}/clothing_items/${id}/remove_image_background`, {
+      method: "POST",
+    }),
+  );
+}
+
+export async function selectClothingItemImageVersion(
+  id: number,
+  variantKind: WardrobeImageVersionKind,
+) {
+  return normalizeClothingItemPayload(
+    await requestJson<ClothingItem>(`${API_BASE_URL}/clothing_items/${id}/select_image_version`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ variant_kind: variantKind }),
+    }),
+  );
 }
 
 export async function generateClothingItemMetadataSuggestions(
@@ -778,35 +1284,20 @@ export async function createCleanPreviewFile(photo: File, options: AiImageOption
   return fileFromDataUrl(preview.data_url, preview.filename, preview.content_type);
 }
 
-export async function fetchImageFileFromUrl(imageUrl: string, filename?: string) {
-  const fetchUrl = resolveEditableImageFetchUrl(imageUrl);
-  const response = await fetch(fetchUrl, {
-    credentials: "include",
-  });
-  if (!response.ok) {
-    throw new Error("Unable to load the source image for editing.");
-  }
-
-  const blob = await response.blob();
-  return new File([blob], filename ?? inferFilenameFromUrl(imageUrl), {
-    type: blob.type || "image/png",
-  });
+export async function createTransparentPreviewFile(photo: File) {
+  const formData = new FormData();
+  formData.append("image_variant[source_photo]", photo);
+  const preview = await requestJson<TemporaryCleanImageResult>(
+    `${API_BASE_URL}/image_variants/transparent_preview`,
+    { method: "POST", body: formData },
+  );
+  return fileFromDataUrl(preview.data_url, preview.filename, preview.content_type);
 }
 
 async function fileFromDataUrl(dataUrl: string, filename: string, contentType?: string) {
   const response = await fetch(dataUrl);
   const blob = await response.blob();
   return new File([blob], filename, { type: contentType || blob.type || "image/png" });
-}
-
-function inferFilenameFromUrl(imageUrl: string) {
-  try {
-    const url = new URL(imageUrl, window.location.origin);
-    const lastSegment = url.pathname.split("/").pop()?.trim();
-    return lastSegment && lastSegment.includes(".") ? lastSegment : "image.png";
-  } catch {
-    return "image.png";
-  }
 }
 
 function normalizeTagList(rawTags: unknown): string[] {
@@ -858,6 +1349,9 @@ function normalizeClothingItemPayload(item: ClothingItem): ClothingItem {
     brand: item.brand?.trim() ? item.brand.trim() : null,
     style_notes: item.style_notes?.trim() ? item.style_notes.trim() : null,
     cleaned_image_url: normalizeAttachmentUrl(item.cleaned_image_url),
+    generated_image_url: normalizeAttachmentUrl(item.generated_image_url),
+    transparent_image_url: normalizeAttachmentUrl(item.transparent_image_url),
+    image_versions: normalizeWardrobeImageVersions(item.image_versions),
     image_url: normalizeAttachmentUrl(item.image_url),
     original_image_url: normalizeAttachmentUrl(item.original_image_url),
     tags: normalizeTagList((item as ClothingItem & { tags?: unknown }).tags),
@@ -869,7 +1363,18 @@ function normalizeOutfitDetectionPayload(detection: OutfitDetection): OutfitDete
   return {
     ...detection,
     cleaned_image_url: normalizeAttachmentUrl(detection.cleaned_image_url),
+    image_url: normalizeAttachmentUrl(detection.image_url),
+    generated_image_url: normalizeAttachmentUrl(detection.generated_image_url),
+    transparent_image_url: normalizeAttachmentUrl(detection.transparent_image_url),
+    image_versions: normalizeWardrobeImageVersions(detection.image_versions),
   };
+}
+
+function normalizeWardrobeImageVersions(versions?: WardrobeImageVersion[]) {
+  return (versions ?? []).map((version) => ({
+    ...version,
+    image_url: normalizeAttachmentUrl(version.image_url) ?? "",
+  }));
 }
 
 function normalizeOutfitUploadPayload(upload: OutfitUpload): OutfitUpload {
@@ -883,10 +1388,49 @@ function normalizeOutfitUploadPayload(upload: OutfitUpload): OutfitUpload {
 function normalizeOutfitPayload(outfit: Outfit): Outfit {
   return {
     ...outfit,
-    generated_by_ai: Boolean(outfit.generated_by_ai),
-    generated_item_ids: Array.isArray(outfit.generated_item_ids) ? outfit.generated_item_ids : [],
+    modeled_workflow: outfit.modeled_workflow
+      ? normalizeAiWorkflowPayload(outfit.modeled_workflow)
+      : null,
     items: (outfit.items ?? []).map(normalizeClothingItemPayload),
+    decorations: (outfit.decorations ?? []).map(normalizeOutfitDecorationPayload),
   };
+}
+
+function normalizeDecorationPayload(decoration: Decoration): Decoration {
+  return {
+    ...decoration,
+    image_url: normalizeAttachmentUrl(decoration.image_url) ?? "",
+  };
+}
+
+function normalizeOutfitDecorationPayload(decoration: OutfitDecoration): OutfitDecoration {
+  return {
+    ...decoration,
+    image_url: normalizeAttachmentUrl(decoration.image_url) ?? "",
+  };
+}
+
+function normalizeOutfitFolderDecorationPayload(
+  decoration: OutfitFolderDecoration,
+): OutfitFolderDecoration {
+  return {
+    ...decoration,
+    image_url: normalizeAttachmentUrl(decoration.image_url) ?? "",
+  };
+}
+
+function normalizeOutfitFolderPayload(folder: OutfitFolder): OutfitFolder {
+  return {
+    ...folder,
+    page_layouts: normalizeMagazinePageLayouts(folder.page_layouts),
+    outfit_ids: Array.isArray(folder.outfit_ids) ? folder.outfit_ids : [],
+    outfits: (folder.outfits ?? []).map(normalizeOutfitPayload),
+    decorations: (folder.decorations ?? []).map(normalizeOutfitFolderDecorationPayload),
+  };
+}
+
+function decorationNameFromFile(file: File) {
+  return file.name.replace(/\.png$/i, "").replace(/[-_]+/g, " ").trim() || "Decoration";
 }
 
 function normalizeMetadataSuggestionPayload(
@@ -904,6 +1448,17 @@ function normalizeMetadataSuggestionPayload(
 
 function normalizeUserPayload(user: User): User {
   const clothing_items = (user.clothing_items ?? []).map(normalizeClothingItemPayload);
+  const model_reference_photos = (user.model_reference_photos ?? [])
+    .map((referencePhoto) => ({
+      ...referencePhoto,
+      photo_url: normalizeApiResourceUrl(referencePhoto.photo_url),
+    }))
+    .sort((left, right) => left.position - right.position || left.id - right.id);
+  const rawReferenceCount = (user as User & { model_reference_photo_count?: unknown }).model_reference_photo_count;
+  const model_reference_photo_count =
+    typeof rawReferenceCount === "number" && Number.isFinite(rawReferenceCount)
+      ? rawReferenceCount
+      : model_reference_photos.length;
   const rawCount = (user as User & { clothing_items_count?: unknown }).clothing_items_count;
   const clothing_items_count =
     typeof rawCount === "number" && Number.isFinite(rawCount)
@@ -914,7 +1469,18 @@ function normalizeUserPayload(user: User): User {
     ...user,
     clothing_items,
     clothing_items_count,
+    model_reference_photo_attached: model_reference_photo_count > 0 || Boolean(user.model_reference_photo_attached),
+    model_reference_photo_count,
+    model_reference_photos,
   };
+}
+
+function normalizeApiResourceUrl(rawUrl: string) {
+  if (!rawUrl.startsWith("/")) {
+    return rawUrl;
+  }
+
+  return `${API_BASE_URL}${rawUrl}`;
 }
 
 function buildAiContextFormData(metadata?: ClothingItemFormValues) {
@@ -966,6 +1532,15 @@ function buildClothingItemFormData(
 
   if (photoOptions.cleanedPhoto) {
     formData.append("clothing_item[cleaned_photo]", photoOptions.cleanedPhoto);
+  }
+
+
+  if (photoOptions.generatedPhoto) {
+    formData.append("clothing_item[generated_photo]", photoOptions.generatedPhoto);
+  }
+
+  if (photoOptions.selectedImageKind) {
+    formData.append("clothing_item[selected_image_kind]", photoOptions.selectedImageKind);
   }
 
   if (photoOptions.sourceOutfitDetectionId) {

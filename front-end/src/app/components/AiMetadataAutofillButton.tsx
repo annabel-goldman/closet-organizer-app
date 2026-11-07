@@ -8,6 +8,7 @@ interface AiMetadataAutofillButtonProps {
   isLoading?: boolean;
   label?: string;
   onClick: () => void;
+  showLabel?: boolean;
 }
 
 export function AiMetadataAutofillButton({
@@ -16,6 +17,7 @@ export function AiMetadataAutofillButton({
   isLoading = false,
   label = "AI autofill item details",
   onClick,
+  showLabel = false,
 }: AiMetadataAutofillButtonProps) {
   const buttonLabel = isLoading ? "Autofilling details..." : label;
   const isDisabled = disabled || isLoading;
@@ -35,6 +37,7 @@ export function AiMetadataAutofillButton({
             aria-label={buttonLabel}
           >
             <Icon className={`h-4 w-4 shrink-0 ${isLoading ? "animate-spin" : ""}`} />
+            {showLabel ? buttonLabel : null}
           </PrimitiveButton>
         </span>
       </TooltipTrigger>

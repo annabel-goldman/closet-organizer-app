@@ -1,15 +1,10 @@
-import { Dispatch, SetStateAction, useDeferredValue, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ShoppingBag } from "lucide-react";
+import { CircleAlert, ShoppingBag } from "lucide-react";
 import { AddItemMenu } from "./components/AddItemMenu";
 import { ClothingCard } from "./components/ClothingCard";
-import { CreateItemPage } from "./components/CreateItemPage";
-import { ItemDetailPage } from "./components/ItemDetailPage";
-import { MyOutfitsPage } from "./components/MyOutfitsPage";
 import { OutfitCartSheet } from "./components/OutfitCartSheet";
 import { OutfitCreatedDialog } from "./components/OutfitCreatedDialog";
-import { UserDetailPage } from "./components/UserDetailPage";
-import { UsersDirectoryPage } from "./components/UsersDirectoryPage";
 import {
   PrimitiveButton,
 } from "./components/primitives/PrimitiveButton";
@@ -31,7 +26,6 @@ import {
 } from "./components/primitives/PrimitiveSelect";
 import { PrimitiveText } from "./components/primitives/PrimitiveText";
 import { AboutPage } from "./components/info/AboutPage";
-import { HomeFooterLinks } from "./components/info/HomeFooterLinks";
 import { PrivacyPage } from "./components/info/PrivacyPage";
 import { TermsPage } from "./components/info/TermsPage";
 import { AccessRestrictedState } from "./components/shared/AccessRestrictedState";
@@ -40,46 +34,116 @@ import { HomeLanding } from "./components/shared/HomeLanding";
 import { NotFoundPage } from "./components/shared/NotFoundPage";
 import { SiteFooter } from "./components/shared/SiteFooter";
 import { SiteHeader } from "./components/shared/SiteHeader";
+import {
+  CollectionGrid,
+  CollectionGridSkeleton,
+  CollectionPageHeader,
+  CollectionPageShell,
+  CollectionToolbar,
+} from "./components/shared/CollectionLayout";
+import { VisualStatePanel } from "./components/shared/VisualStatePanel";
+import {
+  GenerationTaskToasts,
+} from "./components/shared/GenerationTaskToasts";
 import { ClosetSearchField } from "./components/ClosetSearchField";
 import {
   ClothingItem,
   createOutfit,
+  discardOutfitRecommendation,
+  emptyOutfitDraft,
+  AiWorkflow,
+  fetchClothingItem,
+  fetchOutfitRecommendation,
   fetchOutfits,
   fetchCurrentUser,
+  fetchWardrobeAnalysisStatus,
+  formatTagInput,
   formatPossessive,
   formatPreferredStyle,
+  generateOutfitRecommendations,
+  generateOutfitMetadataSuggestions,
   logoutSession,
   Outfit,
   OutfitDraft,
   parseTagInput,
+  startWardrobeAnalysis,
   titleize,
   User,
 } from "./lib/closet";
-import {
-  buildGroupedTagOptions,
-  ClosetSortOption,
-  filterClothingItems,
-  formatClosetSearchSuggestionLabel,
-  getClosetSearchSuggestions,
-  hasActiveClosetControls,
-} from "./lib/closetFilters";
+import { formatClosetSearchSuggestionLabel } from "./lib/closetFilters";
 import {
   AppRoute,
   authErrorMessage,
   getRouteFromLocation,
   isClosetRoute,
-  isOutfitRoute,
   isPublicInfoRoute,
   isProtectedRoute,
-  isUsersRoute,
   navigateTo,
 } from "./lib/routes";
 import { collectClosetSuggestions } from "./lib/itemFormValidation";
 import { useOutfitDraftState } from "./lib/useOutfitDraftState";
+import { useGenerationTaskManager } from "./lib/useGenerationTaskManager";
+import { useClosetControls } from "./lib/useClosetControls";
+import { useIncrementalCollection } from "./lib/useIncrementalCollection";
+import { InfiniteCollectionSentinel } from "./components/shared/InfiniteCollectionSentinel";
 
 interface HomeMessageState {
   kind: "error" | "success";
   text: string;
+}
+
+const CreateItemPage = lazy(() => import("./components/CreateItemPage").then((module) => ({
+  default: module.CreateItemPage,
+})));
+const ItemDetailPage = lazy(() => import("./components/ItemDetailPage").then((module) => ({
+  default: module.ItemDetailPage,
+})));
+const MyOutfitsPage = lazy(() => import("./components/MyOutfitsPage").then((module) => ({
+  default: module.MyOutfitsPage,
+})));
+const MyDecorationsPage = lazy(() => import("./components/MyDecorationsPage").then((module) => ({
+  default: module.MyDecorationsPage,
+})));
+const MagazineEditorPage = lazy(() => import("./components/MagazineEditorPage").then((module) => ({
+  default: module.MagazineEditorPage,
+})));
+const MagazineReaderPage = lazy(() => import("./components/MagazineReaderPage").then((module) => ({
+  default: module.MagazineReaderPage,
+})));
+const UserDetailPage = lazy(() => import("./components/UserDetailPage").then((module) => ({
+  default: module.UserDetailPage,
+})));
+const UsersDirectoryPage = lazy(() => import("./components/UsersDirectoryPage").then((module) => ({
+  default: module.UsersDirectoryPage,
+})));
+
+function RouteLoadingState() {
+  return (
+    <div className="mx-auto flex min-h-72 w-full max-w-7xl items-center justify-center px-6 py-12" role="status">
+      <PrimitiveText tone="muted">Loading page…</PrimitiveText>
+    </div>
+  );
+}
+
+interface OutfitCartGenerationMessage {
+  kind: "error" | "success";
+  text: string;
+}
+
+function outfitCartGenerationPrompt(draft: OutfitDraft, name: string) {
+  const details = [
+    name.trim() ? `Working title: ${name.trim()}` : "",
+    draft.tagInput.trim() ? `Tags or direction: ${draft.tagInput.trim()}` : "",
+    draft.notes.trim() ? `Notes: ${draft.notes.trim()}` : "",
+  ].filter(Boolean);
+
+  return details.length > 0
+    ? `Create a cohesive, wearable outfit from my closet. ${details.join(". ")}`
+    : "Create a cohesive, wearable outfit from my closet.";
+}
+
+function waitForOutfitGenerationPoll(milliseconds: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
 function buildCartOutfitName(itemCount: number) {
@@ -95,7 +159,6 @@ interface ClosetFilterMenuProps {
   label: string;
   options: string[];
   selectedValues: string[];
-  onClear: () => void;
   onToggleValue: (value: string) => void;
 }
 
@@ -146,7 +209,6 @@ function ClosetFilterMenu({
   label,
   options,
   selectedValues,
-  onClear,
   onToggleValue,
 }: ClosetFilterMenuProps) {
   const triggerLabel = formatFilterMenuTrigger(label, selectedValues);
@@ -191,24 +253,52 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [homeMessage, setHomeMessage] = useState<HomeMessageState | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
-  const [selectedColors, setSelectedColors] = useState<string[]>([]);
-  const [selectedOtherTags, setSelectedOtherTags] = useState<string[]>([]);
-  const [sortOption, setSortOption] = useState<ClosetSortOption>("name-asc");
   const [isOutfitCartOpen, setIsOutfitCartOpen] = useState(false);
   const [isOutfitCreatedDialogOpen, setIsOutfitCreatedDialogOpen] = useState(false);
   const [isCreatingOutfitFromCart, setIsCreatingOutfitFromCart] = useState(false);
+  const [isClearingOutfitCart, setIsClearingOutfitCart] = useState(false);
   const [outfitsCache, setOutfitsCache] = useState<Outfit[]>([]);
   const [hasLoadedOutfits, setHasLoadedOutfits] = useState(false);
   const [isLoadingOutfits, setIsLoadingOutfits] = useState(false);
   const [outfitsErrorMessage, setOutfitsErrorMessage] = useState("");
   const [outfitCartErrorMessage, setOutfitCartErrorMessage] = useState("");
   const [outfitCartName, setOutfitCartName] = useState("");
+  const [isGeneratingOutfitCart, setIsGeneratingOutfitCart] = useState(false);
+  const [outfitCartGenerationMessage, setOutfitCartGenerationMessage] = useState<OutfitCartGenerationMessage | null>(null);
   const [outfitCartStatusMessage, setOutfitCartStatusMessage] = useState("");
   const [isTopOutfitCartButtonVisible, setIsTopOutfitCartButtonVisible] = useState(true);
   const topOutfitCartButtonRef = useRef<HTMLSpanElement | null>(null);
+  const outfitCartGenerationRequestIdRef = useRef(0);
   const [outfitDraft, setOutfitDraft] = useOutfitDraftState(user);
+  const {
+    cancel: cancelGenerationTask,
+    dismiss: dismissGenerationTask,
+    tasks: generationTasks,
+    track: trackGenerationTask,
+    updateTracked: updateTrackedGenerationTask,
+  } = useGenerationTaskManager({
+    ownerId: user?.id,
+    onWorkflowUpdated: async (workflow, _reason, signal) => {
+      if (workflow.kind === "modeled_outfit") {
+        const outfitId = Number(workflow.metadata?.outfit_id);
+        if (outfitId) {
+          setOutfitsCache((current) => current.map((outfit) => (
+            outfit.id === outfitId ? { ...outfit, modeled_workflow: workflow } : outfit
+          )));
+        }
+      }
+
+      if (["succeeded", "cancelled"].includes(workflow.status) && workflow.kind === "item_clean") {
+        const itemId = Number(workflow.metadata?.item_id);
+        if (itemId) {
+          const nextItem = await fetchClothingItem(itemId, signal);
+          setUser((current) => updateUserItem(current, nextItem));
+          syncCachedOutfitItem(nextItem);
+        }
+      }
+
+    },
+  });
 
   useEffect(() => {
     const handlePopState = () => setRoute(getRouteFromLocation());
@@ -302,7 +392,7 @@ export default function App() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (!user || route.kind !== "outfits" || hasLoadedOutfits) {
+    if (!user || (route.kind !== "outfits" && route.kind !== "magazines") || hasLoadedOutfits) {
       return;
     }
 
@@ -378,16 +468,19 @@ export default function App() {
     setIsOutfitCreatedDialogOpen(false);
     setOutfitCartName("");
     setOutfitCartErrorMessage("");
+    setIsGeneratingOutfitCart(false);
+    setOutfitCartGenerationMessage(null);
+    outfitCartGenerationRequestIdRef.current += 1;
     setOutfitCartStatusMessage("");
   }, [user]);
 
   const clothingItems = user?.clothing_items ?? [];
+  const closetControls = useClosetControls(clothingItems);
   const outfitDraftItems = outfitDraft.itemIds
     .map((itemId) => clothingItems.find((item) => item.id === itemId))
     .filter((item): item is ClothingItem => Boolean(item));
   const outfitCartBadgeLabel =
     outfitDraftItems.length > 9 ? "9+" : String(outfitDraftItems.length);
-  const deferredSearchQuery = useDeferredValue(searchQuery);
   const isLoggedOutProtectedRoute = isProtectedRoute(route) && !user;
   const closetTitle = user ? formatPossessive(titleize(user.username)) : "Your Closet";
   const preferredStyle = formatPreferredStyle(user?.preferred_style);
@@ -395,54 +488,65 @@ export default function App() {
     route.kind === "item"
       ? clothingItems.find((item) => item.id === route.itemId) ?? null
       : null;
+  const selectedItemModeledWorkflow = route.kind === "item"
+    ? Object.values(generationTasks).find((task) => (
+        task.workflow.kind === "modeled_item"
+        && Number(task.workflow.metadata?.item_id) === route.itemId
+      ))?.workflow ?? null
+    : null;
+  const selectedItemCleanWorkflow = route.kind === "item"
+    ? Object.values(generationTasks).find((task) => (
+        task.workflow.kind === "item_clean"
+        && Number(task.workflow.metadata?.item_id) === route.itemId
+      ))?.workflow ?? null
+    : null;
+  const resumableOutfitUploadIds = Array.from(new Set(Object.values(generationTasks)
+    .filter((task) => (
+      task.workflow.kind === "outfit_upload"
+      && !["failed", "cancelled"].includes(task.workflow.status)
+    ))
+    .map((task) => Number(task.workflow.metadata?.upload_id))
+    .filter((uploadId) => uploadId > 0)));
   const isAdminRoute = route.kind === "users" || route.kind === "user";
   const isUnauthorizedAdminRoute = Boolean(user && !user.admin && isAdminRoute);
-  const groupedTagOptions = buildGroupedTagOptions(clothingItems);
-  const filteredClothingItems = filterClothingItems(
-    clothingItems,
-    deferredSearchQuery,
-    selectedBrands,
-    selectedColors,
-    selectedOtherTags,
-    sortOption,
-  );
-  const closetSearchSuggestions = getClosetSearchSuggestions(
-    clothingItems,
+  const {
+    clearAll,
+    filteredItems: filteredClothingItems,
+    filterOptions,
+    hasActiveFilters,
     searchQuery,
     selectedBrands,
     selectedColors,
-    selectedOtherTags,
+    selectedTypes,
+    setSearchQuery,
+    setSortOption,
     sortOption,
-    { limit: 8 },
-  );
-  const hasActiveFilters = hasActiveClosetControls(
-    searchQuery,
-    selectedBrands,
-    selectedColors,
-    selectedOtherTags,
-    sortOption,
-  );
+    suggestions: closetSearchSuggestions,
+    toggleBrand,
+    toggleColor,
+    toggleType,
+    typeOptions,
+  } = closetControls;
+  const {
+    hasMore: hasMoreClothingItems,
+    sentinelRef: clothingItemsSentinelRef,
+    visibleItems: visibleClothingItems,
+  } = useIncrementalCollection(filteredClothingItems, {
+    batchSize: 48,
+    resetKey: JSON.stringify({
+      searchQuery,
+      selectedBrands,
+      selectedColors,
+      selectedTypes,
+      sortOption,
+    }),
+  });
   const showFloatingOutfitCartButton = Boolean(
     user && isClosetRoute(route) && !isOutfitCartOpen && !isTopOutfitCartButtonVisible,
   );
   const outfitCartStatusMessageClassName = showFloatingOutfitCartButton
     ? "fixed right-20 top-[calc(30%-1.5rem)] z-[70] max-w-[calc(100vw-7rem)] border border-foreground/15 bg-background/95 px-4 py-3 text-sm text-foreground shadow-lg backdrop-blur sm:max-w-sm"
     : "fixed bottom-6 right-6 z-[70] max-w-sm border border-foreground/15 bg-background/95 px-4 py-3 text-sm text-foreground shadow-lg backdrop-blur";
-
-  function toggleSelectedValue(
-    value: string,
-    setSelectedValues: Dispatch<SetStateAction<string[]>>,
-  ) {
-    setSelectedValues((current) =>
-      current.includes(value)
-        ? current.filter((entry) => entry !== value)
-        : [...current, value].sort((left, right) => left.localeCompare(right)),
-    );
-  }
-
-  function clearSelectedValues(setSelectedValues: Dispatch<SetStateAction<string[]>>) {
-    setSelectedValues([]);
-  }
 
   function addItemToOutfitDraft(itemId: number) {
     if (outfitDraft.itemIds.includes(itemId)) {
@@ -451,6 +555,9 @@ export default function App() {
 
     setOutfitCartStatusMessage("Item added successfully.");
     setOutfitCartErrorMessage("");
+    setOutfitCartGenerationMessage(null);
+    setIsGeneratingOutfitCart(false);
+    outfitCartGenerationRequestIdRef.current += 1;
     setOutfitDraft((current) => ({
       ...current,
       itemIds: [itemId, ...current.itemIds],
@@ -459,6 +566,9 @@ export default function App() {
 
   function removeItemFromOutfitDraft(itemId: number) {
     setOutfitCartStatusMessage("Item removed from outfit.");
+    setOutfitCartGenerationMessage(null);
+    setIsGeneratingOutfitCart(false);
+    outfitCartGenerationRequestIdRef.current += 1;
     setOutfitDraft((current) => ({
       ...current,
       itemIds: current.itemIds.filter((id) => id !== itemId),
@@ -476,6 +586,39 @@ export default function App() {
     setOutfitsCache((current) =>
       current.map((outfit) => (outfit.id === nextOutfit.id ? nextOutfit : outfit)),
     );
+  }
+
+  function updateCachedOutfitModeledWorkflow(outfitId: number, workflow: AiWorkflow) {
+    const outfitName = outfitsCache.find((outfit) => outfit.id === outfitId)?.name ?? `Outfit ${outfitId}`;
+
+    setOutfitsCache((current) =>
+      current.map((outfit) => (
+        outfit.id === outfitId ? { ...outfit, modeled_workflow: workflow } : outfit
+      )),
+    );
+
+    updateTrackedGenerationTask(workflow, outfitName);
+  }
+
+  function openGenerationResult(workflow: AiWorkflow) {
+    if (["item_clean", "modeled_item"].includes(workflow.kind)) {
+      const itemId = Number(workflow.metadata?.item_id);
+      navigateTo(itemId ? `/items/${itemId}` : "/closet");
+      return;
+    }
+
+    if (workflow.kind === "outfit_upload") {
+      navigateTo("/items/new/image");
+      return;
+    }
+
+    if (workflow.kind === "outfit_recommendation") {
+      navigateTo("/closet");
+      setIsOutfitCartOpen(true);
+      return;
+    }
+
+    navigateTo("/outfits");
   }
 
   function removeCachedOutfit(outfitId: number) {
@@ -518,19 +661,16 @@ export default function App() {
         itemIds: outfitDraft.itemIds,
         notes: outfitDraft.notes.trim() || undefined,
         tags: tags.length > 0 ? tags : undefined,
+        recommendationOptionId: outfitDraft.recommendationOptionId,
       });
 
       if (hasLoadedOutfits) {
         upsertCachedOutfit(createdOutfit);
       }
 
-      setOutfitDraft((current) => ({
-        ...current,
-        itemIds: [],
-        notes: "",
-        tagInput: "",
-      }));
+      setOutfitDraft(emptyOutfitDraft());
       setOutfitCartName("");
+      setOutfitCartGenerationMessage(null);
       setIsOutfitCartOpen(false);
       setIsOutfitCreatedDialogOpen(true);
       setOutfitCartStatusMessage("Outfit created.");
@@ -540,6 +680,139 @@ export default function App() {
       );
     } finally {
       setIsCreatingOutfitFromCart(false);
+    }
+  }
+
+  async function handleClearOutfitCart() {
+    if (outfitDraft.itemIds.length === 0 && !outfitCartName.trim() && !outfitDraft.tagInput.trim() && !outfitDraft.notes.trim()) {
+      return;
+    }
+
+    setIsClearingOutfitCart(true);
+    setOutfitCartErrorMessage("");
+    let feedbackError = false;
+
+    try {
+      if (outfitDraft.recommendationRunId && outfitDraft.recommendationOptionId) {
+        try {
+          await discardOutfitRecommendation({
+            runId: outfitDraft.recommendationRunId,
+            optionId: outfitDraft.recommendationOptionId,
+          });
+        } catch {
+          feedbackError = true;
+        }
+      }
+
+      setOutfitDraft(emptyOutfitDraft());
+      setOutfitCartName("");
+      setOutfitCartGenerationMessage(null);
+      setOutfitCartStatusMessage(
+        feedbackError
+          ? "Outfit cleared, but its AI feedback could not be saved."
+          : "Outfit cleared.",
+      );
+    } finally {
+      setIsClearingOutfitCart(false);
+    }
+  }
+
+  async function handleGenerateOutfitCart() {
+    if (!user) return;
+
+    const requestId = outfitCartGenerationRequestIdRef.current + 1;
+    const lockedItemIds = [...outfitDraft.itemIds];
+    const draftMetadata = {
+      name: outfitCartName.trim(),
+      tags: parseTagInput(outfitDraft.tagInput),
+      notes: outfitDraft.notes.trim(),
+    };
+    const prompt = outfitCartGenerationPrompt(outfitDraft, outfitCartName);
+    outfitCartGenerationRequestIdRef.current = requestId;
+    setIsGeneratingOutfitCart(true);
+    setOutfitCartGenerationMessage(null);
+    setOutfitCartErrorMessage("");
+
+    try {
+      let analysisStatus = await fetchWardrobeAnalysisStatus();
+      if (!analysisStatus.complete) {
+        analysisStatus = await startWardrobeAnalysis();
+        if (analysisStatus.workflow) trackGenerationTask(analysisStatus.workflow, "your closet");
+
+        while (!analysisStatus.complete) {
+          await waitForOutfitGenerationPoll(1400);
+          if (outfitCartGenerationRequestIdRef.current !== requestId) return;
+          analysisStatus = await fetchWardrobeAnalysisStatus();
+          if (analysisStatus.workflow) trackGenerationTask(analysisStatus.workflow, "your closet");
+          if (!analysisStatus.complete && !analysisStatus.workflow) {
+            throw new Error("Closet preparation stopped before it finished. Try the sparkle button again.");
+          }
+        }
+      }
+      if (analysisStatus.ready === 0) throw new Error("Add a photographed closet item before generating an outfit.");
+      if (outfitCartGenerationRequestIdRef.current !== requestId) return;
+
+      let result = await generateOutfitRecommendations({ prompt, lockedItemIds, draftMetadata });
+      if (result.workflow) trackGenerationTask(result.workflow, "your outfit");
+      while (["pending", "processing"].includes(result.status)) {
+        await waitForOutfitGenerationPoll(1200);
+        if (outfitCartGenerationRequestIdRef.current !== requestId) return;
+        result = await fetchOutfitRecommendation(result.id);
+        if (result.workflow) trackGenerationTask(result.workflow, "your outfit");
+      }
+      if (result.status !== "succeeded") {
+        throw new Error(result.error_message || "Unable to generate an outfit from this closet.");
+      }
+
+      const recommendation = result.recommendations[0];
+      if (!recommendation?.item_ids.length) throw new Error("The generator did not return any closet pieces.");
+
+      setOutfitCartName(recommendation.title || outfitCartName);
+      setOutfitDraft((current) => ({
+        ...current,
+        itemIds: recommendation.item_ids,
+        notes: recommendation.summary || current.notes,
+        recommendationRunId: result.id,
+        recommendationOptionId: recommendation.id,
+      }));
+
+      try {
+        const suggestion = await generateOutfitMetadataSuggestions({
+          itemIds: recommendation.item_ids,
+          name: draftMetadata.name || recommendation.title,
+          notes: draftMetadata.notes,
+          tags: draftMetadata.tags,
+        });
+        if (outfitCartGenerationRequestIdRef.current !== requestId) return;
+        setOutfitCartName(suggestion.name || recommendation.title || outfitCartName);
+        setOutfitDraft((current) => ({
+          ...current,
+          itemIds: recommendation.item_ids,
+          notes: suggestion.notes,
+          tagInput: formatTagInput(suggestion.tags),
+          recommendationRunId: result.id,
+          recommendationOptionId: recommendation.id,
+        }));
+        setOutfitCartGenerationMessage({
+          kind: "success",
+          text: "Outfit added to your cart with editable details.",
+        });
+      } catch {
+        setOutfitCartGenerationMessage({
+          kind: "success",
+          text: "Outfit added to your cart. You can edit its details before creating it.",
+        });
+      }
+    } catch (error) {
+      if (outfitCartGenerationRequestIdRef.current !== requestId) return;
+      setOutfitCartGenerationMessage({
+        kind: "error",
+        text: error instanceof Error ? error.message : "Unable to generate an outfit.",
+      });
+    } finally {
+      if (outfitCartGenerationRequestIdRef.current === requestId) {
+        setIsGeneratingOutfitCart(false);
+      }
     }
   }
 
@@ -572,7 +845,7 @@ export default function App() {
   let pageContent;
 
   if ((route.kind === "home" || isLoggedOutProtectedRoute) && isLoading) {
-    return <div className="min-h-screen bg-background" />;
+    return <div className={`min-h-screen ${route.kind === "magazine-reader" ? "bg-[#191714]" : "bg-background"}`} />;
   }
 
   if ((!user && route.kind === "home") || (isLoggedOutProtectedRoute && !isLoading)) {
@@ -621,7 +894,9 @@ export default function App() {
         userId={targetUserId}
         initialMode={route.mode}
         initialUser={targetUser}
+        initialOutfitUploadIds={route.mode === "image" ? resumableOutfitUploadIds : []}
         onBack={() => navigateTo("/closet")}
+        onGenerationTaskStarted={trackGenerationTask}
         onItemsCreated={(nextItems) => {
           setUser((current) => {
             if (!current || current.id !== targetUserId || nextItems.length === 0) {
@@ -652,9 +927,13 @@ export default function App() {
     pageContent = (
       <ItemDetailPage
         brandSuggestions={closetSuggestions.brandSuggestions}
+        backgroundCleanWorkflow={selectedItemCleanWorkflow}
+        backgroundModeledWorkflow={selectedItemModeledWorkflow}
+        canUseModeledPreview={Boolean(user?.model_reference_photo_attached && user.model_reference_consent_at)}
         itemId={route.itemId}
         initialItem={selectedItem}
         onBack={() => navigateTo("/closet")}
+        onGenerationTaskStarted={trackGenerationTask}
         tagSuggestions={closetSuggestions.tagSuggestions}
         onItemSaved={(nextItem) => {
           setUser((current) => updateUserItem(current, nextItem));
@@ -671,62 +950,57 @@ export default function App() {
         }}
       />
     );
-  } else if (route.kind === "outfits") {
+  } else if (route.kind === "outfits" || route.kind === "magazines") {
     pageContent = user ? (
       <MyOutfitsPage
+        pageView={route.kind}
         isLoading={isLoadingOutfits || (!hasLoadedOutfits && !outfitsErrorMessage)}
         loadErrorMessage={outfitsErrorMessage}
         onOutfitDeleted={removeCachedOutfit}
-        onOutfitGenerated={upsertCachedOutfit}
+        onOutfitModeledWorkflowUpdated={updateCachedOutfitModeledWorkflow}
         onOutfitUpdated={replaceCachedOutfit}
         outfits={outfitsCache}
+        canUseModeledPreview={Boolean(user.model_reference_photo_attached && user.model_reference_consent_at)}
         user={user}
       />
     ) : null;
+  } else if (route.kind === "decorations") {
+    pageContent = (
+      <MyDecorationsPage
+        onDecorationDeleted={(decorationId) => {
+          setOutfitsCache((current) => current.map((outfit) => ({
+            ...outfit,
+            decorations: outfit.decorations?.filter((placement) => placement.decoration_id !== decorationId),
+          })));
+        }}
+        onDecorationUpdated={(decoration) => {
+          setOutfitsCache((current) => current.map((outfit) => ({
+            ...outfit,
+            decorations: outfit.decorations?.map((placement) => (
+              placement.decoration_id === decoration.id
+                ? { ...placement, image_url: decoration.image_url, name: decoration.name }
+                : placement
+            )),
+          })));
+        }}
+      />
+    );
+  } else if (route.kind === "magazine-editor") {
+    pageContent = <MagazineEditorPage magazineId={route.magazineId} />;
+  } else if (route.kind === "magazine-reader") {
+    pageContent = <MagazineReaderPage magazineId={route.magazineId} />;
   } else {
     pageContent = (
-      <div className="max-w-7xl mx-auto px-6 py-12">
-        <div className="mb-8 flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
-          <div>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
-            >
-              <PrimitiveText
-                as="h1"
-                variant="display"
-                font="serif"
-                className="mb-2 tracking-tight"
-                style={{
-                  fontSize: "clamp(2.5rem, 5vw, 4rem)",
-                  lineHeight: "1",
-                }}
-              >
-                {closetTitle}
-              </PrimitiveText>
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-            >
-              <PrimitiveText as="p" tone="muted" className="tracking-wide">
-                {isLoading
-                  ? "Loading items from your backend..."
-                  : `${clothingItems.length} ${clothingItems.length === 1 ? "item" : "items"}${
-                      preferredStyle ? ` · ${preferredStyle} style` : ""
-                    }`}
-              </PrimitiveText>
-            </motion.div>
-          </div>
-
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6 }}
-            className="flex items-center gap-3"
-          >
+      <CollectionPageShell>
+        <CollectionPageHeader
+          title={closetTitle}
+          description={isLoading
+            ? "Loading your closet…"
+            : `${clothingItems.length} ${clothingItems.length === 1 ? "item" : "items"}${
+                preferredStyle ? ` · ${preferredStyle} style` : ""
+              }`}
+          actions={(
+            <>
             <AddItemMenu
               disabled={!user}
               onSelectImage={() => {
@@ -768,36 +1042,23 @@ export default function App() {
                 </PrimitiveText>
               </PrimitiveButton>
             </span>
-          </motion.div>
-        </div>
+            </>
+          )}
+        />
 
         {errorMessage ? (
-          <div className="border border-destructive/20 bg-destructive/5 p-6">
-            <PrimitiveText as="p" variant="title" font="serif" className="mb-2">
-              The closet data could not be loaded.
-            </PrimitiveText>
-            <PrimitiveText as="p" tone="muted">
-              {errorMessage}. Make sure both dev servers are running through `./start.sh`.
-            </PrimitiveText>
-          </div>
+          <VisualStatePanel
+            icon={CircleAlert}
+            overline="Unable to load"
+            title="The closet data could not be loaded"
+            description={`${errorMessage}. Make sure both dev servers are running through ./start.sh.`}
+            tone="destructive"
+          />
         ) : isLoading ? (
-          <div className="grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="space-y-3 animate-pulse">
-                <div className="aspect-[3/4] bg-muted" />
-                <div className="h-6 w-2/3 bg-muted" />
-                <div className="h-4 w-1/2 bg-muted" />
-              </div>
-            ))}
-          </div>
+          <CollectionGridSkeleton count={4} label="Loading closet items" mediaClassName="aspect-[5/6] sm:aspect-[3/4]" variant="wardrobe" />
         ) : (
           <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
-              className="mb-8 space-y-5"
-            >
+            <CollectionToolbar className="space-y-5">
               <div className="space-y-3 min-[660px]:grid min-[660px]:gap-3 min-[660px]:space-y-0 min-[660px]:grid-cols-[minmax(0,3.2fr)_repeat(3,minmax(0,0.8fr))_minmax(0,1fr)] min-[660px]:items-start">
                 <div className="min-w-0 self-start">
                   <label htmlFor="closet-search" className="sr-only">
@@ -807,44 +1068,42 @@ export default function App() {
                     id="closet-search"
                     value={searchQuery}
                     onChange={setSearchQuery}
+                    onClear={clearAll}
+                    showClear={hasActiveFilters}
                     suggestions={closetSearchSuggestions}
                     onSelectSuggestion={(item) =>
                       setSearchQuery(formatClosetSearchSuggestionLabel(item))
                     }
                     onOpenItem={(item) => navigateTo(`/items/${item.id}`)}
-                    placeholder="Search by name or describe an item with tags"
-                    className="h-14 pl-10"
+                    placeholder="Search by name or describe an item"
                   />
                 </div>
 
                 <div className="flex gap-3 overflow-x-auto pb-1 min-[660px]:contents">
                   <div className="min-w-[8.5rem] shrink-0 min-[660px]:min-w-0 min-[660px]:shrink">
                     <ClosetFilterMenu
-                      label="Tags"
-                      options={groupedTagOptions.other}
-                      selectedValues={selectedOtherTags}
-                      onClear={() => clearSelectedValues(setSelectedOtherTags)}
-                      onToggleValue={(value) => toggleSelectedValue(value, setSelectedOtherTags)}
+                      label="Types"
+                      options={typeOptions}
+                      selectedValues={selectedTypes}
+                      onToggleValue={toggleType}
                     />
                   </div>
 
                   <div className="min-w-[8.5rem] shrink-0 min-[660px]:min-w-0 min-[660px]:shrink">
                     <ClosetFilterMenu
                       label="Colors"
-                      options={groupedTagOptions.colors}
+                      options={filterOptions.colors}
                       selectedValues={selectedColors}
-                      onClear={() => clearSelectedValues(setSelectedColors)}
-                      onToggleValue={(value) => toggleSelectedValue(value, setSelectedColors)}
+                      onToggleValue={toggleColor}
                     />
                   </div>
 
                   <div className="min-w-[8.5rem] shrink-0 min-[660px]:min-w-0 min-[660px]:shrink">
                     <ClosetFilterMenu
                       label="Brands"
-                      options={groupedTagOptions.brands}
+                      options={filterOptions.brands}
                       selectedValues={selectedBrands}
-                      onClear={() => clearSelectedValues(setSelectedBrands)}
-                      onToggleValue={(value) => toggleSelectedValue(value, setSelectedBrands)}
+                      onToggleValue={toggleBrand}
                     />
                   </div>
 
@@ -852,7 +1111,7 @@ export default function App() {
                     <label id="closet-sort-label" className="sr-only">
                       Sort closet items
                     </label>
-                    <PrimitiveSelect value={sortOption} onValueChange={(value) => setSortOption(value as ClosetSortOption)}>
+                    <PrimitiveSelect value={sortOption} onValueChange={setSortOption}>
                       <PrimitiveSelectTrigger
                         aria-labelledby="closet-sort-label"
                         className="h-14 w-full gap-1.5 bg-stone-200 px-2.5 hover:bg-stone-200"
@@ -869,32 +1128,11 @@ export default function App() {
                 </div>
               </div>
 
-              {hasActiveFilters ? (
-                <div className="flex items-center justify-between gap-4 border border-border bg-card px-4 py-3">
-                  <PrimitiveText as="p" tone="muted">
-                    Refine your closet with free-text search, tag filters, and sorting.
-                  </PrimitiveText>
-                  <PrimitiveButton
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setSearchQuery("");
-                      setSelectedOtherTags([]);
-                      setSelectedColors([]);
-                      setSelectedBrands([]);
-                      setSortOption("name-asc");
-                    }}
-                  >
-                    Clear filters
-                  </PrimitiveButton>
-                </div>
-              ) : null}
-
-            </motion.div>
+            </CollectionToolbar>
 
             {user && filteredClothingItems.length > 0 ? (
-              <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-6 sm:gap-y-12 lg:grid-cols-4">
-                {filteredClothingItems.map((item) => (
+              <CollectionGrid variant="wardrobe">
+                {visibleClothingItems.map((item) => (
                   <ClothingCard
                     key={item.id}
                     {...item}
@@ -904,7 +1142,7 @@ export default function App() {
                     onRemoveFromOutfit={removeItemFromOutfitDraft}
                   />
                 ))}
-              </div>
+              </CollectionGrid>
             ) : user ? (
               <ClosetEmptyState
                 hasActiveFilters={hasActiveFilters}
@@ -922,9 +1160,16 @@ export default function App() {
             ) : (
               <ClosetEmptyState hasActiveFilters={false} />
             )}
+            {user && filteredClothingItems.length > 0 ? (
+              <InfiniteCollectionSentinel
+                hasMore={hasMoreClothingItems}
+                label="Loading more closet items…"
+                sentinelRef={clothingItemsSentinelRef}
+              />
+            ) : null}
           </>
         )}
-      </div>
+      </CollectionPageShell>
     );
   }
 
@@ -938,11 +1183,15 @@ export default function App() {
           Skip to main content
         </a>
         <main id="main-content" className="flex flex-1 flex-col">
-          {pageContent}
+          <Suspense fallback={<RouteLoadingState />}>{pageContent}</Suspense>
         </main>
         <SiteFooter />
       </div>
     );
+  }
+
+  if (route.kind === "magazine-reader" && user) {
+    return <Suspense fallback={<RouteLoadingState />}>{pageContent}</Suspense>;
   }
 
   return (
@@ -954,21 +1203,31 @@ export default function App() {
         Skip to main content
       </a>
 
-      <SiteHeader route={route} user={user} onSignOut={() => void handleLogout()} />
+      <SiteHeader
+        route={route}
+        user={user}
+        onSignOut={() => void handleLogout()}
+        onUserUpdated={setUser}
+      />
 
       <main
         id="main-content"
         className={`${isPublicInfoRoute(route) ? "" : "flex-1"} ${route.kind === "home" ? "flex" : ""}`}
       >
-        {pageContent}
+        <Suspense fallback={<RouteLoadingState />}>{pageContent}</Suspense>
       </main>
 
       <OutfitCartSheet
+        generationMessage={outfitCartGenerationMessage}
         createErrorMessage={outfitCartErrorMessage}
+        isGeneratingOutfit={isGeneratingOutfitCart}
+        isClearingOutfit={isClearingOutfitCart}
         isCreating={isCreatingOutfitFromCart}
         isOpen={isOutfitCartOpen}
         items={outfitDraftItems}
         notes={outfitDraft.notes}
+        onGenerateOutfit={() => void handleGenerateOutfitCart()}
+        onClearOutfit={() => void handleClearOutfitCart()}
         onCreateOutfit={() => void handleCreateOutfitFromCart()}
         onNotesChange={(value) =>
           setOutfitDraft((current) => ({
@@ -1045,6 +1304,13 @@ export default function App() {
           </motion.div>
         ) : null}
       </AnimatePresence>
+
+      <GenerationTaskToasts
+        tasks={Object.values(generationTasks)}
+        onCancel={(workflowId) => void cancelGenerationTask(workflowId)}
+        onDismiss={dismissGenerationTask}
+        onOpen={openGenerationResult}
+      />
 
       <SiteFooter />
     </div>

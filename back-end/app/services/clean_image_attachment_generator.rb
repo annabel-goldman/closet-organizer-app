@@ -32,6 +32,16 @@ class CleanImageAttachmentGenerator
       metadata_context: metadata_context
     )
     generated_tempfile = temporary_files.track(generated.fetch(:tempfile))
+    original_version = record.image_versions.find_by(variant_kind: "original")
+    generated_version = WardrobeImageVersionPublisher.call(
+      record: record,
+      variant_kind: "generated",
+      source: generated_tempfile,
+      parent: original_version,
+      provider: generated.fetch(:provider),
+      model: generated.fetch(:model),
+      metadata: { generated_at: Time.current.iso8601 }
+    )
     filename_root = File.basename(generated.fetch(:filename).to_s, ".*").presence || "item-clean"
     processed = CleanImageBackgroundRemover.call(
       generated_tempfile,
@@ -40,11 +50,16 @@ class CleanImageAttachmentGenerator
     )
     processed_tempfile = temporary_files.track(processed.fetch(:tempfile))
 
-    record.cleaned_photo.attach(
-      io: processed_tempfile,
-      filename: processed.fetch(:filename),
-      content_type: processed.fetch(:content_type)
+    transparent_version = WardrobeImageVersionPublisher.call(
+      record: record,
+      variant_kind: "transparent",
+      source: processed_tempfile,
+      parent: generated_version,
+      provider: generated.fetch(:provider),
+      model: generated.fetch(:model),
+      metadata: { background_removed_at: Time.current.iso8601 }
     )
+    record.cleaned_photo.attach(transparent_version.image.blob)
     record.update!(
       clean_image_status: :succeeded,
       clean_image_error_message: nil,

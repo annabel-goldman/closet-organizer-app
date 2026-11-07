@@ -59,31 +59,7 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
       ]
     }
 
-    with_crop_pipeline_stubs(
-      detector_response: detector_response,
-      refinement_response: {
-        refined_box: {
-          x: 0.14,
-          y: 0.1,
-          width: 0.32,
-          height: 0.39
-        },
-        crop_confidence: 0.87,
-        notes: "Tightened around the shirt."
-      },
-      verification_response: {
-        accepted: true,
-        quality_score: 0.91,
-        issues: [],
-        notes: "Verified for saving.",
-        final_box: {
-          x: 0.15,
-          y: 0.11,
-          width: 0.3,
-          height: 0.37
-        }
-      }
-    ) do
+    with_detector_stub(detector_response) do
       assert_difference("OutfitUpload.count", 1) do
         assert_enqueued_jobs 1, only: OutfitUploadAnalysisJob do
           post outfit_uploads_url, params: {
@@ -97,6 +73,10 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
 
       assert_response :created
       assert_equal "pending", response_json["status"]
+      assert_equal "outfit_upload", response_json.dig("ai_workflow", "kind")
+      assert_equal response_json["id"], response_json.dig("ai_workflow", "metadata", "upload_id")
+      assert_equal "item-photo.png", response_json.dig("ai_workflow", "metadata", "upload_name")
+      assert_equal %w[detect], response_json.dig("ai_workflow", "stages").map { |stage| stage.fetch("key") }
       assert_nil response_json["vision_model"]
       assert_equal [], response_json["detections"]
       assert_match %r{/rails/active_storage/}, response_json["source_photo_url"]
@@ -116,13 +96,13 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
       assert_equal "shirt", response_json["detections"].first["category"]
       assert_not response_json["detections"].first.key?("crop_status")
       assert_equal 0.12, response_json["detections"].first["coarse_box"]["x"]
-      assert_equal 0.14, response_json["detections"].first["refined_box"]["x"]
-      assert_equal 0.15, response_json["detections"].first["final_box"]["x"]
+      assert_nil response_json["detections"].first["refined_box"]
+      assert_nil response_json["detections"].first["final_box"]
     end
   end
 
   test "returns a failed upload payload after async detection raises an error" do
-    with_crop_pipeline_stubs(detector_response: ->(_upload) { raise "OPENROUTER_API_KEY is not configured." }) do
+    with_detector_stub(->(_upload) { raise "OPENROUTER_API_KEY is not configured." }) do
       post outfit_uploads_url, params: {
         outfit_upload: {
           user_id: @user.id,
@@ -146,6 +126,65 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
     assert_equal "failed", response_json["status"]
     assert_equal "OPENROUTER_API_KEY is not configured.", response_json["error_message"]
     assert_equal [], response_json["detections"]
+  end
+
+  test "can cancel queued outfit-photo detection" do
+    post outfit_uploads_url, params: {
+      outfit_upload: {
+        user_id: @user.id,
+        source_photo: item_photo_upload
+      }
+    }, headers: auth_headers(@user)
+
+    assert_response :created
+    upload_id = response_json.fetch("id")
+    workflow_id = response_json.dig("ai_workflow", "id")
+
+    post cancel_ai_workflow_url(workflow_id), headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal "cancelled", response_json["status"]
+    perform_enqueued_jobs only: OutfitUploadAnalysisJob
+
+    get outfit_upload_url(upload_id), headers: auth_headers(@user), as: :json
+    assert_response :success
+    assert_equal "cancelled", response_json["status"]
+    assert_equal [], response_json["detections"]
+  end
+
+  test "a cancelled outfit-photo workflow discards a late analyzer failure" do
+    post outfit_uploads_url, params: {
+      outfit_upload: {
+        user_id: @user.id,
+        source_photo: item_photo_upload
+      }
+    }, headers: auth_headers(@user)
+
+    assert_response :created
+    upload_id = response_json.fetch("id")
+    workflow_id = response_json.dig("ai_workflow", "id")
+
+    analyzer = lambda do |upload|
+      AiWorkflow.find(workflow_id).cancel!
+      upload.update!(status: :failed, error_message: "Late provider failure")
+      raise "Late provider failure"
+    end
+
+    original_analyzer = OutfitUploadAnalyzer.method(:call)
+    OutfitUploadAnalyzer.singleton_class.send(:define_method, :call, analyzer)
+
+    begin
+      perform_enqueued_jobs only: OutfitUploadAnalysisJob
+    ensure
+      OutfitUploadAnalyzer.singleton_class.send(:define_method, :call, original_analyzer)
+    end
+
+    get outfit_upload_url(upload_id), headers: auth_headers(@user), as: :json
+
+    assert_response :success
+    assert_equal "cancelled", response_json["status"]
+    assert_nil response_json["error_message"]
+    assert_equal "cancelled", AiWorkflow.find(workflow_id).status
   end
 
   test "can fetch an existing outfit upload" do
@@ -194,91 +233,7 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
     assert_equal 0.26, response_json["detections"].first["final_box"]["width"]
   end
 
-  test "retries refinement when the first crop is rejected" do
-    detector_response = {
-      provider: "openrouter",
-      vision_model: "openai/gpt-4.1-mini",
-      raw_response: { "id" => "resp_retry" },
-      items: [
-        {
-          category: "sweatshirt",
-          confidence: 0.9,
-          suggested_name: "Gray Crewneck Sweatshirt",
-          coarse_box: {
-            x: 0.1,
-            y: 0.1,
-            width: 0.5,
-            height: 0.5
-          },
-          single_item_visible: true,
-          details: {
-            dominant_color: "gray",
-            material_guess: "cotton",
-            style_guess: "casual",
-            notes: "Relaxed fit sweatshirt."
-          }
-        }
-      ]
-    }
-
-    refinement_responses = [
-      {
-        refined_box: { x: 0.14, y: 0.12, width: 0.24, height: 0.2 },
-        crop_confidence: 0.5,
-        notes: "First attempt."
-      },
-      {
-        refined_box: { x: 0.1, y: 0.11, width: 0.38, height: 0.4 },
-        crop_confidence: 0.84,
-        notes: "Second attempt widened the crop."
-      }
-    ]
-    verification_responses = [
-      {
-        accepted: false,
-        quality_score: 0.41,
-        issues: [ "cut_off_item" ],
-        notes: "Sleeve is cropped out.",
-        final_box: { x: 0.14, y: 0.12, width: 0.24, height: 0.2 }
-      },
-      {
-        accepted: true,
-        quality_score: 0.9,
-        issues: [],
-        notes: "Verified after retry.",
-        final_box: { x: 0.11, y: 0.11, width: 0.36, height: 0.39 }
-      }
-    ]
-
-    with_env("OUTFIT_CROP_CYCLE_LIMIT" => "2") do
-      with_crop_pipeline_stubs(
-        detector_response: detector_response,
-        refinement_response: ->(_detection) { refinement_responses.shift },
-        verification_response: ->(_detection) { verification_responses.shift }
-      ) do
-        post outfit_uploads_url, params: {
-          outfit_upload: {
-            user_id: @user.id,
-            source_photo: item_photo_upload
-          }
-        }, headers: auth_headers(@user)
-
-        assert_response :created
-        upload_id = response_json["id"]
-
-        perform_enqueued_jobs only: OutfitUploadAnalysisJob
-
-        get outfit_upload_url(upload_id), headers: auth_headers(@user), as: :json
-
-        assert_response :success
-        detection = response_json["detections"].first
-        assert_not detection.key?("crop_status")
-        assert_equal 0.11, detection["final_box"]["x"]
-      end
-    end
-  end
-
-  test "can generate a clean image for an outfit detection" do
+  test "can persist generated and transparent versions for an outfit detection" do
     upload = OutfitUpload.new(user: @user)
     upload.source_photo.attach(item_photo_upload)
     upload.status = :succeeded
@@ -312,7 +267,7 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
     captured = {}
 
     with_image_cleaner_stub(capture: captured) do
-      post generate_clean_image_outfit_detection_url(detection), params: {
+      post generate_image_outfit_detection_url(detection), params: {
         ai_context: {
           name: "Blue Denim Jacket",
           brand: "Acme Atelier",
@@ -324,12 +279,42 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     detection.reload
-    assert_predicate detection.cleaned_photo, :attached?
+    assert_not detection.cleaned_photo.attached?
+    assert_equal %w[original generated], detection.image_versions.in_display_order.pluck(:variant_kind)
+    assert_predicate detection.image_versions.find_by!(variant_kind: "generated"), :selected?
+    assert_nil response_json["transparent_image_url"]
+    assert_match %r{/rails/active_storage/}, response_json["generated_image_url"]
     assert_equal "succeeded", response_json["clean_image_status"]
-    assert_match %r{/rails/active_storage/}, response_json["cleaned_image_url"]
     assert_equal "Blue Denim Jacket", captured.dig(:metadata_context, :name)
     assert_equal "Acme Atelier", captured.dig(:metadata_context, :brand)
     assert_equal 1, captured[:reference_photos].size
+
+    post remove_image_background_outfit_detection_url(detection), headers: auth_headers(@user)
+
+    assert_response :success
+    detection.reload
+    assert_predicate detection.cleaned_photo, :attached?
+    assert_equal %w[original generated transparent], detection.image_versions.in_display_order.pluck(:variant_kind)
+    assert_predicate detection.image_versions.find_by!(variant_kind: "transparent"), :selected?
+    assert_match %r{/rails/active_storage/}, response_json["transparent_image_url"]
+
+    post clothing_items_url, params: {
+      clothing_item: {
+        name: "Blue Denim Jacket",
+        category: "jacket",
+        size: "medium",
+        tags: [ "blue", "denim", "jacket" ],
+        source_outfit_detection_id: detection.id
+      }
+    }, headers: auth_headers(@user)
+
+    assert_response :created
+    created_item = ClothingItem.order(:created_at).last
+    assert_equal %w[original generated transparent], created_item.image_versions.in_display_order.pluck(:variant_kind)
+    assert_predicate created_item.image_versions.find_by!(variant_kind: "transparent"), :selected?
+    assert_match %r{/rails/active_storage/}, response_json["original_image_url"]
+    assert_match %r{/rails/active_storage/}, response_json["generated_image_url"]
+    assert_match %r{/rails/active_storage/}, response_json["transparent_image_url"]
   end
 
   test "can generate metadata suggestions for an outfit detection" do
@@ -389,50 +374,34 @@ class OutfitUploadsFlowTest < ActionDispatch::IntegrationTest
 
   private
 
-  def with_crop_pipeline_stubs(detector_response:, refinement_response: nil, verification_response: nil)
-    detector_class = OutfitPhotoDetector.singleton_class
-    refiner_class = OutfitCropRefiner.singleton_class
-    verifier_class = OutfitCropVerifier.singleton_class
-    original_detector = OutfitPhotoDetector.method(:call)
-    original_refiner = OutfitCropRefiner.method(:call)
-    original_verifier = OutfitCropVerifier.method(:call)
-    invoke_response = lambda do |callable, detection, kwargs = {}|
-      parameters = callable.parameters
-      accepts_keywords = parameters.any? { |kind, _| %i[key keyreq keyrest].include?(kind) }
-      accepts_second_positional = parameters.count { |kind, _| %i[opt req rest].include?(kind) } > 1
+  def single_item_detector_response
+    {
+      provider: "openrouter",
+      vision_model: "openai/gpt-4.1-mini",
+      raw_response: { "id" => "resp_single" },
+      items: [
+        {
+          category: "shirt",
+          confidence: 0.92,
+          suggested_name: "White Button-Up Shirt",
+          coarse_box: { x: 0.12, y: 0.08, width: 0.38, height: 0.42 },
+          details: { dominant_color: "white" }
+        }
+      ]
+    }
+  end
 
-      if accepts_keywords && kwargs.present?
-        callable.call(detection, **kwargs)
-      elsif accepts_second_positional && kwargs.present?
-        callable.call(detection, kwargs)
-      else
-        callable.call(detection)
-      end
-    end
+  def with_detector_stub(detector_response)
+    detector_class = OutfitPhotoDetector.singleton_class
+    original_detector = OutfitPhotoDetector.method(:call)
 
     detector_class.send(:define_method, :call) do |upload|
       detector_response.respond_to?(:call) ? detector_response.call(upload) : detector_response
     end
 
-    refiner_class.send(:define_method, :call) do |*args, **kwargs|
-      _upload, detection = args
-      if refinement_response.respond_to?(:call)
-        invoke_response.call(refinement_response, detection, kwargs)
-      else
-        refinement_response
-      end
-    end if refinement_response
-
-    verifier_class.send(:define_method, :call) do |*args, **_kwargs|
-      _upload, detection = args
-      verification_response.respond_to?(:call) ? invoke_response.call(verification_response, detection) : verification_response
-    end if verification_response
-
     yield
   ensure
     detector_class.send(:define_method, :call, original_detector)
-    refiner_class.send(:define_method, :call, original_refiner)
-    verifier_class.send(:define_method, :call, original_verifier)
   end
 
   def item_photo_upload

@@ -1,12 +1,13 @@
-import { motion } from "motion/react";
-import { Check, LoaderCircle, Plus, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Check, Plus, Shirt, X } from "lucide-react";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
 import { PrimitiveText } from "./primitives/PrimitiveText";
 import {
-  buildItemPreviewMetadata,
-  formatTagLabel,
-} from "../lib/closet";
+  CollectionCard,
+  CollectionCardHoverActions,
+  CollectionCardMedia,
+  CollectionCardTitleOverlay,
+  CollectionImage,
+} from "./shared/CollectionCard";
 
 interface ClothingCardProps {
   id: number;
@@ -22,144 +23,63 @@ interface ClothingCardProps {
 export function ClothingCard({
   id,
   name,
-  tags,
   image_url,
   isInOutfit,
   onSelect,
   onAddToOutfit,
   onRemoveFromOutfit,
 }: ClothingCardProps) {
-  const [isHovered, setIsHovered] = useState(false);
-  const [isImageLoading, setIsImageLoading] = useState(Boolean(image_url));
-  const itemMetadata = buildItemPreviewMetadata(tags.slice(1));
   const handleSelect = () => onSelect?.(id);
 
-  useEffect(() => {
-    setIsImageLoading(Boolean(image_url));
-  }, [image_url]);
-
   return (
-    <div
-      className="group relative cursor-pointer"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onClick={handleSelect}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          handleSelect();
-        }
-      }}
-      role="button"
-      tabIndex={0}
-    >
-      <div className="relative overflow-hidden bg-muted aspect-[5/6] sm:aspect-[3/4]">
-        {isInOutfit ? (
-          <div className="absolute top-3 right-3 z-30 rounded-full bg-foreground p-1 text-background">
-            <Check className="w-3 h-3" />
-          </div>
-        ) : null}
-        {image_url ? (
-          <>
-            {isImageLoading ? (
-              <div
-                className="absolute inset-0 animate-pulse bg-gradient-to-br from-stone-300 via-neutral-200 to-stone-300"
-                aria-hidden="true"
-              />
-            ) : null}
-            <img
-              src={image_url}
-              alt={name}
-              loading="lazy"
-              decoding="async"
-              onLoad={() => setIsImageLoading(false)}
-              onError={() => setIsImageLoading(false)}
-              className={`w-full h-full object-cover transition-[opacity,transform] duration-700 ease-out ${
-                isImageLoading ? "opacity-0" : "opacity-100"
-              }`}
-              style={{
-                transform: isHovered ? "scale(1.08)" : "scale(1)",
+    <CollectionCard className="group">
+      <CollectionCardMedia className="aspect-[5/6] sm:aspect-[3/4]">
+          {isInOutfit ? (
+            <div className="absolute left-3 top-3 z-20 rounded-full bg-foreground p-1.5 text-background">
+              <Check className="h-3 w-3" aria-hidden="true" />
+            </div>
+          ) : null}
+          <CollectionImage
+            src={image_url}
+            alt={name}
+            fit="contain"
+            trimEmptySpace
+            empty={(
+              <div className="flex h-full w-full flex-col items-center justify-center bg-stone-100 px-6 text-center text-muted-foreground">
+                <Shirt className="mb-3 h-10 w-10 stroke-[1.25]" aria-hidden="true" />
+                <PrimitiveText as="span" variant="overline" tone="muted">
+                  Closet item
+                </PrimitiveText>
+              </div>
+            )}
+          />
+          <CollectionCardTitleOverlay title={name} />
+          <button
+            type="button"
+            className="absolute inset-0 z-10 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
+            onClick={handleSelect}
+            aria-label={`Open ${name}`}
+          />
+          <CollectionCardHoverActions>
+            <PrimitiveButton
+              type="button"
+              variant={isInOutfit ? "outline" : "default"}
+              size="icon"
+              onClick={(event) => {
+                event.stopPropagation();
+                if (isInOutfit) {
+                  onRemoveFromOutfit?.(id);
+                } else {
+                  onAddToOutfit?.(id);
+                }
               }}
-            />
-          </>
-        ) : (
-          <div
-            className="h-full w-full p-6 flex flex-col justify-end bg-gradient-to-br from-stone-100 via-neutral-50 to-stone-200 text-stone-700 transition-transform duration-700 ease-out"
-            style={{
-              transform: isHovered ? "scale(1.03)" : "scale(1)",
-            }}
-          >
-            <div className="space-y-2">
-              {tags[0] && (
-                <PrimitiveText as="p" variant="overline">
-                  {formatTagLabel(tags[0])}
-                </PrimitiveText>
-              )}
-              {itemMetadata && (
-                <PrimitiveText as="p" variant="bodySm" className="opacity-70">
-                  {itemMetadata}
-                </PrimitiveText>
-              )}
-            </div>
-          </div>
-        )}
-
-        <motion.div
-          initial={{ opacity: image_url ? 0.88 : 0.12 }}
-          animate={{ opacity: isHovered ? 1 : image_url ? 0.88 : 0.12 }}
-          className="absolute inset-0 bg-gradient-to-t from-neutral-950/88 via-neutral-900/46 to-neutral-900/10"
-        />
-
-        {image_url && isImageLoading ? (
-          <div
-            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
-            aria-hidden="true"
-          >
-            <div className="flex h-14 w-14 items-center justify-center">
-              <LoaderCircle className="h-7 w-7 animate-spin text-white drop-shadow-sm" />
-            </div>
-          </div>
-        ) : null}
-
-        <div className="absolute inset-x-0 top-0 z-20 p-5 pt-8">
-          <PrimitiveText
-            as="h3"
-            variant="display"
-            font="serif"
-            className="max-w-[11ch] break-words"
-            style={{
-              color: image_url ? "white" : "rgba(68, 64, 60, 0.92)",
-              fontSize: "clamp(2rem, 4vw, 3rem)",
-              lineHeight: "0.95",
-            }}
-          >
-            {name}
-          </PrimitiveText>
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: isHovered ? 1 : 0, y: isHovered ? 0 : 20 }}
-          className="absolute bottom-4 left-4 right-4 z-20"
-        >
-          <PrimitiveButton
-            onClick={(event) => {
-              event.stopPropagation();
-              if (isInOutfit) {
-                onRemoveFromOutfit?.(id);
-              } else {
-                onAddToOutfit?.(id);
-              }
-            }}
-            className="h-auto w-full bg-white/90 px-4 py-2 backdrop-blur-sm hover:bg-white"
-          >
-            {isInOutfit ? <X className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-            <PrimitiveText as="span" variant="bodySm">
-              {isInOutfit ? "Remove from outfit" : "Add to Outfit"}
-            </PrimitiveText>
-          </PrimitiveButton>
-        </motion.div>
-      </div>
-    </div>
+              aria-label={isInOutfit ? `Remove ${name} from outfit` : `Add ${name} to outfit`}
+              className="border-background/60 shadow-sm"
+            >
+              {isInOutfit ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            </PrimitiveButton>
+          </CollectionCardHoverActions>
+      </CollectionCardMedia>
+    </CollectionCard>
   );
 }

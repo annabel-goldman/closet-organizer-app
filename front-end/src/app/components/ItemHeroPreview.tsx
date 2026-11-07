@@ -32,6 +32,7 @@ interface ItemHeroPreviewProps {
     getEditableFile: () => Promise<File | null>;
     imageActions?: ExpandedImageEditorImageActions;
     onApply: (file: File, context: ExpandedImageEditorApplyContext) => Promise<void> | void;
+    sourceKey: string;
   };
   isPreviewProcessing?: boolean;
   previewTopAction?: ReactNode;
@@ -250,6 +251,7 @@ export function ItemHeroPreview({
                 imageActions={previewEditor.imageActions}
                 isApplying={isApplyingEditedImage}
                 onApply={handleApplyEditedImage}
+                sourceKey={previewEditor.sourceKey}
                 title={title}
               />
             ) : (

@@ -11,7 +11,7 @@ function textFromChildren(children: React.ReactNode): string {
         return String(child);
       }
 
-      if (React.isValidElement(child)) {
+      if (React.isValidElement<{ children?: React.ReactNode }>(child)) {
         return textFromChildren(child.props.children);
       }
 

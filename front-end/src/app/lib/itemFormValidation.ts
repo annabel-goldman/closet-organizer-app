@@ -1,10 +1,11 @@
 import type { ClothingItem, ClothingItemFormValues } from "./closet.ts";
 import { COMMON_BRANDS } from "./commonBrands.ts";
+import { MAX_CLOTHING_ITEM_NAME } from "./inputLengthPolicy.ts";
 import { CANONICAL_CLOTHING_CATEGORIES } from "./wardrobeTaxonomy.ts";
 
 export type ClothingItemFormErrors = Partial<Record<keyof ClothingItemFormValues, string>>;
 
-const MAX_NAME_LENGTH = 80;
+const MAX_NAME_LENGTH = MAX_CLOTHING_ITEM_NAME;
 
 export function validateClothingItemForm(values: ClothingItemFormValues): ClothingItemFormErrors {
   const errors: ClothingItemFormErrors = {};

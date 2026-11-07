@@ -4,11 +4,18 @@ class ClothingItem < ApplicationRecord
   has_many :outfits, through: :outfit_items
   has_one_attached :photo
   has_one_attached :cleaned_photo
+  has_many :image_versions,
+    as: :imageable,
+    class_name: "WardrobeImageVersion",
+    dependent: :destroy,
+    inverse_of: :imageable
+  has_one :wardrobe_item_analysis, dependent: :destroy
   before_validation :apply_defaults, on: :create
   before_validation :normalize_category
   before_validation :normalize_tags
   before_validation :normalize_brand
   before_validation :normalize_style_notes
+  after_commit :schedule_wardrobe_analysis, on: %i[create update]
 
   enum :size, {
     xs: 0,
@@ -35,11 +42,20 @@ class ClothingItem < ApplicationRecord
   validate :photo_size_within_limit
 
   def display_photo_attachment
-    cleaned_photo.attached? ? cleaned_photo : photo
+    active_image_version&.image || (cleaned_photo.attached? ? cleaned_photo : photo)
   end
 
   def source_photo_for_cleaning
-    display_photo_attachment
+    original_image_version&.image || photo
+  end
+
+  def active_image_version
+    versions = ordered_image_versions
+    versions.find(&:selected?) || versions.last
+  end
+
+  def original_image_version
+    ordered_image_versions.find { |version| version.variant_kind == "original" }
   end
 
   def self.human_attribute_name(attribute, options = {})
@@ -49,6 +65,14 @@ class ClothingItem < ApplicationRecord
   end
 
   private
+
+  def ordered_image_versions
+    return image_versions.in_display_order.to_a unless association(:image_versions).loaded?
+
+    image_versions.sort_by do |version|
+      [ WardrobeImageVersion::KINDS.index(version.variant_kind) || WardrobeImageVersion::KINDS.length, version.id ]
+    end
+  end
 
   def photo_must_be_an_image
     return unless photo.attached?
@@ -87,5 +111,11 @@ class ClothingItem < ApplicationRecord
   def normalize_category
     normalized_category = category.to_s.strip.downcase.presence
     self.category = normalized_category == "bag" ? "accessory" : normalized_category
+  end
+
+  def schedule_wardrobe_analysis
+    WardrobeItemAnalysisScheduler.call(self)
+  rescue StandardError => error
+    Rails.logger.error("Unable to schedule wardrobe analysis for item #{id}: #{error.class}: #{error.message}")
   end
 end

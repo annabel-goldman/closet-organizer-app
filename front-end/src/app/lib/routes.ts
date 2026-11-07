@@ -1,4 +1,4 @@
-import { CreateItemMode } from "./closet";
+import type { CreateItemMode } from "./closet.ts";
 
 interface HomeRouteState {
   kind: "home";
@@ -32,6 +32,24 @@ interface OutfitsRouteState {
   kind: "outfits";
 }
 
+interface MagazinesRouteState {
+  kind: "magazines";
+}
+
+interface DecorationsRouteState {
+  kind: "decorations";
+}
+
+interface MagazineEditorRouteState {
+  kind: "magazine-editor";
+  magazineId: number | null;
+}
+
+interface MagazineReaderRouteState {
+  kind: "magazine-reader";
+  magazineId: number;
+}
+
 interface NotFoundRouteState {
   kind: "not-found";
 }
@@ -56,6 +74,10 @@ export type AppRoute =
   | UserRouteState
   | NewItemRouteState
   | OutfitsRouteState
+  | MagazinesRouteState
+  | DecorationsRouteState
+  | MagazineEditorRouteState
+  | MagazineReaderRouteState
   | AboutRouteState
   | PrivacyRouteState
   | TermsRouteState
@@ -71,6 +93,16 @@ export function isClosetRoute(route: AppRoute) {
 
 export function isOutfitRoute(route: AppRoute) {
   return route.kind === "outfits";
+}
+
+export function isMagazineRoute(route: AppRoute) {
+  return route.kind === "magazines"
+    || route.kind === "magazine-editor"
+    || route.kind === "magazine-reader";
+}
+
+export function isDecorationsRoute(route: AppRoute) {
+  return route.kind === "decorations";
 }
 
 export function isUsersRoute(route: AppRoute) {
@@ -107,6 +139,8 @@ export function getRouteFromLocation(
   const normalizedPath = pathname.replace(/\/+$/, "") || "/";
   const itemMatch = normalizedPath.match(/^\/items\/(\d+)$/);
   const userMatch = normalizedPath.match(/^\/users\/(\d+)$/);
+  const magazineEditorMatch = normalizedPath.match(/^\/magazines\/(\d+)\/edit$/);
+  const magazineReaderMatch = normalizedPath.match(/^\/magazines\/(\d+)$/);
   const query = new URLSearchParams(search);
 
   if (normalizedPath === "/items/new") {
@@ -128,7 +162,27 @@ export function getRouteFromLocation(
   }
 
   if (normalizedPath === "/outfits") {
-    return { kind: "outfits" };
+    return query.get("view") === "magazines" ? { kind: "magazines" } : { kind: "outfits" };
+  }
+
+  if (normalizedPath === "/magazines") {
+    return { kind: "magazines" };
+  }
+
+  if (normalizedPath === "/decorations") {
+    return { kind: "decorations" };
+  }
+
+  if (normalizedPath === "/magazines/new") {
+    return { kind: "magazine-editor", magazineId: null };
+  }
+
+  if (magazineEditorMatch) {
+    return { kind: "magazine-editor", magazineId: Number(magazineEditorMatch[1]) };
+  }
+
+  if (magazineReaderMatch) {
+    return { kind: "magazine-reader", magazineId: Number(magazineReaderMatch[1]) };
   }
 
   if (userMatch) {

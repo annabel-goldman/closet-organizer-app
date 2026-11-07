@@ -17,6 +17,7 @@ export function AccessRestrictedState({
     <div className="mx-auto max-w-4xl px-6 py-16">
       <VisualStatePanel
         icon={ShieldAlert}
+        headingAs="h1"
         tone="destructive"
         overline="403"
         title="You are not authorized to view this page."

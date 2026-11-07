@@ -63,6 +63,17 @@ class ImageVariantsFlowTest < ActionDispatch::IntegrationTest
     assert_equal "Acme", captured.dig(:metadata_context, :brand)
   end
 
+  test "can remove the background from a generated preview without replacing it" do
+    post transparent_preview_image_variants_url, params: {
+      image_variant: { source_photo: item_photo_upload }
+    }, headers: auth_headers(@user)
+
+    assert_response :success
+    assert_equal "image/png", response_json["content_type"]
+    assert_match(/no-background|clean/, response_json["filename"])
+    assert_match(/\Adata:image\/png;base64,/, response_json["data_url"])
+  end
+
   private
 
   def item_photo_upload

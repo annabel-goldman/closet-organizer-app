@@ -24,7 +24,17 @@ class SessionsController < ApplicationController
   def me
     return render_unauthorized unless logged_in?
 
-    render json: payloads.user(current_user)
+    clothing_items = current_user.clothing_items.includes(
+      { photo_attachment: :blob },
+      { cleaned_photo_attachment: :blob },
+      { image_versions: { image_attachment: :blob } }
+    ).order(:name).to_a
+
+    render json: payloads.user(
+      current_user,
+      include_model_references: true,
+      clothing_items: clothing_items
+    )
   end
 
   def destroy

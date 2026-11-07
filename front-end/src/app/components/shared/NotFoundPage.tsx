@@ -12,6 +12,7 @@ export function NotFoundPage({ signedIn }: NotFoundPageProps) {
     <div className="mx-auto max-w-4xl px-6 py-16">
       <VisualStatePanel
         icon={MapPinOff}
+        headingAs="h1"
         overline="404"
         title="We couldn't find that page."
         description="The link may be out of date, or the page may have been moved. Use the button below to return to a known page."

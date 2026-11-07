@@ -1,20 +1,27 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Plus, Search, X } from "lucide-react";
-import { ClothingItem, buildPlaceholderLabel } from "../lib/closet";
+import { Plus, X } from "lucide-react";
+import { ClothingItem, Decoration, OutfitDecoration, buildPlaceholderLabel } from "../lib/closet";
 import { OutfitCollageLayout, sortItemsByCollageLayer } from "../lib/outfitCollage";
+import { DecorationPickerPopover } from "./decorations/DecorationPickerPopover";
 import { PrimitiveButton } from "./primitives/PrimitiveButton";
+import { PrimitivePickerPopover } from "./primitives/PrimitivePickerPopover";
 import { PrimitiveText } from "./primitives/PrimitiveText";
-import { Input } from "./ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Popover, PopoverTrigger } from "./ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 interface OutfitCollageLayersPanelProps {
   availableItems: ClothingItem[];
+  decorations?: OutfitDecoration[];
   items: ClothingItem[];
   layouts: Record<number, OutfitCollageLayout>;
+  onAddDecoration?: (decoration: Decoration) => void;
   onAddItem: (itemId: number) => void;
+  onRemoveDecoration?: (decoration: OutfitDecoration) => void;
   onRemoveItem: (itemId: number) => void;
   onReorder: (orderedItemIds: number[]) => void;
+  onSelectDecoration?: (decorationId: number) => void;
   onSelectItem: (itemId: number) => void;
+  selectedDecorationId?: number | null;
   selectedItemId?: number | null;
 }
 
@@ -29,12 +36,17 @@ function itemSearchText(item: ClothingItem) {
 
 export function OutfitCollageLayersPanel({
   availableItems,
+  decorations = [],
   items,
   layouts,
+  onAddDecoration,
   onAddItem,
+  onRemoveDecoration,
   onRemoveItem,
   onReorder,
+  onSelectDecoration,
   onSelectItem,
+  selectedDecorationId = null,
   selectedItemId = null,
 }: OutfitCollageLayersPanelProps) {
   const orderedItems = useMemo(
@@ -56,11 +68,16 @@ export function OutfitCollageLayersPanel({
 
     return availableItems.filter((item) => itemSearchText(item).includes(normalizedAddItemSearchQuery));
   }, [availableItems, normalizedAddItemSearchQuery]);
+  const orderedDecorations = useMemo(
+    () => [...decorations].sort((left, right) => right.layer_order - left.layer_order || right.id - left.id),
+    [decorations],
+  );
 
   useEffect(() => {
     if (!draggingItemId) {
       return;
     }
+    const sourceItemId = draggingItemId;
 
     function handleWindowPointerMove(event: PointerEvent) {
       const hoveredElement = document.elementFromPoint(event.clientX, event.clientY);
@@ -83,7 +100,7 @@ export function OutfitCollageLayersPanel({
         return;
       }
 
-      reorderItems(draggingItemId, targetItemId);
+      reorderItems(sourceItemId, targetItemId);
       lastDropTargetIdRef.current = targetItemId;
     }
 
@@ -183,12 +200,46 @@ export function OutfitCollageLayersPanel({
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 border border-border bg-card/90 p-2 sm:gap-3 sm:p-3">
       <PrimitiveText as="p" variant="overline" tone="muted" className="text-[0.65rem] sm:text-[0.7rem]">
-        Items
+        Layers
       </PrimitiveText>
       <p id={keyboardHintId} className="sr-only">
         Press Enter or Space to select an item. Press Option plus Arrow Up or Arrow Down to reorder items.
       </p>
       <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+        {orderedDecorations.map((decoration) => {
+          const isSelected = selectedDecorationId === decoration.id;
+
+          return (
+            <button
+              key={`decoration-${decoration.id}`}
+              type="button"
+              data-layer-decoration-id={decoration.id}
+              onClick={() => onSelectDecoration?.(decoration.id)}
+              className={`group relative flex aspect-[3/4] w-full items-center justify-center overflow-hidden border bg-background p-2 transition-colors ${
+                isSelected ? "border-foreground shadow-[0_0_0_1px_rgba(17,17,17,0.18)]" : "border-border hover:bg-stone-50"
+              }`}
+              aria-label={`Select decoration ${decoration.name}`}
+              title={decoration.name}
+            >
+              <PrimitiveButton
+                type="button"
+                variant="outline"
+                size="icon"
+                className="absolute right-1.5 top-1.5 z-10 h-5.5 w-5.5 border-white/70 bg-white/85 text-stone-700 shadow-sm hover:bg-white"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onRemoveDecoration?.(decoration);
+                }}
+                aria-label={`Remove ${decoration.name} from outfit`}
+                title={`Remove ${decoration.name}`}
+              >
+                <X className="h-3 w-3" />
+              </PrimitiveButton>
+              <img src={decoration.image_url} alt="" className="h-full w-full object-contain" />
+            </button>
+          );
+        })}
         {orderedItems.map((item) => {
           const isSelected = selectedItemId === item.id;
 
@@ -245,55 +296,45 @@ export function OutfitCollageLayersPanel({
           );
         })}
       </div>
-      <Popover
-        open={isAddOpen}
-        onOpenChange={(open) => {
-          setIsAddOpen(open);
-          if (!open) {
-            setAddItemSearchQuery("");
-          }
-        }}
-      >
-        <PopoverTrigger asChild>
-          <PrimitiveButton
-            type="button"
-            variant="outline"
-            size="icon"
-            className="mt-auto h-8 w-8 self-center border-dashed"
-            disabled={availableItems.length === 0}
-            aria-label="Add item to outfit"
-            title="Add item"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </PrimitiveButton>
-        </PopoverTrigger>
-        <PopoverContent
-          side="right"
-          align="start"
-          sideOffset={12}
-          collisionPadding={{ top: 16, right: 16, bottom: 76, left: 16 }}
-          className="flex max-h-[24rem] w-[15.5rem] flex-col overflow-hidden border-border p-0 shadow-[0_18px_40px_rgba(15,23,42,0.16)]"
+      <div className="mt-auto flex items-center justify-center gap-2">
+        <Popover
+          open={isAddOpen}
+          onOpenChange={(open) => {
+            setIsAddOpen(open);
+            if (!open) {
+              setAddItemSearchQuery("");
+            }
+          }}
         >
-          <div className="shrink-0 space-y-2 border-b border-border px-3 py-2.5">
-            <PrimitiveText as="p" variant="overline" tone="muted" className="mb-1">
-              Add Item
-            </PrimitiveText>
-            <label className="relative block" htmlFor={addItemSearchId}>
-              <span className="sr-only">Search closet items to add</span>
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id={addItemSearchId}
-                value={addItemSearchQuery}
-                onChange={(event) => setAddItemSearchQuery(event.target.value)}
-                placeholder="Search closet"
-                className="h-8 pl-8 text-sm"
-                disabled={availableItems.length === 0}
-              />
-            </label>
-          </div>
-          <div
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3"
-            onWheel={(event) => event.stopPropagation()}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <PrimitiveButton
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 border-dashed"
+                  disabled={availableItems.length === 0}
+                  aria-label="Add item to outfit"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </PrimitiveButton>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={6}>Add item</TooltipContent>
+          </Tooltip>
+          <PrimitivePickerPopover
+            side="right"
+            align="start"
+            sideOffset={12}
+            collisionPadding={{ top: 16, right: 16, bottom: 76, left: 16 }}
+            title="Add Item"
+            searchId={addItemSearchId}
+            searchLabel="Search closet items to add"
+            searchPlaceholder="Search closet"
+            searchValue={addItemSearchQuery}
+            searchDisabled={availableItems.length === 0}
+            onSearchValueChange={setAddItemSearchQuery}
           >
             {availableItems.length === 0 ? (
               <div className="rounded-sm border border-dashed border-border p-4 text-sm text-muted-foreground">
@@ -306,20 +347,21 @@ export function OutfitCollageLayersPanel({
             ) : (
               <div className="grid grid-cols-3 gap-1.5">
                 {filteredAvailableItems.map((item) => (
-                  <button
+                  <PrimitiveButton
                     key={item.id}
                     type="button"
+                    variant="ghost"
                     onClick={() => {
                       onAddItem(item.id);
                       setIsAddOpen(false);
                     }}
-                    className="group text-left"
+                    className="group h-auto w-full items-stretch whitespace-normal p-0 text-left hover:bg-transparent"
                     aria-label={`Add ${item.name} to outfit`}
                     title={item.name}
                   >
-                    <div className="relative aspect-[3/4] overflow-hidden border border-border bg-background transition-colors group-hover:bg-stone-50">
+                    <div className="relative aspect-[3/4] w-full overflow-hidden border border-border bg-background transition-colors group-hover:bg-stone-50">
                       {item.image_url ? (
-                        <img src={item.image_url} alt="" className="h-full w-full object-cover" />
+                        <img src={item.image_url} alt="" className="h-full w-full object-cover" draggable={false} />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center">
                           <PrimitiveText as="span" variant="bodySm" tone="muted">
@@ -328,13 +370,21 @@ export function OutfitCollageLayersPanel({
                         </div>
                       )}
                     </div>
-                  </button>
+                  </PrimitiveButton>
                 ))}
               </div>
             )}
-          </div>
-        </PopoverContent>
-      </Popover>
+          </PrimitivePickerPopover>
+        </Popover>
+        {onAddDecoration ? (
+          <DecorationPickerPopover
+            side="right"
+            onSelect={onAddDecoration}
+            buttonLabel="Add decoration to flat lay"
+            buttonClassName="h-8 w-8 border-dashed"
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

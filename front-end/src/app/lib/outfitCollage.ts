@@ -178,8 +178,7 @@ export function resolveOutfitCollageLayouts(
   overrides: Record<number, OutfitCollageLayout> = {},
 ): Record<number, OutfitCollageLayout> {
   const defaults = buildDefaultOutfitCollageLayouts(items);
-
-  return Object.fromEntries(
+  const preferredLayouts = Object.fromEntries(
     items.map((item) => {
       const preferred = overrides[item.id] ?? item.collage_layout ?? defaults[item.id];
       return [
@@ -194,6 +193,11 @@ export function resolveOutfitCollageLayouts(
         },
       ];
     }),
+  );
+
+  return reorderCollageLayers(
+    preferredLayouts,
+    sortItemsByCollageLayer(items, preferredLayouts).map((item) => item.id),
   );
 }
 

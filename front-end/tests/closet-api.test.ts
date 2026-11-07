@@ -2,14 +2,289 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  generateOutfit,
+  cancelAiWorkflow,
+  createDecoration,
+  createOutfitDecoration,
+  createOutfitFolder,
+  createOutfitFolderDecoration,
+  discardOutfitRecommendation,
+  fetchDecorations,
+  deleteModeledPreview,
+  fetchOutfitFolder,
+  fetchOutfitFolders,
+  fetchWardrobeAnalysisStatus,
+  generateOutfitRecommendations,
+  generateClothingItemCleanImage,
+  generateOutfitDetectionImage,
+  generateMagazineMetadataSuggestions,
+  generateOutfitMetadataSuggestions,
   mergeMetadataSuggestion,
+  requestModeledOutfit,
+  removeOutfitDetectionImageBackground,
   resolveEditableImageFetchUrl,
+  saveModelReferences,
+  startWardrobeAnalysis,
+  updateModeledPreview,
+  updateOutfitFolder,
+  updateOutfitFolderDecoration,
+  updateDecoration,
+  updateOutfitDecoration,
 } from "../src/app/lib/closet.ts";
+
+test("outfit cart generator prepares embeddings and preserves selected anchor pieces", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ path: string; init?: RequestInit }> = [];
+  globalThis.fetch = async (input, init) => {
+    const path = String(input);
+    requests.push({ path, init });
+    if (path.endsWith("/outfit_recommendations")) {
+      return new Response(JSON.stringify({
+        brief: { summary: "Fall layers", preferred_colors: ["brown"] },
+        provider: "openrouter",
+        models: { brief: "test/brief", embedding: "test/embedding" },
+        recommendations: [{
+          id: "look-one",
+          title: "Orchard Walk",
+          summary: "Fall layers",
+          item_ids: [4],
+          items: [{ id: 4, user_id: 1, name: "Brown Jacket", size: "na", date: null, tags: [] }],
+          score: 0.9,
+          reasons: ["Matches brown"],
+        }],
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(JSON.stringify({
+      total: 12,
+      ready: init?.method === "POST" ? 0 : 12,
+      pending: 0,
+      processing: 0,
+      failed: 0,
+      stale: 0,
+      missing_image: 0,
+      complete: init?.method !== "POST",
+      workflow: null,
+    }), { status: init?.method === "POST" ? 202 : 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    await fetchWardrobeAnalysisStatus();
+    await startWardrobeAnalysis();
+    const result = await generateOutfitRecommendations({
+      prompt: "Brown fall layers",
+      lockedItemIds: [4],
+      draftMetadata: {
+        name: "Thanksgiving",
+        tags: ["warm", "family dinner"],
+        notes: "Comfortable enough for hosting.",
+      },
+    });
+
+    assert.deepEqual(requests.map((request) => request.path), [
+      "/api/wardrobe_item_analysis",
+      "/api/wardrobe_item_analysis",
+      "/api/outfit_recommendations",
+    ]);
+    assert.deepEqual(JSON.parse(String(requests[2].init?.body)), {
+      outfit_recommendation: {
+        prompt: "Brown fall layers",
+        locked_item_ids: [4],
+        draft_metadata: {
+          name: "Thanksgiving",
+          tags: ["warm", "family dinner"],
+          notes: "Comfortable enough for hosting.",
+        },
+      },
+    });
+    assert.equal(result.recommendations[0].items[0].name, "Brown Jacket");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("clearing an AI-generated cart records the rejected recommendation", async () => {
+  const originalFetch = globalThis.fetch;
+  let request: { path: string; init?: RequestInit } | null = null;
+  globalThis.fetch = async (input, init) => {
+    request = { path: String(input), init };
+    return new Response(JSON.stringify({ id: 8, event_type: "none" }), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    await discardOutfitRecommendation({ runId: 12, optionId: 27 });
+    assert.equal(request?.path, "/api/outfit_recommendations/12/discard");
+    assert.deepEqual(JSON.parse(String(request?.init?.body)), {
+      outfit_recommendation: { option_id: 27 },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 import { validateClothingItemForm } from "../src/app/lib/itemFormValidation.ts";
 import { normalizeCategory } from "../src/app/lib/wardrobeTaxonomy.ts";
 
-test("generateOutfit posts an optional occasion and preserves item visual descriptions", async () => {
+test("outfit folder APIs preserve magazine order and upload page-specific clip art", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ path: string; init?: RequestInit }> = [];
+  const folderPayload = {
+    id: 8,
+    user_id: 1,
+    name: "Paris Weekend",
+    occasion: "Paris · September",
+    notes: "Three days",
+    outfit_ids: [19, 12],
+    outfits: [],
+    decorations: [],
+  };
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ path: String(input), init });
+    if (String(input).endsWith("/decorations") && init?.method === "POST") {
+      return new Response(JSON.stringify({
+        id: 31,
+        outfit_folder_id: 8,
+        page_key: "cover",
+        image_url: "/rails/active_storage/blobs/proxy/clip-art",
+        x: 12,
+        y: 18,
+        width: 24,
+        rotation: 0,
+        layer_order: 0,
+      }), { status: 201, headers: { "Content-Type": "application/json" } });
+    }
+    if (String(input).includes("/decorations/31")) {
+      return new Response(JSON.stringify({
+        id: 31,
+        outfit_folder_id: 8,
+        page_key: "cover",
+        image_url: "/rails/active_storage/blobs/proxy/clip-art",
+        x: 42,
+        y: 18,
+        width: 24,
+        rotation: 0,
+        layer_order: 0,
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (init?.method === "POST") {
+      return new Response(JSON.stringify(folderPayload), { status: 201, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(JSON.stringify([folderPayload]), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const folder = await createOutfitFolder({
+      name: "Paris Weekend",
+      occasion: "Paris · September",
+      notes: "Three days",
+      outfitIds: [19, 12],
+    });
+    const folders = await fetchOutfitFolders();
+    const clipArt = new File(["clip"], "star.png", { type: "image/png" });
+    const decoration = await createOutfitFolderDecoration(folder.id, {
+      file: clipArt,
+      pageKey: "cover",
+      x: 12,
+      y: 18,
+      width: 24,
+    });
+    const movedDecoration = await updateOutfitFolderDecoration(folder.id, decoration.id, { x: 42 });
+
+    assert.deepEqual(folder.outfit_ids, [19, 12]);
+    assert.deepEqual(JSON.parse(String(requests[0].init?.body)), {
+      outfit_folder: {
+        name: "Paris Weekend",
+        occasion: "Paris · September",
+        notes: "Three days",
+        outfit_ids: [19, 12],
+      },
+    });
+    assert.ok(requests[2].init?.body instanceof FormData);
+    assert.equal((requests[2].init?.body as FormData).get("decoration[image]"), clipArt);
+    assert.equal((requests[2].init?.body as FormData).get("decoration[page_key]"), "cover");
+    assert.equal(movedDecoration.x, 42);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("decoration library and flatlay placement APIs keep assets reusable", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ path: string; init?: RequestInit }> = [];
+  globalThis.fetch = async (input, init) => {
+    const path = String(input);
+    requests.push({ path, init });
+    if (path === "/api/decorations" && !init?.method) {
+      return new Response(JSON.stringify([{ id: 7, user_id: 1, name: "Star", image_url: "/star.png" }]), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (path === "/api/decorations" && init?.method === "POST") {
+      return new Response(JSON.stringify({ id: 7, user_id: 1, name: "Star", image_url: "/star.png" }), { status: 201, headers: { "Content-Type": "application/json" } });
+    }
+    if (path === "/api/decorations/7") {
+      return new Response(JSON.stringify({ id: 7, user_id: 1, name: "Bright star", image_url: "/star.png" }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    const placement = { id: 9, outfit_id: 4, decoration_id: 7, name: "Star", image_url: "/star.png", x: init?.method === "PATCH" ? 40 : 35, y: 35, width: 20, rotation: 0, layer_order: 0 };
+    return new Response(JSON.stringify(placement), { status: init?.method === "POST" ? 201 : 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const file = new File(["png"], "star.png", { type: "image/png" });
+    await fetchDecorations();
+    await createDecoration({ file });
+    await updateDecoration(7, { name: "Bright star" });
+    await createOutfitDecoration(4, { decorationId: 7 });
+    await updateOutfitDecoration(4, 9, { x: 40 });
+
+    assert.deepEqual(requests.map((request) => request.path), [
+      "/api/decorations",
+      "/api/decorations",
+      "/api/decorations/7",
+      "/api/outfits/4/decorations",
+      "/api/outfits/4/decorations/9",
+    ]);
+    assert.ok(requests[1].init?.body instanceof FormData);
+    assert.equal((requests[1].init?.body as FormData).get("decoration[image]"), file);
+    assert.deepEqual(JSON.parse(String(requests[3].init?.body)), {
+      decoration: { decoration_id: 7 },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchOutfitFolder loads one independently routable magazine", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedPath = "";
+
+  globalThis.fetch = async (input) => {
+    requestedPath = String(input);
+    return new Response(JSON.stringify({
+      id: 8,
+      user_id: 1,
+      name: "Paris Weekend",
+      occasion: null,
+      notes: "Three days",
+      outfit_ids: [],
+      outfits: [],
+      decorations: [],
+      page_layouts: {
+        cover: { title: { text: "Paris", x: 8, y: 36, width: 84 } },
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const folder = await fetchOutfitFolder(8);
+    assert.equal(requestedPath, "/api/outfit_folders/8");
+    assert.equal(folder.name, "Paris Weekend");
+    assert.equal(folder.page_layouts.cover.title?.text, "Paris");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("updateOutfitFolder persists visual page layouts with the magazine draft", async () => {
   const originalFetch = globalThis.fetch;
   let requestedPath = "";
   let requestInit: RequestInit | undefined;
@@ -17,129 +292,522 @@ test("generateOutfit posts an optional occasion and preserves item visual descri
   globalThis.fetch = async (input, init) => {
     requestedPath = String(input);
     requestInit = init;
-
-    return new Response(
-      JSON.stringify({
-        id: 44,
-        user_id: 1,
-        name: "Dinner Look",
-        tags: ["dinner"],
-        notes: "Built from visual descriptions.",
-        item_ids: [7],
-        generation_id: 12,
-        generated_by_ai: true,
-        generated_item_ids: [7],
-        items: [
-          {
-            id: 7,
-            name: "Ivory Blouse",
-            category: "blouse",
-            brand: null,
-            style_notes: "Tuck into wide-leg trousers.",
-            size: "na",
-            date: null,
-            user_id: 1,
-            tags: ["ivory"],
-          },
-        ],
-      }),
-      {
-        status: 201,
-        headers: { "Content-Type": "application/json" },
+    return new Response(JSON.stringify({
+      id: 8,
+      user_id: 1,
+      name: "Paris Weekend",
+      notes: "Three days",
+      outfit_ids: [19],
+      outfits: [],
+      decorations: [],
+      page_layouts: {
+        "outfit:19": { image_mode: "flatlay", image: { x: 24, y: 18, width: 60 } },
       },
-    );
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
   };
 
   try {
-    const outfit = await generateOutfit("dinner");
+    await updateOutfitFolder(8, {
+      name: "Paris Weekend",
+      notes: "Three days",
+      outfitIds: [19],
+      pageLayouts: {
+        "outfit:19": { image_mode: "flatlay", image: { x: 24, y: 18, width: 60 } },
+      },
+    });
 
-    assert.equal(requestedPath, "/api/outfits/generate");
-    assert.equal(requestInit?.method, "POST");
-    assert.equal(requestInit?.body, JSON.stringify({ occasion: "dinner" }));
-    assert.equal(outfit.items[0]?.style_notes, "Tuck into wide-leg trousers.");
-    assert.equal(outfit.generation_id, 12);
-    assert.equal(outfit.generated_by_ai, true);
-    assert.deepEqual(outfit.generated_item_ids, [7]);
+    assert.equal(requestedPath, "/api/outfit_folders/8");
+    assert.equal(requestInit?.method, "PATCH");
+    assert.deepEqual(JSON.parse(String(requestInit?.body)), {
+      outfit_folder: {
+        name: "Paris Weekend",
+        notes: "Three days",
+        page_layouts: {
+          "outfit:19": { image_mode: "flatlay", image: { x: 24, y: 18, width: 60 } },
+        },
+        outfit_ids: [19],
+      },
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test("generateOutfit posts a reference flatlay photo as multipart form data", async () => {
+test("magazine metadata suggestions use collection and member routes without saving", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ path: string; init?: RequestInit }> = [];
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ path: String(input), init });
+    return new Response(JSON.stringify({
+      name: "Paris After Dark",
+      notes: "Gallery afternoons and late dinners.",
+      outfit_ids: [19, 12],
+      provider: "openrouter",
+      model: "test/metadata",
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    await generateMagazineMetadataSuggestions({
+      name: "Paris",
+      notes: "Gallery and dinner",
+      outfitIds: [19],
+    });
+    await generateMagazineMetadataSuggestions({
+      folderId: 8,
+      name: "Paris Weekend",
+      notes: "",
+      outfitIds: [12],
+    });
+
+    assert.equal(requests[0].path, "/api/outfit_folders/generate_metadata_suggestions");
+    assert.equal(requests[1].path, "/api/outfit_folders/8/generate_metadata_suggestions");
+    assert.deepEqual(JSON.parse(String(requests[0].init?.body)), {
+      outfit_folder: {
+        name: "Paris",
+        notes: "Gallery and dinner",
+        outfit_ids: [19],
+      },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("generateClothingItemCleanImage queues a cancellable item-clean workflow", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedPath = "";
+  let requestInit: RequestInit | undefined;
+
+  globalThis.fetch = async (input, init) => {
+    requestedPath = String(input);
+    requestInit = init;
+    return new Response(JSON.stringify({
+      id: 51,
+      kind: "item_clean",
+      status: "pending",
+      completed_count: 0,
+      failed_count: 0,
+      metadata: { item_id: 7, item_name: "Ivory Blouse" },
+      stages: [],
+    }), {
+      status: 202,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const workflow = await generateClothingItemCleanImage(7);
+
+    assert.equal(requestedPath, "/api/clothing_items/7/generate_clean_image");
+    assert.equal(requestInit?.method, "POST");
+    assert.ok(requestInit?.body instanceof FormData);
+    assert.equal(workflow.kind, "item_clean");
+    assert.equal(workflow.status, "pending");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("outfit detection image APIs keep generation and background removal as separate stages", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ init?: RequestInit; path: string }> = [];
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ init, path: String(input) });
+    const transparent = String(input).endsWith("/remove_image_background");
+    return new Response(JSON.stringify({
+      category: "shirt",
+      confidence: 0.9,
+      details: {},
+      generated_image_url: "/generated.png",
+      id: 12,
+      image_url: transparent ? "/transparent.png" : "/generated.png",
+      image_versions: transparent
+        ? [
+            { id: 1, kind: "original", image_url: "/original.png", selected: false },
+            { id: 2, kind: "generated", image_url: "/generated.png", selected: false },
+            { id: 3, kind: "transparent", image_url: "/transparent.png", selected: true },
+          ]
+        : [
+            { id: 1, kind: "original", image_url: "/original.png", selected: false },
+            { id: 2, kind: "generated", image_url: "/generated.png", selected: true },
+          ],
+      outfit_upload_id: 4,
+      position: 0,
+      transparent_image_url: transparent ? "/transparent.png" : null,
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const generated = await generateOutfitDetectionImage(12);
+    const transparent = await removeOutfitDetectionImageBackground(12);
+
+    assert.equal(requests[0].path, "/api/outfit_detections/12/generate_image");
+    assert.equal(requests[0].init?.method, "POST");
+    assert.equal(requests[1].path, "/api/outfit_detections/12/remove_image_background");
+    assert.equal(requests[1].init?.method, "POST");
+    assert.equal(generated.image_versions?.find((version) => version.selected)?.kind, "generated");
+    assert.equal(transparent.image_versions?.find((version) => version.selected)?.kind, "transparent");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("generateOutfitMetadataSuggestions sends the current outfit draft without saving it", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedPath = "";
+  let requestInit: RequestInit | undefined;
+
+  globalThis.fetch = async (input, init) => {
+    requestedPath = String(input);
+    requestInit = init;
+    return new Response(JSON.stringify({
+      name: "Ivory Gallery Afternoon",
+      tags: ["ivory", "gallery", "polished"],
+      notes: "A polished ivory look for a gallery afternoon.",
+      provider: "openrouter",
+      model: "openai/gpt-4.1-mini",
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const suggestion = await generateOutfitMetadataSuggestions({
+      outfitId: 19,
+      itemIds: [7, 8],
+      name: "Outfit Aug 28",
+      notes: "",
+      tags: ["casual"],
+    });
+
+    assert.equal(requestedPath, "/api/outfits/19/generate_metadata_suggestions");
+    assert.equal(requestInit?.method, "POST");
+    assert.deepEqual(JSON.parse(String(requestInit?.body)), {
+      outfit: {
+        item_ids: [7, 8],
+        name: "Outfit Aug 28",
+        notes: "",
+        tags: ["casual"],
+      },
+    });
+    assert.equal(suggestion.name, "Ivory Gallery Afternoon");
+    assert.deepEqual(suggestion.tags, ["ivory", "gallery", "polished"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("generateOutfitMetadataSuggestions uses the collection route for an unsaved cart draft", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedPath = "";
+  let requestInit: RequestInit | undefined;
+
+  globalThis.fetch = async (input, init) => {
+    requestedPath = String(input);
+    requestInit = init;
+    return new Response(JSON.stringify({
+      name: "Soft Western Layers",
+      tags: ["cream", "floral", "western"],
+      notes: "A soft layered look with warm western accents.",
+      provider: "openrouter",
+      model: "openai/gpt-4.1-mini",
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const suggestion = await generateOutfitMetadataSuggestions({
+      itemIds: [7, 8],
+      name: "",
+      notes: "",
+      tags: [],
+    });
+
+    assert.equal(requestedPath, "/api/outfits/generate_metadata_suggestions");
+    assert.equal(requestInit?.method, "POST");
+    assert.deepEqual(JSON.parse(String(requestInit?.body)), {
+      outfit: {
+        item_ids: [7, 8],
+        name: "",
+        notes: "",
+        tags: [],
+      },
+    });
+    assert.equal(suggestion.name, "Soft Western Layers");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("requestModeledOutfit snapshots the current unsaved outfit draft", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedPath = "";
+  let requestInit: RequestInit | undefined;
+
+  globalThis.fetch = async (input, init) => {
+    requestedPath = String(input);
+    requestInit = init;
+    return new Response(JSON.stringify({
+      id: 72,
+      kind: "modeled_outfit",
+      status: "pending",
+      completed_count: 0,
+      failed_count: 0,
+      stages: [],
+    }), {
+      status: 202,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    await requestModeledOutfit(19, {
+      itemIds: [7, 12],
+      name: "Unsaved gallery look",
+      notes: "Use this draft.",
+      tags: ["gallery", "evening"],
+    });
+
+    assert.equal(requestedPath, "/api/outfits/19/generate_modeled_image");
+    assert.equal(requestInit?.method, "POST");
+    assert.equal(new Headers(requestInit?.headers).get("Content-Type"), "application/json");
+    assert.deepEqual(JSON.parse(String(requestInit?.body)), {
+      modeled_outfit: {
+        item_ids: [7, 12],
+        name: "Unsaved gallery look",
+        notes: "Use this draft.",
+        tags: ["gallery", "evening"],
+      },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("requestModeledOutfit uploads the styled flat-lay snapshot with the draft", async () => {
   const originalFetch = globalThis.fetch;
   let requestInit: RequestInit | undefined;
-  const referencePhoto = new File(["flatlay"], "flatlay.png", { type: "image/png" });
 
   globalThis.fetch = async (_input, init) => {
     requestInit = init;
-
-    return new Response(
-      JSON.stringify({
-        id: 45,
-        user_id: 1,
-        name: "Reference Look",
-        tags: ["reference"],
-        notes: "Matched to the uploaded flatlay.",
-        item_ids: [7],
-        items: [
-          {
-            id: 7,
-            name: "Ivory Blouse",
-            category: "blouse",
-            brand: null,
-            style_notes: null,
-            size: "na",
-            date: null,
-            user_id: 1,
-            tags: ["ivory"],
-          },
-        ],
-      }),
-      {
-        status: 201,
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+    return new Response(JSON.stringify({
+      id: 73,
+      kind: "modeled_outfit",
+      status: "pending",
+      completed_count: 0,
+      failed_count: 0,
+      stages: [],
+    }), {
+      status: 202,
+      headers: { "Content-Type": "application/json" },
+    });
   };
 
   try {
-    await generateOutfit({ occasion: "match this", referencePhoto });
+    const flatlaySnapshot = new File(["flatlay-bytes"], "styled-flatlay.png", { type: "image/png" });
+    await requestModeledOutfit(19, {
+      itemIds: [7, 12],
+      name: "Styled gallery look",
+      notes: "Keep the jacket open.",
+      tags: ["layered", "evening"],
+    }, flatlaySnapshot);
 
     assert.equal(requestInit?.method, "POST");
+    assert.equal(new Headers(requestInit?.headers).get("Content-Type"), null);
     assert.ok(requestInit?.body instanceof FormData);
-    const body = requestInit.body;
-    assert.equal(body.get("occasion"), "match this");
-    assert.equal(body.get("reference_photo"), referencePhoto);
-    assert.equal(new Headers(requestInit.headers).has("Content-Type"), false);
+    const formData = requestInit.body as FormData;
+    assert.deepEqual(formData.getAll("modeled_outfit[item_ids][]"), ["7", "12"]);
+    assert.deepEqual(formData.getAll("modeled_outfit[tags][]"), ["layered", "evening"]);
+    assert.equal(formData.get("modeled_outfit[name]"), "Styled gallery look");
+    assert.equal(formData.get("modeled_outfit[notes]"), "Keep the jacket open.");
+    assert.equal(formData.get("flatlay_snapshot"), flatlaySnapshot);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test("generateOutfit surfaces AI failure stage and cause details", async () => {
+test("saveModelReferences uploads multiple photos and normalizes their private thumbnail paths", async () => {
   const originalFetch = globalThis.fetch;
+  let requestInit: RequestInit | undefined;
+  const frontPhoto = new File(["front"], "front.png", { type: "image/png" });
+  const sidePhoto = new File(["side"], "side.png", { type: "image/png" });
 
-  globalThis.fetch = async () => new Response(
-    JSON.stringify({
-      error: "AI outfit generation failed during candidate selection: OpenRouter timed out",
-      stage: "candidate_selection",
-      provider: "openrouter",
-      cause_class: "Net::ReadTimeout",
-      cause: "Net::ReadTimeout with \"Net::ReadTimeout\"",
-    }),
-    {
-      status: 422,
+  globalThis.fetch = async (_input, init) => {
+    requestInit = init;
+    return new Response(JSON.stringify({
+      id: 1,
+      username: "alex",
+      admin: false,
+      clothing_items: [],
+      clothing_items_count: 0,
+      model_reference_photo_attached: true,
+      model_reference_photo_count: 2,
+      model_reference_photos: [
+        { id: 11, position: 0, photo_url: "/model_reference_images/11/photo" },
+        { id: 12, position: 1, photo_url: "/model_reference_images/12/photo" },
+      ],
+    }), {
+      status: 201,
       headers: { "Content-Type": "application/json" },
-    },
-  );
+    });
+  };
 
   try {
-    await assert.rejects(
-      () => generateOutfit("ice bar"),
-      {
-        message:
-          "AI outfit generation failed during candidate selection: OpenRouter timed out (stage: candidate_selection; provider: openrouter; cause: Net::ReadTimeout - Net::ReadTimeout with \"Net::ReadTimeout\")",
-      },
+    const user = await saveModelReferences([frontPhoto, sidePhoto]);
+
+    assert.equal(requestInit?.method, "POST");
+    assert.ok(requestInit?.body instanceof FormData);
+    assert.deepEqual(
+      requestInit.body.getAll("model_reference_images[photos][]"),
+      [frontPhoto, sidePhoto],
+    );
+    assert.equal(user.model_reference_photo_count, 2);
+    assert.equal(user.model_reference_photos?.[0]?.photo_url, "/api/model_reference_images/11/photo");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("deleteModeledPreview removes an approved generated artifact through its workflow", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedPath = "";
+  let requestInit: RequestInit | undefined;
+
+  globalThis.fetch = async (input, init) => {
+    requestedPath = String(input);
+    requestInit = init;
+    return new Response(JSON.stringify({
+      id: 41,
+      kind: "modeled_outfit",
+      status: "deleted",
+      completed_count: 1,
+      failed_count: 0,
+      stages: [
+        {
+          key: "modeled",
+          status: "approved",
+          artifacts: [
+            { id: 9, kind: "modeled_outfit_image", status: "deleted", file_url: null },
+          ],
+        },
+      ],
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const workflow = await deleteModeledPreview(41);
+
+    assert.equal(requestedPath, "/api/ai_workflows/41/preview");
+    assert.equal(requestInit?.method, "DELETE");
+    assert.equal(workflow.status, "deleted");
+    assert.equal(workflow.stages[0]?.artifacts?.[0]?.file_url, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("updateModeledPreview uploads an edited image without setting a multipart content type", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedPath = "";
+  let requestInit: RequestInit | undefined;
+  const editedPhoto = new File(["edited"], "modeled-preview-wand.png", { type: "image/png" });
+
+  globalThis.fetch = async (input, init) => {
+    requestedPath = String(input);
+    requestInit = init;
+    return new Response(JSON.stringify({
+      id: 41,
+      kind: "modeled_outfit",
+      status: "succeeded",
+      completed_count: 1,
+      failed_count: 0,
+      stages: [
+        {
+          key: "modeled",
+          status: "approved",
+          artifacts: [
+            {
+              id: 9,
+              kind: "modeled_outfit_image",
+              status: "approved",
+              file_url: "/rails/active_storage/blobs/proxy/new-token/modeled-preview-wand.png",
+            },
+          ],
+        },
+      ],
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const workflow = await updateModeledPreview(41, editedPhoto);
+
+    assert.equal(requestedPath, "/api/ai_workflows/41/preview");
+    assert.equal(requestInit?.method, "PATCH");
+    assert.ok(requestInit?.body instanceof FormData);
+    assert.equal(requestInit.body.get("modeled_preview[photo]"), editedPhoto);
+    assert.equal(new Headers(requestInit.headers).has("Content-Type"), false);
+    assert.match(workflow.stages[0]?.artifacts?.[0]?.file_url ?? "", /\/proxy\//);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("cancelAiWorkflow returns the complete cancelled workflow payload", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedPath = "";
+
+  globalThis.fetch = async (input) => {
+    requestedPath = String(input);
+    return new Response(JSON.stringify({
+      id: 42,
+      kind: "modeled_outfit",
+      status: "cancelled",
+      completed_count: 0,
+      failed_count: 0,
+      stages: [
+        {
+          key: "modeled",
+          status: "cancelled",
+          artifacts: [
+            {
+              id: 10,
+              kind: "modeled_outfit_image",
+              status: "cancelled",
+              file_url: "/rails/active_storage/blobs/redirect/token/preview.png",
+            },
+          ],
+        },
+      ],
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const workflow = await cancelAiWorkflow(42);
+
+    assert.equal(requestedPath, "/api/ai_workflows/42/cancel");
+    assert.equal(workflow.status, "cancelled");
+    assert.equal(workflow.stages[0]?.status, "cancelled");
+    assert.equal(
+      workflow.stages[0]?.artifacts?.[0]?.file_url,
+      "/rails/active_storage/blobs/redirect/token/preview.png",
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -219,6 +887,8 @@ test("normalizeCategory treats accessories as a canonical item type", () => {
   assert.equal(normalizeCategory("handbag"), "accessory");
   assert.equal(normalizeCategory("bag"), "accessory");
   assert.equal(normalizeCategory("tote"), "accessory");
+  assert.equal(normalizeCategory("necklace"), "accessory");
+  assert.equal(normalizeCategory("pendant"), "accessory");
 });
 
 test("resolveEditableImageFetchUrl keeps local Active Storage fetches same-origin and proxied", () => {

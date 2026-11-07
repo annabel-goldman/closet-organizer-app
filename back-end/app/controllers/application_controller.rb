@@ -129,4 +129,8 @@ class ApplicationController < ActionController::API
 
     request.headers["X-Test-User-Id"].presence
   end
+
+  def boolean_param(value)
+    ActiveModel::Type::Boolean.new.cast(value)
+  end
 end
